@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'widgets/map.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TripPlanner());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TripPlanner extends StatelessWidget {
+  const TripPlanner({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -17,15 +17,9 @@ class MyApp extends StatelessWidget {
       ),
       home: Scaffold(
         appBar: AppBar(
-          title: const Text("BASK Trip Planner"),
+          title: const Text('BASK Trip Planner'),
         ),
-        body: const GoogleMap(
-          mapType: MapType.normal,
-          initialCameraPosition: CameraPosition(
-            target: LatLng(37.7717, -122.2983), // Center on Alameda shoreline.
-            zoom: 12,
-          ),
-        ),
+        body: const Map(),
       ),
     );
   }
