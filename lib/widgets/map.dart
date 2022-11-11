@@ -29,7 +29,7 @@ class MapState extends State<Map> {
     _nauticalTileProvider.preferredTileSize = tileSize;
 
     return GoogleMap(
-      mapType: MapType.none,
+      mapType: MapType.normal,
       initialCameraPosition: const CameraPosition(
         target: LatLng(37.7717, -122.2983), // Center on Alameda shoreline.
         zoom: 12,
@@ -40,6 +40,9 @@ class MapState extends State<Map> {
             tileProvider: _nauticalTileProvider,
             tileSize: tileSize)
       },
+      onMapCreated: (controller) async => controller.setMapStyle(
+          await DefaultAssetBundle.of(context)
+              .loadString('assets/nautical-style.json')),
     );
   }
 }
