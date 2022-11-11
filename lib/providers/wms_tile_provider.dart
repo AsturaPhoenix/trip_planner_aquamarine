@@ -42,6 +42,8 @@ class _AreaLocator {
 }
 
 class _TileLocator extends _AreaLocator {
+  /// The LOD delta from [zoom]. The effective zoom level of the referenced
+  /// tiles is `zoom + lod`.
   final int lod;
 
   _TileLocator(super.zoom, super.coordinate, this.lod);
@@ -308,7 +310,7 @@ class WmsTileProvider implements TileProvider {
     //
     // Also go ahead and normalize the tile size to 1.
     final tileSize = min(logicalTileSize << lod, preferredTileSize);
-    canvas.scale(tileSize.toDouble() / (1 << lod));
+    canvas.scale(tileSize.toDouble());
 
     await task(canvas);
 
