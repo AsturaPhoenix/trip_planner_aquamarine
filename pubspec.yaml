@@ -41,6 +41,7 @@ dependencies:
   google_maps_flutter_web: ^0.4.0+3
   http: ^0.13.5
   json_annotation: ^4.7.0
+  pointer_interceptor: ^0.9.3+3
 
 dependency_overrides:
   google_maps_flutter_web:

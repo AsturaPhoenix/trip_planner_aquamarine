@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../providers/wms_tile_provider.dart';
 
@@ -89,64 +90,69 @@ class MapState extends State<Map> {
         Container(
           alignment: Alignment.bottomRight,
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 115),
-          child: Card(
-              elevation: 2,
-              margin: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(2)),
-              child: Theme(
-                  data: ThemeData(
-                      textButtonTheme: TextButtonThemeData(
-                          style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xff666666),
-                              fixedSize: const Size.square(40),
-                              minimumSize: const Size.square(40),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              padding: EdgeInsets.zero)),
-                      dividerTheme: const DividerThemeData(
-                          color: Color(0xffe6e6e6),
-                          space: 1,
-                          thickness: 1,
-                          indent: 5,
-                          endIndent: 5)),
-                  child: SizedBox(
-                      width: 40,
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        TextButton(
-                            onPressed: chartOverlay.tileProvider.levelOfDetail <
-                                    zoom +
-                                        chartOverlay.tileProvider.maxOversample
-                                ? _increaseLod
-                                : null,
-                            child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Image.asset('assets/lodinc.png'),
-                                  const Icon(Icons.add)
-                                ])),
-                        const Divider(),
-                        TextButton(
-                            onPressed:
-                                chartOverlay.tileProvider.levelOfDetail == 0
-                                    ? _lockLod
-                                    : _resetLod,
-                            child: Icon(
-                                chartOverlay.tileProvider.levelOfDetail == 0
-                                    ? Icons.lock_open
-                                    : Icons.sync)),
-                        const Divider(),
-                        TextButton(
-                            onPressed:
-                                chartOverlay.tileProvider.levelOfDetail > zoom
-                                    ? _decreaseLod
-                                    : null,
-                            child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Image.asset('assets/loddec.png'),
-                                  const Icon(Icons.remove)
-                                ])),
-                      ])))),
+          child: Theme(
+              data: ThemeData(
+                  textButtonTheme: TextButtonThemeData(
+                      style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xff666666),
+                          fixedSize: const Size.square(40),
+                          minimumSize: const Size.square(40),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero)),
+                  dividerTheme: const DividerThemeData(
+                      color: Color(0xffe6e6e6),
+                      space: 1,
+                      thickness: 1,
+                      indent: 5,
+                      endIndent: 5)),
+              child: PointerInterceptor(
+                  child: Card(
+                      elevation: 2,
+                      margin: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2)),
+                      child: SizedBox(
+                          width: 40,
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            TextButton(
+                                onPressed:
+                                    chartOverlay.tileProvider.levelOfDetail <
+                                            zoom +
+                                                chartOverlay
+                                                    .tileProvider.maxOversample
+                                        ? _increaseLod
+                                        : null,
+                                child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Image.asset('assets/lodinc.png'),
+                                      const Icon(Icons.add)
+                                    ])),
+                            const Divider(),
+                            TextButton(
+                                onPressed:
+                                    chartOverlay.tileProvider.levelOfDetail == 0
+                                        ? _lockLod
+                                        : _resetLod,
+                                child: Icon(
+                                    chartOverlay.tileProvider.levelOfDetail == 0
+                                        ? Icons.lock_open
+                                        : Icons.sync)),
+                            const Divider(),
+                            TextButton(
+                                onPressed:
+                                    chartOverlay.tileProvider.levelOfDetail >
+                                            zoom
+                                        ? _decreaseLod
+                                        : null,
+                                child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Image.asset('assets/loddec.png'),
+                                      const Icon(Icons.remove)
+                                    ])),
+                          ]))))),
         ),
     ]);
   }
