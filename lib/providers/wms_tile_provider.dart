@@ -30,6 +30,10 @@ extension on Point<int> {
   Point<int> operator >>(int z) => Point(x >> z, y >> z);
 }
 
+extension on ui.Image {
+  ui.Size get size => ui.Size(width.toDouble(), height.toDouble());
+}
+
 class _AreaLocator {
   final int zoom;
   final Point<int> coordinate;
@@ -64,9 +68,8 @@ class _TileLocator extends _AreaLocator {
 }
 
 /// Tile cache by zoom level, y, x, and LOD boost.
-/// Only the images are cached. Images can only have one parent at a time;
-/// cloning does not work well for image servers that do not permit caching.
-/// Composited and windowed tiles are canvases rendered on the fly.
+/// Only the images are cached. Composited and windowed tiles are canvases
+/// rendered on the fly.
 ///
 /// Another possible way of keeping this cache is a quadtree, but it would
 /// likely make most operations slower and probably use more memory.
@@ -74,14 +77,18 @@ class _ImageCache {
   final _cache =
       SparseArray<SparseArray<SparseArray<SparseArray<Future<ui.Image>?>>>>();
 
-  Future<ui.Image>? operator [](_TileLocator locator) => _cache[locator.zoom]
-      ?[locator.coordinate.y]?[locator.coordinate.x]?[locator.lod];
+  int? get minZoom => _cache.firstKey();
 
-  void operator []=(_TileLocator locator, Future<ui.Image>? image) => _cache
-      .putIfAbsent(locator.zoom, SplayTreeMap.new)
-      .putIfAbsent(locator.coordinate.y, SplayTreeMap.new)
-      .putIfAbsent(locator.coordinate.x, SplayTreeMap.new)[locator.lod] = image;
+  Future<ui.Image>? operator [](_TileLocator key) =>
+      _cache[key.zoom]?[key.coordinate.y]?[key.coordinate.x]?[key.lod];
+
+  void operator []=(_TileLocator key, Future<ui.Image>? image) => _cache
+      .putIfAbsent(key.zoom, SplayTreeMap.new)
+      .putIfAbsent(key.coordinate.y, SplayTreeMap.new)
+      .putIfAbsent(key.coordinate.x, SplayTreeMap.new)[key.lod] = image;
 }
+
+typedef _RenderTask = FutureOr<void> Function(ui.Canvas);
 
 // Derived from js-ogc
 class WmsTileProvider implements TileProvider {
@@ -170,25 +177,30 @@ class WmsTileProvider implements TileProvider {
   }
 
   /// Windows a tile from a larger tile.
-  Future<void>? _tileFromLarger(ui.Canvas canvas, _TileLocator locator) {
-    for (int levelsAbove = 1; levelsAbove <= locator.zoom; ++levelsAbove) {
+  ///
+  /// Synchronously determines whether a composite can be made in the near
+  /// future. If a composite can be made, returns a function that can be
+  /// executed to render the composite.
+  _RenderTask? _tileFromLarger(_TileLocator locator) {
+    for (int levelsAbove = 1;
+        locator.zoom - levelsAbove >= (_imageCache.minZoom ?? locator.zoom);
+        ++levelsAbove) {
       final ancestor = locator << levelsAbove;
 
       final cacheHit = _imageCache[ancestor];
       if (cacheHit != null) {
-        return cacheHit.then((image) {
-          assert(image.width == logicalTileSize << ancestor.lod);
-          assert(image.height == logicalTileSize << ancestor.lod);
-          final lodTileSize = logicalTileSize << locator.lod;
-          final relativeCoordinate =
-              locator.coordinate - (ancestor.coordinate << levelsAbove);
-          canvas.drawImageRect(
-              image,
-              (relativeCoordinate * lodTileSize).toOffset() &
-                  ui.Size.square(lodTileSize.toDouble()),
-              ui.Offset.zero & ui.Size.square(lodTileSize.toDouble()),
-              _imagePaint);
-        });
+        return (canvas) async {
+          final image = await cacheHit;
+
+          final size = image.size / (1 << levelsAbove).toDouble();
+          final offset =
+              (locator.coordinate - (ancestor.coordinate << levelsAbove))
+                  .toOffset()
+                  .scale(size.width, size.height);
+
+          canvas.drawImageRect(image, offset & size,
+              ui.Offset.zero & const ui.Size.square(1), _imagePaint);
+        };
       }
     }
 
@@ -196,44 +208,56 @@ class WmsTileProvider implements TileProvider {
   }
 
   /// Recursively assembles a tile from smaller tiles at a lower LOD.
-  /// Returns whether a complete composite could be assembled.
-  Future<void>? _tileFromSmaller(ui.Canvas canvas, _TileLocator locator) {
+  ///
+  /// Synchronously determines whether a composite can be made in the near
+  /// future. If a composite can be made, returns a function that can be
+  /// executed to render the composite. While the function executes, it should
+  /// own the canvas transform stack.
+  _RenderTask? _tileFromSmaller(_TileLocator locator) {
     if (locator.lod <= 0) return null;
 
     final childBasis = locator >> 1;
-    final childFutures = <Future<void>>[];
+    final taskList = <_RenderTask>[
+      (canvas) => canvas
+        ..save()
+        ..scale(.5)
+    ];
 
     for (int j = 0; j <= 1; ++j) {
       for (int i = 0; i <= 1; ++i) {
         final offset = Point(i, j);
         final childLocator = childBasis + offset;
 
+        taskList.add((canvas) => canvas
+          ..save()
+          ..translate(offset.x.toDouble(), offset.y.toDouble()));
+
         final cacheHit = _imageCache[childLocator];
-        final pxOffset =
-            (offset * (logicalTileSize << childLocator.lod)).toOffset();
         if (cacheHit != null) {
-          childFutures.add(cacheHit.then((child) {
-            assert(child.width == logicalTileSize << childLocator.lod);
-            assert(child.height == logicalTileSize << childLocator.lod);
-            canvas.drawImage(child, pxOffset, _imagePaint);
-          }));
+          taskList.add((canvas) async {
+            final image = await cacheHit;
+            canvas.drawImageRect(image, ui.Offset.zero & image.size,
+                ui.Offset.zero & const ui.Size.square(1), _imagePaint);
+          });
         } else {
-          canvas.save();
-          try {
-            canvas.translate(pxOffset.dx, pxOffset.dy);
-            final childFuture = _tileFromSmaller(canvas, childLocator);
-            if (childFuture == null) {
-              return null;
-            } else {
-              childFutures.add(childFuture);
-            }
-          } finally {
-            canvas.restore();
+          final childTasks = _tileFromSmaller(childLocator);
+          if (childTasks == null) {
+            return null;
+          } else {
+            taskList.add(childTasks);
           }
         }
+
+        taskList.add((canvas) => canvas.restore());
       }
     }
-    return Future.wait(childFutures);
+
+    taskList.add((canvas) => canvas.restore());
+    return (canvas) async {
+      for (final task in taskList) {
+        await task(canvas);
+      }
+    };
   }
 
   Future<ui.Image> _fetchTile(_TileLocator locator) async {
@@ -263,31 +287,44 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
-  Future<ui.Image> _createTileContent(_TileLocator locator) async {
+  Future<ui.Image> _render(_RenderTask task, int lod) async {
     final pictureRecorder = ui.PictureRecorder();
     final canvas = ui.Canvas(pictureRecorder);
 
-    // We need to pick the resolution before we start drawing.
-    //
     // Keep the natural resolution afforded by the LOD if we want to display at
     // a higher resolution, but don't waste bytes beyond the preferred size to
     // minimize encoding time.
-    final naturalSize = logicalTileSize << locator.lod;
-    final tileSize = min(naturalSize, preferredTileSize);
-    canvas.scale(tileSize / naturalSize);
+    //
+    // Also go ahead and normalize the tile size to 1.
+    final tileSize = min(logicalTileSize << lod, preferredTileSize);
+    canvas.scale(tileSize.toDouble() / (1 << lod));
 
-    final derivation =
-        _tileFromLarger(canvas, locator) ?? _tileFromSmaller(canvas, locator);
-    if (derivation != null) {
-      await derivation;
-      final picture = pictureRecorder.endRecording();
-      try {
-        return picture.toImage(tileSize, tileSize);
-      } finally {
-        picture.dispose();
-      }
+    await task(canvas);
+
+    final picture = pictureRecorder.endRecording();
+    try {
+      return picture.toImage(tileSize, tileSize);
+    } finally {
+      picture.dispose();
+    }
+  }
+
+  /// Gets a tile image. This may be cached, composited, or fetched.
+  ///
+  /// The caller is responsible for calling `dispose` on the image.
+  Future<ui.Image> _getTileContent(_TileLocator locator) {
+    final cached = _imageCache[locator];
+    if (cached != null) {
+      return cached.then((image) => image.clone());
     }
 
+    final composite = _tileFromLarger(locator) ?? _tileFromSmaller(locator);
+    if (composite != null) {
+      return _render(composite, locator.lod);
+    }
+
+    // We can get away with not testing for existence because (and only because)
+    // we're synchronous with the cache checks up to this point.
     final fetchLocator = locator << fetchLod;
     final fetch = _fetchTile(fetchLocator);
     _imageCache[fetchLocator] = fetch;
@@ -299,16 +336,9 @@ class WmsTileProvider implements TileProvider {
     if (fetchLod == 0) {
       // Leave the cached handle open, but return a clone so we can close it
       // like the PictureRecorder handles.
-      pictureRecorder.endRecording().dispose();
-      return (await fetch).clone();
+      return fetch.then((image) => image.clone());
     } else {
-      await _tileFromLarger(canvas, locator)!;
-      final picture = pictureRecorder.endRecording();
-      try {
-        return picture.toImage(tileSize, tileSize);
-      } finally {
-        picture.dispose();
-      }
+      return _render(_tileFromLarger(locator)!, locator.lod);
     }
   }
 
@@ -317,9 +347,7 @@ class WmsTileProvider implements TileProvider {
     try {
       final locator = _TileLocator(
           zoom!, Point(x, y), max(min(levelOfDetail - zoom, maxOversample), 0));
-      final image =
-          await (_imageCache[locator]?.then((image) => image.clone()) ??
-              _createTileContent(locator));
+      final image = await _getTileContent(locator);
       try {
         final data = await image.toByteData(format: ui.ImageByteFormat.png);
         return Tile(image.width, image.height, data!.buffer.asUint8List());
