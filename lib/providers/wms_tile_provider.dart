@@ -86,6 +86,15 @@ class _ImageCache {
       .putIfAbsent(key.zoom, SplayTreeMap.new)
       .putIfAbsent(key.coordinate.y, SplayTreeMap.new)
       .putIfAbsent(key.coordinate.x, SplayTreeMap.new)[key.lod] = image;
+
+  void dispose() {
+    for (final imageFuture in _cache.values
+        .expand((y) => y.values)
+        .expand((x) => x.values)
+        .expand((lod) => lod.values)) {
+      imageFuture?.then((image) => image.dispose());
+    }
+  }
 }
 
 typedef _RenderTask = FutureOr<void> Function(ui.Canvas);
@@ -146,6 +155,8 @@ class WmsTileProvider implements TileProvider {
     this.preferredTileSize = 256,
     required this.params,
   });
+
+  void dispose() => _imageCache.dispose();
 
   static const _clientKeepAlive = Duration(minutes: 1);
 

@@ -45,4 +45,10 @@ class MapState extends State<Map> {
               .loadString('assets/nautical-style.json')),
     );
   }
+
+  @override
+  void dispose() {
+    _nauticalTileProvider.dispose();
+    super.dispose();
+  }
 }
