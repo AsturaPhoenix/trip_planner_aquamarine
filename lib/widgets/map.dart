@@ -22,7 +22,8 @@ class TileOverlayConfiguration<T extends TileProvider> {
 
 class MapState extends State<Map> {
   static const initialCameraPosition = CameraPosition(
-    target: LatLng(37.7717, -122.2983), // Center on Alameda shoreline.
+    // Center map on Alcatraz, to show the interesting points around the Bay.
+    target: LatLng(37.8331, -122.4165),
     zoom: 12,
   );
 
@@ -44,19 +45,13 @@ class MapState extends State<Map> {
   TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
       chartOverlays[chartOverlayIndex];
 
-  void _changeLod(int Function(WmsTileProvider) newLod) => setState(() {
+  void _setLod(int lod) => setState(() {
         for (final overlay in chartOverlays) {
-          overlay.tileProvider.levelOfDetail = newLod(overlay.tileProvider);
+          overlay.tileProvider.levelOfDetail = lod;
           // TODO: This does not cancel inflight requests, which can leave stale tiles.
           _gmap!.clearTileCache(overlay.id);
         }
       });
-
-  void _decreaseLod() =>
-      _changeLod((tp) => min(tp.levelOfDetail, zoom + tp.maxOversample) - 1);
-  void _resetLod() => _changeLod((_) => 0);
-  void _lockLod() => _changeLod((_) => zoom);
-  void _increaseLod() => _changeLod((tp) => max(tp.levelOfDetail, zoom) + 1);
 
   @override
   Widget build(BuildContext context) {
@@ -90,61 +85,12 @@ class MapState extends State<Map> {
         Container(
           alignment: Alignment.bottomRight,
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 115),
-          child: Theme(
-              data: ThemeData(
-                  textButtonTheme: TextButtonThemeData(
-                      style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xff666666),
-                          fixedSize: const Size.square(40),
-                          minimumSize: const Size.square(40),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero)),
-                  dividerTheme: const DividerThemeData(
-                      color: Color(0xffe6e6e6),
-                      space: 1,
-                      thickness: 1,
-                      indent: 5,
-                      endIndent: 5)),
-              child: PointerInterceptor(
-                  child: Card(
-                      elevation: 2,
-                      margin: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(2)),
-                      child: SizedBox(
-                          width: 40,
-                          child:
-                              Column(mainAxisSize: MainAxisSize.min, children: [
-                            TextButton(
-                                onPressed:
-                                    chartOverlay.tileProvider.levelOfDetail <
-                                            zoom +
-                                                chartOverlay
-                                                    .tileProvider.maxOversample
-                                        ? _increaseLod
-                                        : null,
-                                child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Image.asset('assets/lodinc.png'),
-                                      const Icon(Icons.add)
-                                    ])),
-                            const Divider(),
-                            _CenterLodButton(this),
-                            const Divider(),
-                            TextButton(
-                                onPressed:
-                                    chartOverlay.tileProvider.levelOfDetail >
-                                            zoom
-                                        ? _decreaseLod
-                                        : null,
-                                child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Image.asset('assets/loddec.png'),
-                                      const Icon(Icons.remove)
-                                    ])),
-                          ]))))),
+          child: PointerInterceptor(
+              child: _LodControls(
+                  zoom: zoom,
+                  lod: chartOverlay.tileProvider.levelOfDetail,
+                  maxOversample: chartOverlay.tileProvider.maxOversample,
+                  setLod: _setLod)),
         ),
     ]);
   }
@@ -159,28 +105,86 @@ class MapState extends State<Map> {
   }
 }
 
-class _CenterLodButton extends StatefulWidget {
-  const _CenterLodButton(this.mapState);
-  final MapState mapState;
+class _LodControls extends StatelessWidget {
+  const _LodControls(
+      {required this.lod,
+      required this.zoom,
+      required this.maxOversample,
+      required this.setLod});
+  final int lod, zoom, maxOversample;
+  final void Function(int) setLod;
 
   @override
-  _CenterLodButtonState createState() => _CenterLodButtonState();
+  Widget build(BuildContext context) {
+    return Theme(
+        data: ThemeData(
+            textButtonTheme: TextButtonThemeData(
+                style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xff666666),
+                    fixedSize: const Size.square(40),
+                    minimumSize: const Size.square(40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: EdgeInsets.zero)),
+            dividerTheme: const DividerThemeData(
+                color: Color(0xffe6e6e6),
+                space: 1,
+                thickness: 1,
+                indent: 5,
+                endIndent: 5)),
+        child: Card(
+            elevation: 2,
+            margin: EdgeInsets.zero,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+            child: SizedBox(
+                width: 40,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextButton(
+                      onPressed: lod < zoom + maxOversample
+                          ? () => setLod(max(lod, zoom) + 1)
+                          : null,
+                      child: Stack(alignment: Alignment.center, children: [
+                        Image.asset('assets/lodinc.png'),
+                        const Icon(Icons.add)
+                      ])),
+                  const Divider(),
+                  _HoverButton(
+                      onPressed: () => setLod(lod == 0 ? zoom : 0),
+                      childBuilder: (_, hover) => Icon(lod == 0
+                          ? hover
+                              ? Icons.lock_outlined
+                              : Icons.lock_open
+                          : Icons.sync)),
+                  const Divider(),
+                  TextButton(
+                      onPressed: lod > zoom
+                          ? () => setLod(min(lod, zoom + maxOversample) - 1)
+                          : null,
+                      child: Stack(alignment: Alignment.center, children: [
+                        Image.asset('assets/loddec.png'),
+                        const Icon(Icons.remove)
+                      ])),
+                ]))));
+  }
 }
 
-class _CenterLodButtonState extends State<_CenterLodButton> {
+class _HoverButton extends StatefulWidget {
+  const _HoverButton({this.onPressed, required this.childBuilder});
+  final void Function()? onPressed;
+  final Widget Function(BuildContext, bool hover) childBuilder;
+
+  @override
+  _HoverButtonState createState() => _HoverButtonState();
+}
+
+class _HoverButtonState extends State<_HoverButton> {
   bool hover = false;
 
   @override
   Widget build(BuildContext context) {
-    final mapState = widget.mapState;
-    bool setLod = mapState.chartOverlay.tileProvider.levelOfDetail == 0;
     return TextButton(
         onHover: (value) => setState(() => hover = value),
-        onPressed: setLod ? mapState._lockLod : mapState._resetLod,
-        child: Icon(setLod
-            ? hover
-                ? Icons.lock_outlined
-                : Icons.lock_open
-            : Icons.sync));
+        onPressed: widget.onPressed,
+        child: widget.childBuilder(context, hover));
   }
 }
