@@ -10,15 +10,13 @@ class Map extends StatefulWidget {
   const Map({super.key});
 
   @override
-  MapState createState() {
-    return MapState();
-  }
+  MapState createState() => MapState();
 }
 
-class _TileOverlayConfiguration<T extends TileProvider> {
+class TileOverlayConfiguration<T extends TileProvider> {
   final TileOverlayId id;
   final T tileProvider;
-  _TileOverlayConfiguration(String id, this.tileProvider)
+  TileOverlayConfiguration(String id, this.tileProvider)
       : id = TileOverlayId(id);
 }
 
@@ -28,8 +26,8 @@ class MapState extends State<Map> {
     zoom: 12,
   );
 
-  final _chartOverlays = [
-    _TileOverlayConfiguration(
+  final chartOverlays = [
+    TileOverlayConfiguration(
         'nautical',
         WmsTileProvider(
             url: Uri.parse(
@@ -40,10 +38,14 @@ class MapState extends State<Map> {
               ..layers = '0,1,2,3,4,5,6,7'))
   ];
   GoogleMapController? _gmap;
+
   int zoom = initialCameraPosition.zoom.toInt();
+  int chartOverlayIndex = 0;
+  TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
+      chartOverlays[chartOverlayIndex];
 
   void _changeLod(int Function(WmsTileProvider) newLod) => setState(() {
-        for (final overlay in _chartOverlays) {
+        for (final overlay in chartOverlays) {
           overlay.tileProvider.levelOfDetail = newLod(overlay.tileProvider);
           // TODO: This does not cancel inflight requests, which can leave stale tiles.
           _gmap!.clearTileCache(overlay.id);
@@ -62,11 +64,9 @@ class MapState extends State<Map> {
             WmsTileProvider.logicalTileSize)
         .ceil();
 
-    for (final overlay in _chartOverlays) {
+    for (final overlay in chartOverlays) {
       overlay.tileProvider.preferredTileSize = tileSize;
     }
-
-    final chartOverlay = _chartOverlays.first;
 
     return Stack(children: [
       GoogleMap(
@@ -130,15 +130,7 @@ class MapState extends State<Map> {
                                       const Icon(Icons.add)
                                     ])),
                             const Divider(),
-                            TextButton(
-                                onPressed:
-                                    chartOverlay.tileProvider.levelOfDetail == 0
-                                        ? _lockLod
-                                        : _resetLod,
-                                child: Icon(
-                                    chartOverlay.tileProvider.levelOfDetail == 0
-                                        ? Icons.lock_open
-                                        : Icons.sync)),
+                            _CenterLodButton(this),
                             const Divider(),
                             TextButton(
                                 onPressed:
@@ -160,9 +152,35 @@ class MapState extends State<Map> {
   @override
   void dispose() {
     _gmap?.dispose();
-    for (final overlay in _chartOverlays) {
+    for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
     }
     super.dispose();
+  }
+}
+
+class _CenterLodButton extends StatefulWidget {
+  const _CenterLodButton(this.mapState);
+  final MapState mapState;
+
+  @override
+  _CenterLodButtonState createState() => _CenterLodButtonState();
+}
+
+class _CenterLodButtonState extends State<_CenterLodButton> {
+  bool hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final mapState = widget.mapState;
+    bool setLod = mapState.chartOverlay.tileProvider.levelOfDetail == 0;
+    return TextButton(
+        onHover: (value) => setState(() => hover = value),
+        onPressed: setLod ? mapState._lockLod : mapState._resetLod,
+        child: Icon(setLod
+            ? hover
+                ? Icons.lock_outlined
+                : Icons.lock_open
+            : Icons.sync));
   }
 }
