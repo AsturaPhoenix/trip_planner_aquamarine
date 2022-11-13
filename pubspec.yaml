@@ -42,8 +42,11 @@ dependencies:
   http: ^0.13.5
   json_annotation: ^4.7.0
   pointer_interceptor: ^0.9.3+3
+  xml: ^6.2.2
 
 dependency_overrides:
+  google_maps_flutter_android:
+    path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_android
   google_maps_flutter_web:
     path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_web
 

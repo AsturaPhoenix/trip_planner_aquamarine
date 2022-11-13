@@ -1,13 +1,18 @@
+import 'dart:developer' as debug;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:trip_planner_aquamarine/providers/asset_cache.dart';
+import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
-  const Map({super.key});
+  const Map({super.key, this.stations = const {}});
+
+  final Set<Station> stations;
 
   @override
   MapState createState() => MapState();
@@ -53,6 +58,8 @@ class MapState extends State<Map> {
         }
       });
 
+  var _markerIcons = AssetCache<BitmapDescriptor>();
+
   @override
   Widget build(BuildContext context) {
     final tileSize = (MediaQuery.of(context).devicePixelRatio *
@@ -63,10 +70,43 @@ class MapState extends State<Map> {
       overlay.tileProvider.preferredTileSize = tileSize;
     }
 
+    _markerIcons.beginBuild(context);
+
+    final markers = <Marker>{};
+    for (final station in widget.stations) {
+      final icon = _markerIcons[station.type];
+      if (icon != null) {
+        // tp.js: create_station
+        markers.add(Marker(
+            markerId: MarkerId(station.id),
+            position: station.marker,
+            icon: icon,
+            infoWindow: InfoWindow(
+                title: '${station.typeDescription}: ${station.shortTitle}')));
+      }
+    }
+
+    _markerIcons
+        .fetchIfNeeded((configuration, stationType) =>
+            BitmapDescriptor.fromAssetImage(
+                configuration, 'assets/markers/$stationType.png',
+                mipmaps: false))
+        .then((cache) {
+      if (cache != null) {
+        setState(() => _markerIcons = cache);
+      }
+    },
+            onError: (e, StackTrace s) => debug.log(
+                'Exception while fetching marker icons.',
+                name: 'MapState',
+                error: e,
+                stackTrace: s));
+
     return Stack(children: [
       GoogleMap(
         mapType: MapType.normal,
         initialCameraPosition: initialCameraPosition,
+        markers: markers,
         tileOverlays: {
           TileOverlay(
               tileOverlayId: chartOverlay.id,
