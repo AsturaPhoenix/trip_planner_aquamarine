@@ -165,6 +165,8 @@ class MapState extends State<Map> {
   }
 }
 
+// TODO: tooltip text
+// TODO: consistent weight with Maps zoom buttons (Material font doesn't support weight for these symbols)
 class _LodControls extends StatelessWidget {
   const _LodControls({
     required this.lod,
