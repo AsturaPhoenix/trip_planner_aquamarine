@@ -10,9 +10,10 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
-  const Map({super.key, this.stations = const {}});
+  const Map({super.key, this.stations = const {}, this.onStationSelect});
 
   final Set<Station> stations;
+  final void Function(Station station)? onStationSelect;
 
   @override
   MapState createState() => MapState();
@@ -81,8 +82,8 @@ class MapState extends State<Map> {
             markerId: MarkerId(station.id),
             position: station.marker,
             icon: icon,
-            infoWindow: InfoWindow(
-                title: '${station.typeDescription}: ${station.shortTitle}')));
+            infoWindow: InfoWindow(title: station.typedShortTitle),
+            onTap: () => widget.onStationSelect?.call(station)));
       }
     }
 
@@ -160,7 +161,7 @@ class _LodControls extends StatelessWidget {
         data: ThemeData(
             textButtonTheme: TextButtonThemeData(
                 style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xff666666),
+                    foregroundColor: Colors.grey.shade800,
                     fixedSize: const Size.square(40),
                     minimumSize: const Size.square(40),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
