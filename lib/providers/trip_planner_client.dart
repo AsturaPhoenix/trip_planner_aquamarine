@@ -16,8 +16,11 @@ class TripPlannerEndpoints {
 }
 
 class _RedirectInfo implements RedirectInfo {
-  _RedirectInfo(
-      {required this.location, required this.method, required this.statusCode});
+  _RedirectInfo({
+    required this.location,
+    required this.method,
+    required this.statusCode,
+  });
 
   @override
   final Uri location;
@@ -27,16 +30,24 @@ class _RedirectInfo implements RedirectInfo {
   final int statusCode;
 }
 
-Future<Uri> resolveRedirects(Client client, Uri url,
-    {required int maxRedirects}) async {
+Future<Uri> resolveRedirects(
+  Client client,
+  Uri url, {
+  required int maxRedirects,
+}) async {
   final redirects = <RedirectInfo>[];
   while (redirects.length <= maxRedirects) {
     final response =
         await client.send(Request('HEAD', url)..followRedirects = false);
     if (response.isRedirect) {
       url = Uri.parse(response.headers['location']!);
-      redirects.add(_RedirectInfo(
-          location: url, method: 'HEAD', statusCode: response.statusCode));
+      redirects.add(
+        _RedirectInfo(
+          location: url,
+          method: 'HEAD',
+          statusCode: response.statusCode,
+        ),
+      );
     } else {
       return url;
     }
@@ -46,8 +57,10 @@ Future<Uri> resolveRedirects(Client client, Uri url,
 
 class TripPlannerClient {
   static Future<TripPlannerClient> resolveFromRedirect(
-      Uri base, TripPlannerEndpoints relative,
-      {int maxRedirects = 5}) async {
+    Uri base,
+    TripPlannerEndpoints relative, {
+    int maxRedirects = 5,
+  }) async {
     final client = Client();
     try {
       base = await resolveRedirects(client, base, maxRedirects: maxRedirects);
@@ -76,15 +89,18 @@ class TripPlannerClient {
           in XmlDocument.parse(response.body).findAllElements('station'))
         Station.fromXml(stationNode)
     };
-    assert({for (var s in stations) s.id}.length == stations.length,
-        'Duplicate station ID present.');
+    assert(
+      {for (var s in stations) s.id}.length == stations.length,
+      'Duplicate station ID present.',
+    );
     return stations;
   }
 }
 
 LatLng latLngFromXml(XmlElement node) => LatLng(
-    double.parse(node.getAttribute('lat')!),
-    double.parse(node.getAttribute('lng')!));
+      double.parse(node.getAttribute('lat')!),
+      double.parse(node.getAttribute('lng')!),
+    );
 
 // tp.js: marker_from_xml
 class Station {

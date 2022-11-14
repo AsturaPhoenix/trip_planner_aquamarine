@@ -34,8 +34,9 @@ class AssetCache<T> {
   /// be invoked at any time after [beginBuild] and still contain the asset
   /// names requested during the rest of the build.
   Future<AssetCache<T>?> fetchIfNeeded(
-      Future<T> Function(ImageConfiguration configuration, String assetName)
-          factory) async {
+    Future<T> Function(ImageConfiguration configuration, String assetName)
+        factory,
+  ) async {
     if (_toFetch!.isEmpty ||
         _lastFetch == _toFetch && _fetchConfiguration == _newConfiguration) {
       return null;
@@ -50,9 +51,12 @@ class AssetCache<T> {
       // are the same.
       final newCache =
           configuration == _fetchConfiguration ? _cache : <String, T>{};
-      await Future.wait(fetch.map((assetName) =>
-          factory(_fetchConfiguration!, assetName)
-              .then((asset) => newCache[assetName] = asset)));
+      await Future.wait(
+        fetch.map(
+          (assetName) => factory(_fetchConfiguration!, assetName)
+              .then((asset) => newCache[assetName] = asset),
+        ),
+      );
       // Identity comparison, in addition to being faster, avoids an extra
       // rebuild in a pathological case where the assets to be fetched change to
       // something different and then back again.

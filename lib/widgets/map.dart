@@ -35,14 +35,17 @@ class MapState extends State<Map> {
 
   final chartOverlays = [
     TileOverlayConfiguration(
-        'nautical',
-        WmsTileProvider(
-            url: Uri.parse(
-                'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer'),
-            fetchLod: 1,
-            params: WmsParams()
-              ..version = '1.3.0'
-              ..layers = '0,1,2,3,4,5,6,7'))
+      'nautical',
+      WmsTileProvider(
+        url: Uri.parse(
+          'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer',
+        ),
+        fetchLod: 1,
+        params: WmsParams()
+          ..version = '1.3.0'
+          ..layers = '0,1,2,3,4,5,6,7',
+      ),
+    )
   ];
   GoogleMapController? _gmap;
 
@@ -78,62 +81,78 @@ class MapState extends State<Map> {
       final icon = _markerIcons[station.type];
       if (icon != null) {
         // tp.js: create_station
-        markers.add(Marker(
+        markers.add(
+          Marker(
             markerId: MarkerId(station.id),
             position: station.marker,
             icon: icon,
             infoWindow: InfoWindow(title: station.typedShortTitle),
-            onTap: () => widget.onStationSelect?.call(station)));
+            onTap: () => widget.onStationSelect?.call(station),
+          ),
+        );
       }
     }
 
     _markerIcons
-        .fetchIfNeeded((configuration, stationType) =>
-            BitmapDescriptor.fromAssetImage(
-                configuration, 'assets/markers/$stationType.png',
-                mipmaps: false))
-        .then((cache) {
-      if (cache != null) {
-        setState(() => _markerIcons = cache);
-      }
-    },
-            onError: (e, StackTrace s) => debug.log(
-                'Exception while fetching marker icons.',
-                name: 'MapState',
-                error: e,
-                stackTrace: s));
+        .fetchIfNeeded(
+      (configuration, stationType) => BitmapDescriptor.fromAssetImage(
+        configuration,
+        'assets/markers/$stationType.png',
+        mipmaps: false,
+      ),
+    )
+        .then(
+      (cache) {
+        if (cache != null) {
+          setState(() => _markerIcons = cache);
+        }
+      },
+      onError: (e, StackTrace s) => debug.log(
+        'Exception while fetching marker icons.',
+        name: 'MapState',
+        error: e,
+        stackTrace: s,
+      ),
+    );
 
-    return Stack(children: [
-      GoogleMap(
-        mapType: MapType.normal,
-        initialCameraPosition: initialCameraPosition,
-        markers: markers,
-        tileOverlays: {
-          TileOverlay(
+    return Stack(
+      children: [
+        GoogleMap(
+          mapType: MapType.normal,
+          initialCameraPosition: initialCameraPosition,
+          markers: markers,
+          tileOverlays: {
+            TileOverlay(
               tileOverlayId: chartOverlay.id,
               tileProvider: chartOverlay.tileProvider,
-              tileSize: tileSize),
-        },
-        onCameraMove: (position) =>
-            setState(() => zoom = position.zoom.toInt()),
-        onMapCreated: (controller) async {
-          setState(() => _gmap = controller);
-          controller.setMapStyle(await DefaultAssetBundle.of(context)
-              .loadString('assets/nautical-style.json'));
-        },
-      ),
-      if (_gmap != null)
-        Container(
-          alignment: Alignment.bottomRight,
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 115),
-          child: PointerInterceptor(
-              child: _LodControls(
-                  zoom: zoom,
-                  lod: chartOverlay.tileProvider.levelOfDetail,
-                  maxOversample: chartOverlay.tileProvider.maxOversample,
-                  setLod: _setLod)),
+              tileSize: tileSize,
+            ),
+          },
+          onCameraMove: (position) =>
+              setState(() => zoom = position.zoom.toInt()),
+          onMapCreated: (controller) async {
+            setState(() => _gmap = controller);
+            controller.setMapStyle(
+              await DefaultAssetBundle.of(context)
+                  .loadString('assets/nautical-style.json'),
+            );
+          },
         ),
-    ]);
+        if (_gmap != null)
+          Container(
+            alignment: Alignment.bottomRight,
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 115),
+            child: PointerInterceptor(
+              child: _LodControls(
+                zoom: zoom,
+                lod: chartOverlay.tileProvider.levelOfDetail,
+                maxOversample: chartOverlay.tileProvider.maxOversample,
+                setLod: _setLod,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
@@ -147,65 +166,86 @@ class MapState extends State<Map> {
 }
 
 class _LodControls extends StatelessWidget {
-  const _LodControls(
-      {required this.lod,
-      required this.zoom,
-      required this.maxOversample,
-      required this.setLod});
+  const _LodControls({
+    required this.lod,
+    required this.zoom,
+    required this.maxOversample,
+    required this.setLod,
+  });
   final int lod, zoom, maxOversample;
   final void Function(int) setLod;
 
   @override
   Widget build(BuildContext context) {
     return Theme(
-        data: ThemeData(
-            textButtonTheme: TextButtonThemeData(
-                style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey.shade800,
-                    fixedSize: const Size.square(40),
-                    minimumSize: const Size.square(40),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero)),
-            dividerTheme: const DividerThemeData(
-                color: Color(0xffe6e6e6),
-                space: 1,
-                thickness: 1,
-                indent: 5,
-                endIndent: 5)),
-        child: Card(
-            elevation: 2,
-            margin: EdgeInsets.zero,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-            child: SizedBox(
-                width: 40,
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextButton(
-                      onPressed: lod < zoom + maxOversample
-                          ? () => setLod(max(lod, zoom) + 1)
-                          : null,
-                      child: Stack(alignment: Alignment.center, children: [
-                        Image.asset('assets/lodinc.png'),
-                        const Icon(Icons.add)
-                      ])),
-                  const Divider(),
-                  _HoverButton(
-                      onPressed: () => setLod(lod == 0 ? zoom : 0),
-                      childBuilder: (_, hover) => Icon(lod == 0
-                          ? hover
-                              ? Icons.lock_outlined
-                              : Icons.lock_open
-                          : Icons.sync)),
-                  const Divider(),
-                  TextButton(
-                      onPressed: lod > zoom
-                          ? () => setLod(min(lod, zoom + maxOversample) - 1)
-                          : null,
-                      child: Stack(alignment: Alignment.center, children: [
-                        Image.asset('assets/loddec.png'),
-                        const Icon(Icons.remove)
-                      ])),
-                ]))));
+      data: ThemeData(
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.grey.shade800,
+            fixedSize: const Size.square(40),
+            minimumSize: const Size.square(40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: EdgeInsets.zero,
+          ),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xffe6e6e6),
+          space: 1,
+          thickness: 1,
+          indent: 5,
+          endIndent: 5,
+        ),
+      ),
+      child: Card(
+        elevation: 2,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+        child: SizedBox(
+          width: 40,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: lod < zoom + maxOversample
+                    ? () => setLod(max(lod, zoom) + 1)
+                    : null,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Image.asset('assets/lodinc.png'),
+                    const Icon(Icons.add)
+                  ],
+                ),
+              ),
+              const Divider(),
+              _HoverButton(
+                onPressed: () => setLod(lod == 0 ? zoom : 0),
+                childBuilder: (_, hover) => Icon(
+                  lod == 0
+                      ? hover
+                          ? Icons.lock_outlined
+                          : Icons.lock_open
+                      : Icons.sync,
+                ),
+              ),
+              const Divider(),
+              TextButton(
+                onPressed: lod > zoom
+                    ? () => setLod(min(lod, zoom + maxOversample) - 1)
+                    : null,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Image.asset('assets/loddec.png'),
+                    const Icon(Icons.remove)
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -224,8 +264,9 @@ class _HoverButtonState extends State<_HoverButton> {
   @override
   Widget build(BuildContext context) {
     return TextButton(
-        onHover: (value) => setState(() => hover = value),
-        onPressed: widget.onPressed,
-        child: widget.childBuilder(context, hover));
+      onHover: (value) => setState(() => hover = value),
+      onPressed: widget.onPressed,
+      child: widget.childBuilder(context, hover),
+    );
   }
 }

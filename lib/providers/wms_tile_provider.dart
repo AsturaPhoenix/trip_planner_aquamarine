@@ -115,8 +115,9 @@ class WmsTileProvider implements TileProvider {
 
   static const _epsg3857Extent = 20037508.34789244;
   static const _origin = ui.Offset(
-      -_epsg3857Extent, // x starts from left
-      _epsg3857Extent); // y starts from top
+    -_epsg3857Extent, // x starts from left
+    _epsg3857Extent,
+  ); // y starts from top
 
   static final _imagePaint = ui.Paint();
 
@@ -125,7 +126,9 @@ class WmsTileProvider implements TileProvider {
     final wmsTileSize = _epsg3857Extent * 2 / (1 << xyz.zoom);
     return _origin +
             ui.Offset(
-                    xyz.coordinate.x.toDouble(), -xyz.coordinate.y.toDouble()) *
+                  xyz.coordinate.x.toDouble(),
+                  -xyz.coordinate.y.toDouble(),
+                ) *
                 wmsTileSize &
         ui.Size(wmsTileSize, -wmsTileSize);
   }
@@ -179,14 +182,16 @@ class WmsTileProvider implements TileProvider {
     final tileSizeParam = logicalTileSize << locator.lod;
     final bbox = _xyzToBounds(locator);
 
-    return url.replace(queryParameters: {
-      ..._defaultWmsParams,
-      ...url.queryParametersAll,
-      ...params.toJson().map((key, value) => MapEntry(key, value.toString())),
-      'bbox': '${bbox.left},${bbox.bottom},${bbox.right},${bbox.top}',
-      'width': tileSizeParam.toString(),
-      'height': tileSizeParam.toString(),
-    });
+    return url.replace(
+      queryParameters: {
+        ..._defaultWmsParams,
+        ...url.queryParametersAll,
+        ...params.toJson().map((key, value) => MapEntry(key, value.toString())),
+        'bbox': '${bbox.left},${bbox.bottom},${bbox.right},${bbox.top}',
+        'width': tileSizeParam.toString(),
+        'height': tileSizeParam.toString(),
+      },
+    );
   }
 
   /// Windows a tile from a larger tile.
@@ -211,8 +216,12 @@ class WmsTileProvider implements TileProvider {
                   .toOffset()
                   .scale(size.width, size.height);
 
-          canvas.drawImageRect(image, offset & size,
-              ui.Offset.zero & const ui.Size.square(1), _imagePaint);
+          canvas.drawImageRect(
+            image,
+            offset & size,
+            ui.Offset.zero & const ui.Size.square(1),
+            _imagePaint,
+          );
         };
       }
     }
@@ -241,16 +250,22 @@ class WmsTileProvider implements TileProvider {
         final offset = Point(i, j);
         final childLocator = childBasis + offset;
 
-        taskList.add((canvas) => canvas
-          ..save()
-          ..translate(offset.x.toDouble(), offset.y.toDouble()));
+        taskList.add(
+          (canvas) => canvas
+            ..save()
+            ..translate(offset.x.toDouble(), offset.y.toDouble()),
+        );
 
         final cacheHit = _imageCache[childLocator];
         if (cacheHit != null) {
           taskList.add((canvas) async {
             final image = await cacheHit;
-            canvas.drawImageRect(image, ui.Offset.zero & image.size,
-                ui.Offset.zero & const ui.Size.square(1), _imagePaint);
+            canvas.drawImageRect(
+              image,
+              ui.Offset.zero & image.size,
+              ui.Offset.zero & const ui.Size.square(1),
+              _imagePaint,
+            );
           });
         } else {
           final childTasks = _tileFromSmaller(childLocator);
@@ -359,7 +374,10 @@ class WmsTileProvider implements TileProvider {
   Future<Tile> getTile(int x, int y, int? zoom) async {
     try {
       final locator = _TileLocator(
-          zoom!, Point(x, y), max(min(levelOfDetail - zoom, maxOversample), 0));
+        zoom!,
+        Point(x, y),
+        max(min(levelOfDetail - zoom, maxOversample), 0),
+      );
       final image = await _getTileContent(locator);
       try {
         final data = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -369,8 +387,12 @@ class WmsTileProvider implements TileProvider {
       }
     } catch (e, s) {
       // The Java maps impl likes to eat exceptions, so log them.
-      debug.log('getTile($x, $y, $zoom)',
-          name: 'WmsTileProvider', error: e, stackTrace: s);
+      debug.log(
+        'getTile($x, $y, $zoom)',
+        name: 'WmsTileProvider',
+        error: e,
+        stackTrace: s,
+      );
       rethrow;
     }
   }
