@@ -22,7 +22,7 @@ void main() {
 }
 
 class TripPlanner extends StatefulWidget {
-  static const double appBarHorizontalPadding = 0xE0;
+  static const double appBarHorizontalPadding = 0xE0, sidePanelWidth = 473;
 
   const TripPlanner({super.key});
 
@@ -85,8 +85,10 @@ class TripPlannerState extends State<TripPlanner> {
       home: LayoutBuilder(
         builder: (context, boxConstraints) {
           final inlineStationBar = boxConstraints.maxWidth >=
-              _SelectedStationBar.preferredWidth +
-                  2 * TripPlanner.appBarHorizontalPadding;
+              TripPlanner.sidePanelWidth +
+                  2 *
+                      (_SelectedStationBar.blendedHorizontalPadding +
+                          TripPlanner.appBarHorizontalPadding);
           return Scaffold(
             appBar: AppBar(
               title: const Text('BASK Trip Planner'),
@@ -128,7 +130,8 @@ class TripPlannerState extends State<TripPlanner> {
                             ConstrainedBox(
                               constraints: BoxConstraints(
                                 maxWidth: horizontal
-                                    ? min(473, boxConstraints.maxWidth / 2)
+                                    ? min(TripPlanner.sidePanelWidth,
+                                        boxConstraints.maxWidth / 2)
                                     : boxConstraints.maxWidth,
                               ),
                               child: Align(
@@ -155,7 +158,7 @@ class TripPlannerState extends State<TripPlanner> {
 }
 
 class _SelectedStationBar extends StatelessWidget {
-  static const double verticalPadding = 6;
+  static const double verticalPadding = 6, blendedHorizontalPadding = 40;
   static const double preferredWidth = 0x2C0;
 
   static Widget blendedEdgeContainer({
@@ -172,7 +175,7 @@ class _SelectedStationBar extends StatelessWidget {
         ),
         padding: const EdgeInsets.symmetric(
           vertical: verticalPadding,
-          horizontal: 40,
+          horizontal: blendedHorizontalPadding,
         ),
         constraints: const BoxConstraints(minWidth: preferredWidth),
         child: Align(
