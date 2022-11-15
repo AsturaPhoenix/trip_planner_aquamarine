@@ -2,10 +2,20 @@ import 'dart:async';
 import 'dart:developer' as debug;
 
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'widgets/map.dart';
 
 void main() {
+  Logger.root.onRecord.listen(
+    (record) => debug.log(
+      '${record.level.name}: ${record.time}: ${record.message}',
+      name: record.loggerName,
+      error: record.error,
+      stackTrace: record.stackTrace,
+    ),
+  );
+
   runApp(const TripPlanner());
 }
 
@@ -19,6 +29,8 @@ class TripPlanner extends StatefulWidget {
 }
 
 class TripPlannerState extends State<TripPlanner> {
+  static final log = Logger('TripPlannerState');
+
   TripPlannerState()
       : _client = TripPlannerClient.resolveFromRedirect(
           Uri.parse('https://www.bask.org/trip_planner/'),
@@ -32,11 +44,10 @@ class TripPlannerState extends State<TripPlanner> {
     super.initState();
 
     // TODO: Surface something to the user.
-    void logException(Object e, StackTrace s) => debug.log(
+    void logException(Object e, StackTrace s) => log.severe(
           'Exception during initialization.',
-          name: 'TripPlannerState',
-          error: e,
-          stackTrace: s,
+          e,
+          s,
         );
 
     _client.then(

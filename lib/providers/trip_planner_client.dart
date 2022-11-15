@@ -1,9 +1,9 @@
-import 'dart:developer' as debug;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart';
+import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
@@ -56,6 +56,8 @@ Future<Uri> resolveRedirects(
 }
 
 class TripPlannerClient {
+  static final log = Logger('TripPlannerClient');
+
   static Future<TripPlannerClient> resolveFromRedirect(
     Uri base,
     TripPlannerEndpoints relative, {
@@ -72,7 +74,7 @@ class TripPlannerClient {
         rethrow;
       }
     }
-    debug.log('base URL: $base', name: 'TripPlannerClient');
+    log.info('base URL: $base');
     return TripPlannerClient._(client, relative.resolve(base));
   }
 

@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:developer' as debug;
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:json_annotation/json_annotation.dart';
+import 'package:logging/logging.dart';
 
 part 'wms_tile_provider.g.dart';
 
@@ -103,6 +103,8 @@ typedef _RenderTask = FutureOr<void> Function(ui.Canvas);
 
 // Derived from js-ogc
 class WmsTileProvider implements TileProvider {
+  static final log = Logger('WmsTileProvider');
+
   /// This is determined by the Maps API, but doesn't seem to be a constant
   /// provided there.
   static const logicalTileSize = 256;
@@ -290,7 +292,7 @@ class WmsTileProvider implements TileProvider {
 
   Future<ui.Image> _fetchTile(_TileLocator locator) async {
     final url = _getTileUrl(locator);
-    debug.log('_fetchTile($locator) => get $url', name: 'WmsTileProvider');
+    log.info('_fetchTile($locator) => get $url');
 
     final buffer = await _client
         .get(url)
@@ -387,11 +389,10 @@ class WmsTileProvider implements TileProvider {
       }
     } catch (e, s) {
       // The Java maps impl likes to eat exceptions, so log them.
-      debug.log(
+      log.warning(
         'getTile($x, $y, $zoom)',
-        name: 'WmsTileProvider',
-        error: e,
-        stackTrace: s,
+        e,
+        s,
       );
       rethrow;
     }

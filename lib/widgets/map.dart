@@ -1,8 +1,8 @@
-import 'dart:developer' as debug;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/providers/asset_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -27,6 +27,8 @@ class TileOverlayConfiguration<T extends TileProvider> {
 }
 
 class MapState extends State<Map> {
+  static final log = Logger('MapState');
+
   static const initialCameraPosition = CameraPosition(
     // Center map on Alcatraz, to show the interesting points around the Bay.
     target: LatLng(37.8331, -122.4165),
@@ -107,11 +109,10 @@ class MapState extends State<Map> {
           setState(() => _markerIcons = cache);
         }
       },
-      onError: (e, StackTrace s) => debug.log(
+      onError: (e, StackTrace s) => log.warning(
         'Exception while fetching marker icons.',
-        name: 'MapState',
-        error: e,
-        stackTrace: s,
+        e,
+        s,
       ),
     );
 
