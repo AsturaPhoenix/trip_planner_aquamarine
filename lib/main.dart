@@ -4,9 +4,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
-import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
-import 'package:trip_planner_aquamarine/widgets/tide_chart.dart';
+import 'package:timezone/data/latest.dart';
+import 'package:timezone/timezone.dart';
+
+import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
+import 'widgets/tide_chart.dart';
 
 void main() {
   Logger.root.onRecord.listen(
@@ -17,6 +20,8 @@ void main() {
       stackTrace: record.stackTrace,
     ),
   );
+
+  initializeTimeZones();
 
   runApp(const TripPlanner());
 }
@@ -40,6 +45,7 @@ class TripPlannerState extends State<TripPlanner> {
             datapoints: Uri(path: 'datapoints.xml'),
             tides: Uri(path: 'tides.php'),
           ),
+          timeZone: getLocation('America/Los_Angeles'),
         );
 
   Station? selectedStation;
@@ -166,6 +172,8 @@ class _SelectedStationBar extends StatelessWidget {
     required Widget child,
   }) =>
       Container(
+        alignment: Alignment.center,
+        constraints: const BoxConstraints(minWidth: preferredWidth),
         decoration: BoxDecoration(
           borderRadius: const BorderRadius.all(Radius.elliptical(32, 4)),
           gradient: LinearGradient(
@@ -177,13 +185,7 @@ class _SelectedStationBar extends StatelessWidget {
           vertical: verticalPadding,
           horizontal: blendedHorizontalPadding,
         ),
-        constraints: const BoxConstraints(minWidth: preferredWidth),
-        child: Align(
-          alignment: Alignment.center,
-          heightFactor: 1,
-          widthFactor: 1,
-          child: child,
-        ),
+        child: child,
       );
 
   static Widget fullWidthContainer({
@@ -210,13 +212,16 @@ class _SelectedStationBar extends StatelessWidget {
           border: Border.symmetric(horizontal: BorderSide()),
         ),
         position: DecorationPosition.foreground,
-        child: (blendEdges ? blendedEdgeContainer : fullWidthContainer)(
-          color: Theme.of(context).colorScheme.secondaryContainer,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              station.typedShortTitle,
-              style: Theme.of(context).textTheme.titleMedium,
+        child: SizedBox(
+          height: 31,
+          child: (blendEdges ? blendedEdgeContainer : fullWidthContainer)(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                station.typedShortTitle,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
           ),
         ),

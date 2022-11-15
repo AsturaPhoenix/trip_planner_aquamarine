@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
+import 'package:timezone/timezone.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
@@ -64,6 +65,7 @@ class TripPlannerClient {
     Uri base,
     TripPlannerEndpoints relative, {
     int maxRedirects = 5,
+    required Location timeZone,
   }) async {
     final client = Client();
     try {
@@ -77,39 +79,13 @@ class TripPlannerClient {
       }
     }
     log.info('base URL: $base');
-    return TripPlannerClient._(client, relative.resolve(base));
+    return TripPlannerClient._(client, relative.resolve(base), timeZone);
   }
 
-  static Uri tideGraphUrl(
-    TripPlannerEndpoints endpoints,
-    Station station,
-    int days,
-    int width,
-    int height,
-    DateTime t,
-  ) {
-    // The server uses local time zone, and all the stations are on the West
-    // Coast. Since this is noncritical, let's keep using local time for now.
-    assert(!t.isUtc);
-    return endpoints.tides.replace(
-      queryParameters: {
-        'days': days.toString(),
-        'mode': 'graph',
-        'tcd': station.source,
-        'station': station.title,
-        'type': station.type,
-        'width': width.toString(),
-        'height': height.toString(),
-        // We could pass the full time, but let's be kind to the cache.
-        'begin': '${t.year}-${t.month}-${t.day}',
-        'subord': station.isSubordinate ? '1' : '',
-      },
-    );
-  }
-
-  TripPlannerClient._(this._client, this.endpoints);
+  TripPlannerClient._(this._client, this.endpoints, this.timeZone);
   final Client _client;
   final TripPlannerEndpoints endpoints;
+  final Location timeZone;
 
   void close() => _client.close();
 
@@ -125,6 +101,31 @@ class TripPlannerClient {
       'Duplicate station ID present.',
     );
     return stations;
+  }
+
+  Uri tideGraphUrl(
+    Station station,
+    int days,
+    int width,
+    int height,
+    DateTime t,
+  ) {
+    // The server uses local time zone, and all the stations are on the West
+    // Coast.
+    final ts = TZDateTime.from(t, timeZone);
+    return endpoints.tides.replace(
+      queryParameters: {
+        'days': days.toString(),
+        'mode': 'graph',
+        'tcd': station.source,
+        'station': station.title,
+        'type': station.type,
+        'width': width.toString(),
+        'height': height.toString(),
+        'begin': '${ts.year}-${ts.month}-${ts.day}',
+        'subord': station.isSubordinate ? '1' : '',
+      },
+    );
   }
 }
 
