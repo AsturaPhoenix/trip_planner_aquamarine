@@ -9,7 +9,7 @@ import 'package:timezone/timezone.dart';
 
 import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
-import 'widgets/tide_chart.dart';
+import 'widgets/tide_panel.dart';
 
 void main() {
   Logger.root.onRecord.listen(
@@ -49,6 +49,7 @@ class TripPlannerState extends State<TripPlanner> {
         );
 
   Station? selectedStation;
+  DateTime t = DateTime.now();
 
   @override
   void initState() {
@@ -128,7 +129,7 @@ class TripPlannerState extends State<TripPlanner> {
                           Expanded(
                             child: Map(
                               stations: stations,
-                              onStationSelect: (station) =>
+                              onStationSelected: (station) =>
                                   setState(() => selectedStation = station),
                             ),
                           ),
@@ -136,16 +137,20 @@ class TripPlannerState extends State<TripPlanner> {
                             ConstrainedBox(
                               constraints: BoxConstraints(
                                 maxWidth: horizontal
-                                    ? min(TripPlanner.sidePanelWidth,
-                                        boxConstraints.maxWidth / 2)
+                                    ? min(
+                                        TripPlanner.sidePanelWidth,
+                                        boxConstraints.maxWidth / 2,
+                                      )
                                     : boxConstraints.maxWidth,
                               ),
                               child: Align(
                                 alignment: Alignment.topCenter,
-                                child: TideChart(
+                                child: TidePanel(
                                   client: _client as TripPlannerClient,
                                   station: selectedStation!,
-                                  t: DateTime.now(),
+                                  t: t,
+                                  onTimeChanged: (t) =>
+                                      setState(() => this.t = t),
                                 ),
                               ),
                             ),
@@ -212,8 +217,8 @@ class _SelectedStationBar extends StatelessWidget {
           border: Border.symmetric(horizontal: BorderSide()),
         ),
         position: DecorationPosition.foreground,
-        child: SizedBox(
-          height: 31,
+        child: UnconstrainedBox(
+          constrainedAxis: Axis.horizontal,
           child: (blendEdges ? blendedEdgeContainer : fullWidthContainer)(
             color: Theme.of(context).colorScheme.secondaryContainer,
             child: FittedBox(

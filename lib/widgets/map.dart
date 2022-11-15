@@ -10,10 +10,10 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
-  const Map({super.key, this.stations = const {}, this.onStationSelect});
+  const Map({super.key, this.stations = const {}, this.onStationSelected});
 
   final Set<Station> stations;
-  final void Function(Station station)? onStationSelect;
+  final void Function(Station station)? onStationSelected;
 
   @override
   MapState createState() => MapState();
@@ -89,7 +89,7 @@ class MapState extends State<Map> {
             position: station.marker,
             icon: icon,
             infoWindow: InfoWindow(title: station.typedShortTitle),
-            onTap: () => widget.onStationSelect?.call(station),
+            onTap: () => widget.onStationSelected?.call(station),
           ),
         );
       }
