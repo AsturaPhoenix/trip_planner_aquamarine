@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:developer' as debug;
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
+import 'package:trip_planner_aquamarine/widgets/tide_chart.dart';
 import 'widgets/map.dart';
 
 void main() {
@@ -34,7 +36,10 @@ class TripPlannerState extends State<TripPlanner> {
   TripPlannerState()
       : _client = TripPlannerClient.resolveFromRedirect(
           Uri.parse('https://www.bask.org/trip_planner/'),
-          TripPlannerEndpoints(datapoints: Uri(path: 'datapoints.xml')),
+          TripPlannerEndpoints(
+            datapoints: Uri(path: 'datapoints.xml'),
+            tides: Uri(path: 'tides.php'),
+          ),
         );
 
   Station? selectedStation;
@@ -50,8 +55,9 @@ class TripPlannerState extends State<TripPlanner> {
           s,
         );
 
-    _client.then(
+    Future.value(_client).then(
       (client) {
+        _client = client;
         client.getDatapoints().then(
               (stations) => setState(() {
                 this.stations = stations;
@@ -64,7 +70,7 @@ class TripPlannerState extends State<TripPlanner> {
     );
   }
 
-  final Future<TripPlannerClient> _client;
+  FutureOr<TripPlannerClient> _client;
 
   var stations = <Station>{};
 
@@ -73,7 +79,8 @@ class TripPlannerState extends State<TripPlanner> {
     return MaterialApp(
       title: 'BASK Trip Planner',
       theme: ThemeData(
-        colorSchemeSeed: const Color(0xffc9d3dc),
+        colorSchemeSeed: const Color(0xffbbccff),
+        scaffoldBackgroundColor: const Color(0xffbbccff),
       ),
       home: LayoutBuilder(
         builder: (context, boxConstraints) {
@@ -91,7 +98,7 @@ class TripPlannerState extends State<TripPlanner> {
                       ),
                       child: Center(
                         child: _SelectedStationBar(
-                          selectedStation,
+                          selectedStation!,
                           blendEdges: true,
                         ),
                       ),
@@ -101,14 +108,43 @@ class TripPlannerState extends State<TripPlanner> {
             body: Column(
               children: [
                 if (selectedStation != null && !inlineStationBar)
-                  _SelectedStationBar(selectedStation, blendEdges: false),
+                  _SelectedStationBar(selectedStation!, blendEdges: false),
                 Expanded(
-                  child: Map(
-                    stations: stations,
-                    onStationSelect: (station) =>
-                        setState(() => selectedStation = station),
+                  child: LayoutBuilder(
+                    builder: (context, boxConstraints) {
+                      bool horizontal =
+                          boxConstraints.maxWidth >= boxConstraints.maxHeight;
+                      return Flex(
+                        direction: horizontal ? Axis.horizontal : Axis.vertical,
+                        children: [
+                          Expanded(
+                            child: Map(
+                              stations: stations,
+                              onStationSelect: (station) =>
+                                  setState(() => selectedStation = station),
+                            ),
+                          ),
+                          if (selectedStation != null)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: horizontal
+                                    ? min(473, boxConstraints.maxWidth / 2)
+                                    : boxConstraints.maxWidth,
+                              ),
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: TideChart(
+                                  client: _client as TripPlannerClient,
+                                  station: selectedStation!,
+                                  t: DateTime.now(),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
-                )
+                ),
               ],
             ),
           );
@@ -162,7 +198,7 @@ class _SelectedStationBar extends StatelessWidget {
 
   const _SelectedStationBar(this.station, {this.blendEdges = true});
 
-  final Station? station;
+  final Station station;
   final bool blendEdges;
 
   @override
@@ -176,9 +212,8 @@ class _SelectedStationBar extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              station?.typedShortTitle ?? '',
+              station.typedShortTitle,
               style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
             ),
           ),
         ),

@@ -7,12 +7,14 @@ import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
-  TripPlannerEndpoints({required this.datapoints});
+  TripPlannerEndpoints({required this.datapoints, required this.tides});
 
-  final Uri datapoints;
+  final Uri datapoints, tides;
 
-  TripPlannerEndpoints resolve(Uri base) =>
-      TripPlannerEndpoints(datapoints: base.resolveUri(datapoints));
+  TripPlannerEndpoints resolve(Uri base) => TripPlannerEndpoints(
+        datapoints: base.resolveUri(datapoints),
+        tides: base.resolveUri(tides),
+      );
 }
 
 class _RedirectInfo implements RedirectInfo {
@@ -78,6 +80,33 @@ class TripPlannerClient {
     return TripPlannerClient._(client, relative.resolve(base));
   }
 
+  static Uri tideGraphUrl(
+    TripPlannerEndpoints endpoints,
+    Station station,
+    int days,
+    int width,
+    int height,
+    DateTime t,
+  ) {
+    // The server uses local time zone, and all the stations are on the West
+    // Coast. Since this is noncritical, let's keep using local time for now.
+    assert(!t.isUtc);
+    return endpoints.tides.replace(
+      queryParameters: {
+        'days': days.toString(),
+        'mode': 'graph',
+        'tcd': station.source,
+        'station': station.title,
+        'type': station.type,
+        'width': width.toString(),
+        'height': height.toString(),
+        // We could pass the full time, but let's be kind to the cache.
+        'begin': '${t.year}-${t.month}-${t.day}',
+        'subord': station.isSubordinate ? '1' : '',
+      },
+    );
+  }
+
   TripPlannerClient._(this._client, this.endpoints);
   final Client _client;
   final TripPlannerEndpoints endpoints;
@@ -133,7 +162,9 @@ class Station {
       : id = _getId(node),
         type = node.getAttribute('station_type')!,
         marker = latLngFromXml(node.findElements('marker').first),
-        title = node.getAttribute('title')!;
+        title = node.getAttribute('title')!,
+        source = node.getAttribute('source'),
+        isSubordinate = node.getAttribute('subtype') == 'Subordinate';
   final String id;
   final String type;
   String get typeDescription => typeDescriptions[type]!;
@@ -142,4 +173,6 @@ class Station {
   String get shortTitle =>
       title.replaceAll(RegExp(r', California( Current)?'), '');
   String get typedShortTitle => '$typeDescription: $shortTitle';
+  final String? source;
+  final bool isSubordinate;
 }
