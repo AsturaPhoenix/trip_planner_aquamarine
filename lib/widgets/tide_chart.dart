@@ -3,8 +3,33 @@ import 'package:timezone/timezone.dart';
 
 import '../providers/trip_planner_client.dart';
 
+class GridSwatch {
+  const GridSwatch({
+    required this.hourly,
+    required this.noon,
+    required this.midnight,
+  });
+  GridSwatch.fromSeed(Color seed)
+      : this(
+          hourly: Color.lerp(seed, null, .5)!,
+          noon: Color.lerp(seed, null, .25)!,
+          midnight: Color.lerp(seed, Colors.black, .5)!,
+        );
+
+  final Color hourly, noon, midnight;
+}
+
+class OverlaySwatch {
+  const OverlaySwatch({required this.text, required this.grid});
+  OverlaySwatch.fromSeed(Color seed)
+      : this(text: seed, grid: GridSwatch.fromSeed(seed));
+
+  final Color text;
+  final GridSwatch grid;
+}
+
 class TideChart extends StatelessWidget {
-  const TideChart({
+  TideChart({
     super.key,
     required this.client,
     required this.station,
@@ -12,15 +37,16 @@ class TideChart extends StatelessWidget {
     this.days = 1,
     this.width = 455,
     this.height = 262,
-    this.overlayColor = const Color(0xff999900),
-  });
+    OverlaySwatch? overlaySwatch,
+  }) : overlaySwatch =
+            overlaySwatch ?? OverlaySwatch.fromSeed(const Color(0xff999900));
 
   final TripPlannerClient client;
   final Station station;
   final DateTime t;
   final int days;
   final double width, height;
-  final Color overlayColor;
+  final OverlaySwatch overlaySwatch;
 
   @override
   Widget build(BuildContext context) {
@@ -60,38 +86,37 @@ class TideChart extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: DividerTheme(
-                data: theme.dividerTheme
-                    .copyWith(color: overlayColor.withAlpha(0x80)),
-                child: DefaultTextStyle(
-                  style: DefaultTextStyle.of(context)
-                      .style
-                      .copyWith(color: overlayColor),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        top: -37,
-                        child: Image.network(
-                          client
-                              .tideGraphUrl(
-                                station,
-                                1,
-                                width.round(),
-                                height.round() + 50,
-                                t,
-                              )
-                              .toString(),
-                        ),
+              child: DefaultTextStyle(
+                style: DefaultTextStyle.of(context)
+                    .style
+                    .copyWith(color: overlaySwatch.text),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: -37,
+                      child: Image.network(
+                        client
+                            .tideGraphUrl(
+                              station,
+                              1,
+                              width.round(),
+                              height.round() + 50,
+                              t,
+                            )
+                            .toString(),
                       ),
-                      for (int h = 1; h < 24; ++h)
-                        Positioned(
-                          left: h * width / 24,
-                          top: 0,
-                          bottom: 0,
-                          child: _HourGrid(t0.add(timespan * (h / 24))),
-                        )
-                    ],
-                  ),
+                    ),
+                    for (int h = 1; h < 24; ++h)
+                      Positioned(
+                        left: h * width / 24,
+                        top: 0,
+                        bottom: 0,
+                        child: _HourGrid(
+                          t0.add(timespan * (h / 24)),
+                          swatch: overlaySwatch.grid,
+                        ),
+                      )
+                  ],
                 ),
               ),
             ),
@@ -103,7 +128,7 @@ class TideChart extends StatelessWidget {
 }
 
 class _HourGrid extends StatelessWidget {
-  const _HourGrid(this.t);
+  const _HourGrid(this.t, {required this.swatch});
 
   final DateTime t;
   int get hour => t.hour;
@@ -112,6 +137,8 @@ class _HourGrid extends StatelessWidget {
       : hour == 12
           ? 'n'
           : (hour % 12).toString();
+
+  final GridSwatch swatch;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -123,7 +150,13 @@ class _HourGrid extends StatelessWidget {
               alignment: Alignment.topCenter,
               child: Text(label),
             ),
-            const VerticalDivider(),
+            VerticalDivider(
+              color: hour == 0
+                  ? swatch.midnight
+                  : hour == 12
+                      ? swatch.noon
+                      : swatch.hourly,
+            ),
           ],
         ),
       );
