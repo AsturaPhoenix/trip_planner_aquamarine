@@ -173,7 +173,6 @@ class TidePanelState extends State<TidePanel> {
             color: theme.colorScheme.secondaryContainer,
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
             child: FittedBox(
-              fit: BoxFit.scaleDown,
               child: Text(
                 '${widget.station.type == 'tide' ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
                 style: theme.textTheme.titleMedium,
@@ -181,7 +180,6 @@ class TidePanelState extends State<TidePanel> {
             ),
           ),
           FittedBox(
-            fit: BoxFit.scaleDown,
             child: TideGraph(
               client: widget.client,
               station: widget.station,
@@ -192,13 +190,15 @@ class TidePanelState extends State<TidePanel> {
               onTimeChanged: widget.onTimeChanged,
             ),
           ),
-          TimeControls(
-            timeZone: widget.client.timeZone,
-            timeWindow: timeWindow,
-            onWindowChanged: (timeWindow) {
-              setState(() => this.timeWindow = timeWindow);
-              widget.onTimeChanged?.call(timeWindow.t);
-            },
+          FittedBox(
+            child: TimeControls(
+              timeZone: widget.client.timeZone,
+              timeWindow: timeWindow,
+              onWindowChanged: (timeWindow) {
+                setState(() => this.timeWindow = timeWindow);
+                widget.onTimeChanged?.call(timeWindow.t);
+              },
+            ),
           ),
         ],
       ),
@@ -386,92 +386,90 @@ class TimeControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return FittedBox(
-      child: Theme(
-        data: theme.copyWith(
-          dividerTheme:
-              theme.dividerTheme.copyWith(indent: 8, endIndent: 8, space: 8),
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(minimumSize: Size.zero),
-          ),
+    return Theme(
+      data: theme.copyWith(
+        dividerTheme:
+            theme.dividerTheme.copyWith(indent: 8, endIndent: 8, space: 8),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(minimumSize: Size.zero),
         ),
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: _changeTime(-1),
-                icon: const Icon(Icons.keyboard_arrow_left),
-              ),
-              const Text('Day'),
-              IconButton(
-                onPressed: _changeTime(1),
-                icon: const Icon(Icons.keyboard_arrow_right),
-              ),
-              const VerticalDivider(),
-              IconButton(
-                onPressed: _changeTime(-7),
-                icon: const Icon(Icons.keyboard_double_arrow_left),
-              ),
-              const Text('Week'),
-              IconButton(
-                onPressed: _changeTime(7),
-                icon: const Icon(Icons.keyboard_double_arrow_right),
-              ),
-              const VerticalDivider(),
-              TextButton(
-                onPressed: onWindowChanged == null
-                    ? null
-                    : () {
-                        onWindowChanged!(
-                          GraphTimeWindow.leftAligned(
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _changeTime(-1),
+              icon: const Icon(Icons.keyboard_arrow_left),
+            ),
+            const Text('Day'),
+            IconButton(
+              onPressed: _changeTime(1),
+              icon: const Icon(Icons.keyboard_arrow_right),
+            ),
+            const VerticalDivider(),
+            IconButton(
+              onPressed: _changeTime(-7),
+              icon: const Icon(Icons.keyboard_double_arrow_left),
+            ),
+            const Text('Week'),
+            IconButton(
+              onPressed: _changeTime(7),
+              icon: const Icon(Icons.keyboard_double_arrow_right),
+            ),
+            const VerticalDivider(),
+            TextButton(
+              onPressed: onWindowChanged == null
+                  ? null
+                  : () {
+                      onWindowChanged!(
+                        GraphTimeWindow.leftAligned(
+                          TZDateTime.now(timeZone),
+                          1,
+                        ),
+                      );
+                    },
+              child: const Text('Today'),
+            ),
+            const VerticalDivider(),
+            TextButton(
+              onPressed: onWindowChanged == null
+                  ? null
+                  : () {
+                      onWindowChanged!(
+                        GraphTimeWindow.leftAligned(
+                          nextWeekday(
                             TZDateTime.now(timeZone),
-                            1,
+                            DateTime.saturday,
                           ),
-                        );
-                      },
-                child: const Text('Today'),
-              ),
-              const VerticalDivider(),
-              TextButton(
-                onPressed: onWindowChanged == null
-                    ? null
-                    : () {
-                        onWindowChanged!(
-                          GraphTimeWindow.leftAligned(
-                            nextWeekday(
-                              TZDateTime.now(timeZone),
-                              DateTime.saturday,
-                            ),
-                            2,
-                          ),
-                        );
-                        // Even if it's Sunday, go to next Saturday.
-                      },
-                child: const Text('Weekend'),
-              ),
-              const VerticalDivider(),
-              TextButton(
-                onPressed: _changeDays(1),
-                child: const Text('1'),
-              ),
-              TextButton(
-                onPressed: _changeDays(2),
-                child: const Text('2'),
-              ),
-              TextButton(
-                onPressed: _changeDays(4),
-                child: const Text('4'),
-              ),
-              TextButton(
-                onPressed: _changeDays(7),
-                child: const Text('7'),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10),
-                child: Text('days'),
-              ),
-            ],
-          ),
+                          2,
+                        ),
+                      );
+                      // Even if it's Sunday, go to next Saturday.
+                    },
+              child: const Text('Weekend'),
+            ),
+            const VerticalDivider(),
+            TextButton(
+              onPressed: _changeDays(1),
+              child: const Text('1'),
+            ),
+            TextButton(
+              onPressed: _changeDays(2),
+              child: const Text('2'),
+            ),
+            TextButton(
+              onPressed: _changeDays(4),
+              child: const Text('4'),
+            ),
+            TextButton(
+              onPressed: _changeDays(7),
+              child: const Text('7'),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text('days'),
+            ),
+          ],
         ),
       ),
     );

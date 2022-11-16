@@ -140,9 +140,9 @@ class MapState extends State<Map> {
           },
         ),
         if (_gmap != null)
-          Container(
-            alignment: Alignment.bottomRight,
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 115),
+          Positioned(
+            bottom: 115,
+            right: 10,
             child: PointerInterceptor(
               child: _LodControls(
                 zoom: zoom,
@@ -168,6 +168,7 @@ class MapState extends State<Map> {
 
 // TODO: tooltip text
 // TODO: consistent weight with Maps zoom buttons (Material font doesn't support weight for these symbols)
+// TODO: consistent size with Maps zoom buttons? may need to replace them with our own
 class _LodControls extends StatelessWidget {
   const _LodControls({
     required this.lod,

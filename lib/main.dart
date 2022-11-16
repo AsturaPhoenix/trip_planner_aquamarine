@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:developer' as debug;
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -27,8 +26,6 @@ void main() {
 }
 
 class TripPlanner extends StatefulWidget {
-  static const double appBarHorizontalPadding = 0xE0, sidePanelWidth = 473;
-
   const TripPlanner({super.key});
 
   @override
@@ -56,11 +53,8 @@ class TripPlannerState extends State<TripPlanner> {
     super.initState();
 
     // TODO: Surface something to the user.
-    void logException(Object e, StackTrace s) => log.severe(
-          'Exception during initialization.',
-          e,
-          s,
-        );
+    void logException(Object e, StackTrace s) =>
+        log.severe('Exception during initialization.', e, s);
 
     Future.value(_client).then(
       (client) {
@@ -91,28 +85,46 @@ class TripPlannerState extends State<TripPlanner> {
       ),
       home: LayoutBuilder(
         builder: (context, boxConstraints) {
-          final inlineStationBar = boxConstraints.maxWidth >=
-              TripPlanner.sidePanelWidth +
+          const double selectedStationBarMinWidth = 480,
+              titleAreaPadding = 164,
+              selectedStationBarMinPadding = 16;
+          final centeredInlineStationBar = boxConstraints.maxWidth >=
+              selectedStationBarMinWidth +
                   2 *
                       (_SelectedStationBar.blendedHorizontalPadding +
-                          TripPlanner.appBarHorizontalPadding);
+                          selectedStationBarMinPadding +
+                          titleAreaPadding);
+          final inlineStationBar = boxConstraints.maxWidth >=
+              selectedStationBarMinWidth +
+                  2 *
+                      (_SelectedStationBar.blendedHorizontalPadding +
+                          selectedStationBarMinPadding) +
+                  titleAreaPadding;
+
+          const title = Text('BASK Trip Planner');
+
           return Scaffold(
             appBar: AppBar(
-              title: const Text('BASK Trip Planner'),
-              flexibleSpace: selectedStation != null && inlineStationBar
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: TripPlanner.appBarHorizontalPadding,
-                      ),
-                      child: Center(
+              title: Row(
+                children: [
+                  title,
+                  if (selectedStation != null && inlineStationBar)
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: selectedStationBarMinPadding,
+                        ),
                         child: _SelectedStationBar(
                           selectedStation!,
                           blendEdges: true,
                         ),
                       ),
-                    )
-                  : null,
+                    ),
+                  if (centeredInlineStationBar)
+                    const Opacity(opacity: 0, child: title),
+                ],
+              ),
             ),
             body: Column(
               children: [
@@ -125,6 +137,7 @@ class TripPlannerState extends State<TripPlanner> {
                           boxConstraints.maxWidth >= boxConstraints.maxHeight;
                       return Flex(
                         direction: horizontal ? Axis.horizontal : Axis.vertical,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
                             child: Map(
@@ -134,17 +147,15 @@ class TripPlannerState extends State<TripPlanner> {
                             ),
                           ),
                           if (selectedStation != null)
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: horizontal
-                                    ? min(
-                                        TripPlanner.sidePanelWidth,
-                                        boxConstraints.maxWidth / 2,
-                                      )
-                                    : boxConstraints.maxWidth,
-                              ),
-                              child: Align(
-                                alignment: Alignment.topCenter,
+                            FittedBox(
+                              alignment: Alignment.topCenter,
+                              fit: BoxFit.scaleDown,
+                              child: Container(
+                                constraints: BoxConstraints(
+                                  maxWidth: horizontal
+                                      ? boxConstraints.maxWidth / 2
+                                      : boxConstraints.maxWidth,
+                                ),
                                 child: TidePanel(
                                   client: _client as TripPlannerClient,
                                   station: selectedStation!,
@@ -178,7 +189,6 @@ class _SelectedStationBar extends StatelessWidget {
   }) =>
       Container(
         alignment: Alignment.center,
-        constraints: const BoxConstraints(minWidth: preferredWidth),
         decoration: BoxDecoration(
           borderRadius: const BorderRadius.all(Radius.elliptical(32, 4)),
           gradient: LinearGradient(
@@ -190,6 +200,7 @@ class _SelectedStationBar extends StatelessWidget {
           vertical: verticalPadding,
           horizontal: blendedHorizontalPadding,
         ),
+        width: preferredWidth,
         child: child,
       );
 
@@ -217,16 +228,12 @@ class _SelectedStationBar extends StatelessWidget {
           border: Border.symmetric(horizontal: BorderSide()),
         ),
         position: DecorationPosition.foreground,
-        child: UnconstrainedBox(
-          constrainedAxis: Axis.horizontal,
-          child: (blendEdges ? blendedEdgeContainer : fullWidthContainer)(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                station.typedShortTitle,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+        child: (blendEdges ? blendedEdgeContainer : fullWidthContainer)(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          child: FittedBox(
+            child: Text(
+              station.typedShortTitle,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
         ),
