@@ -449,22 +449,11 @@ class TimeControls extends StatelessWidget {
               child: const Text('Weekend'),
             ),
             const VerticalDivider(),
-            TextButton(
-              onPressed: _changeDays(1),
-              child: const Text('1'),
-            ),
-            TextButton(
-              onPressed: _changeDays(2),
-              child: const Text('2'),
-            ),
-            TextButton(
-              onPressed: _changeDays(4),
-              child: const Text('4'),
-            ),
-            TextButton(
-              onPressed: _changeDays(7),
-              child: const Text('7'),
-            ),
+            for (final days in const [1, 2, 4, 7])
+              TextButton(
+                onPressed: _changeDays(days),
+                child: Text(days.toString()),
+              ),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text('days'),
