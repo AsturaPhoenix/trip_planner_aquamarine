@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:developer' as debug;
 
 import 'package:flutter/material.dart';
+import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
-import 'package:timezone/timezone.dart';
 
 import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
@@ -42,11 +42,11 @@ class TripPlannerState extends State<TripPlanner> {
             datapoints: Uri(path: 'datapoints.xml'),
             tides: Uri(path: 'tides.php'),
           ),
-          timeZone: getLocation('America/Los_Angeles'),
+          timeZone: TimeZone.forId('America/Los_Angeles'),
         );
 
   Station? selectedStation;
-  DateTime t = DateTime.now();
+  Instant t = Instant.now();
 
   @override
   void initState() {

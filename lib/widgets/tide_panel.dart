@@ -1,5 +1,8 @@
+import 'dart:core';
+import 'dart:core' as core;
+
 import 'package:flutter/material.dart';
-import 'package:timezone/timezone.dart';
+import 'package:joda/time.dart';
 
 import '../providers/trip_planner_client.dart';
 
@@ -43,10 +46,10 @@ class TidePanel extends StatefulWidget {
 
   final TripPlannerClient client;
   final Station station;
-  final DateTime t;
+  final Instant t;
   final double graphWidth, graphHeight;
   final OverlaySwatch overlaySwatch;
-  final void Function(DateTime t)? onTimeChanged;
+  final void Function(Instant t)? onTimeChanged;
 
   @override
   State<StatefulWidget> createState() => TidePanelState();
@@ -55,59 +58,67 @@ class TidePanel extends StatefulWidget {
 /// Represents a consistent time window configuration that is valid for the
 /// graph.
 class GraphTimeWindow {
-  static TZDateTime _quantizeT0(TZDateTime t0, int days) {
-    t0 = TZDateTime(t0.location, t0.year, t0.month, t0.day);
+  static DateTime _quantizeT0(DateTime t0, int days) {
+    t0 = t0.withTimeAtStartOfDay();
 
     // tides.php; For a single-day graph at the fall-back transition, xtide
     // draws starting from 1 AM PDT.
-    if (days == 1 &&
-        t0.timeZone.isDst &&
-        !t0.add(const Duration(days: 1)).timeZone.isDst) {
-      t0 = t0.add(const Duration(hours: 1));
+    if (days == 1 && t0.isDst && !(t0 + const Period(days: 1)).isDst) {
+      t0 += const Duration(hours: 1);
     }
 
     return t0;
   }
 
-  static bool _isMidnight(TZDateTime t) =>
-      t == TZDateTime(t.location, t.year, t.month, t.day);
-
   GraphTimeWindow._(this.t0, this.t, this.days) {
-    assert(!t0.isAfter(t) && !t0.add(timespan).isBefore(t));
+    assert(t0 <= t && t <= t0 + timespan);
   }
 
-  /// A graph time window where [t] falls on the leading day.
-  factory GraphTimeWindow.leftAligned(TZDateTime t, int days) {
+  /// A graph time window where [t] falls on the leading day. [mayMove]
+  /// determines whether we will adjust [t] if it falls outside the normal
+  /// window due to DST quirks or instead change the window.
+  factory GraphTimeWindow.leftAligned(DateTime t, int days, bool mayMove) {
     var t0 = _quantizeT0(t, days);
 
-    if (t0.isAfter(t)) {
-      // This can only happen if we're [12AM-1AM) on the fall-back transition in a
-      // 1-day window, and we can only show this time on a multi-day window.
-      days = 2;
-      t0 = _quantizeT0(t, days);
+    if (t < t0) {
+      // This can only happen if we're [12AM-1AM) on the fall-back transition in
+      // a 1-day window, and we can only show this time on a multi-day window.
+      if (mayMove) {
+        t += const Duration(hours: 1);
+      } else {
+        days = 2;
+        t0 = _quantizeT0(t, days);
+      }
     }
 
     return GraphTimeWindow._(t0, t, days);
   }
 
-  /// A graph time window where [t] falls on the trailing day.
-  factory GraphTimeWindow.rightAligned(TZDateTime t, int days) {
+  /// A graph time window where [t] falls on the trailing day. [mayMove]
+  /// determines whether we will adjust [t] if it falls outside the normal
+  /// window due to DST quirks or instead change the window.
+  factory GraphTimeWindow.rightAligned(DateTime t, int days, bool mayMove) {
     var t0 = _quantizeT0(
-      t.subtract(Duration(days: _isMidnight(t) ? days : days - 1)),
+      t - Period(days: t.time == Time.zero ? days : days - 1),
       days,
     );
 
-    if (t0.isAfter(t)) {
-      // This can only happen if we're (12AM-1AM) on the fall-back transition in a
-      // 1-day window, and we can only show this time on a multi-day window.
-      days = 2;
-      t0 = _quantizeT0(t.subtract(const Duration(days: 1)), days);
-    } else if (t0.add(Duration(days: days)).isBefore(t)) {
+    if (t < t0) {
+      // This can only happen if we're (12AM-1AM) on the fall-back transition in
+      // a 1-day window, and we can only show this time on a multi-day window.
+      if (mayMove) {
+        t += const Duration(hours: 1);
+      } else {
+        days = 2;
+        t0 = _quantizeT0(t - const Period(days: 1), days);
+      }
+    } else if (t0 + Period(days: days) < t) {
       // This is the trailing end of a multi-day fall-back window.
-      t0 = _quantizeT0(
-        t.subtract(Duration(days: _isMidnight(t) ? days - 1 : days - 2)),
-        days,
-      );
+      if (mayMove) {
+        t -= const Duration(hours: 1);
+      } else {
+        t0 = _quantizeT0(t0 - const Period(days: 1), days);
+      }
     }
 
     return GraphTimeWindow._(t0, t, days);
@@ -119,43 +130,71 @@ class GraphTimeWindow {
   /// The adjustment is chosen to minimize the number of changes while
   /// "scrolling", so `t < t0` will adjust to a right-aligned window and
   /// `t > t0 + timespan` will adjust to a left-aligned window.
-  factory GraphTimeWindow(TZDateTime t0, DateTime t, int days) {
+  ///
+  /// If [mayMove] is true, [t] may be adjusted instead to minimize the window
+  /// adjustment in DST edge cases.
+  factory GraphTimeWindow(DateTime t0, Instant t, int days, bool mayMove) {
     t0 = _quantizeT0(t0, days);
 
-    if (t0.isAfter(t)) {
+    if (t < t0) {
       return GraphTimeWindow.rightAligned(
-        TZDateTime.from(t, t0.location),
+        DateTime(t, t0.timeZone),
         days,
+        mayMove,
       );
-    } else if (t0.add(Duration(days: days)).isBefore(t)) {
-      return GraphTimeWindow.leftAligned(TZDateTime.from(t, t0.location), days);
+    } else if (t0 + Period(days: days) < t) {
+      return GraphTimeWindow.leftAligned(
+        DateTime(t, t0.timeZone),
+        days,
+        mayMove,
+      );
     } else {
       return GraphTimeWindow._(t0, t, days);
     }
   }
 
-  final TZDateTime t0;
-  final DateTime t;
+  final DateTime t0;
+  final Instant t;
   final int days;
   Duration get timespan => Duration(days: days);
-  TZDateTime lerp(double f) => t0.add(timespan * f);
+  DateTime lerp(double f) => t0 + timespan * f;
 
   /// Creates a copy with the given overrides, potentially adjusting the window
-  /// to contain [t].
-  GraphTimeWindow copyWith({TZDateTime? t0, DateTime? t, int? days}) =>
-      GraphTimeWindow(t0 ?? this.t0, t ?? this.t, days ?? this.days);
+  /// to contain [t]. If [mayMove] is true, [t] itself may be adjusted as well.
+  GraphTimeWindow copyWith({
+    DateTime? t0,
+    Instant? t,
+    int? days,
+    required bool mayMove,
+  }) =>
+      GraphTimeWindow(t0 ?? this.t0, t ?? this.t, days ?? this.days, mayMove);
+
+  /// Shifts a [GraphTimeWindow] by the given [Period]. If [t] falls on a DST
+  /// edge case, it is adjusted. Furthermore, if [days] = 1,
+  /// [Resolvers.fallBackLater] is used since xtide ends up shifting the graph
+  /// start by an hour anyway; combined with the [t] adjustment for [12AM-1AM),
+  /// this creates a continuous mapping.
+  GraphTimeWindow operator +(Period period) {
+    return copyWith(
+      t0: t0.add(period, fallBack: Resolvers.fallBackLater),
+      t: DateTime(t, t0.timeZone)
+          .add(period, fallBack: Resolvers.fallBackLater),
+      mayMove: true,
+    );
+  }
 }
 
 class TidePanelState extends State<TidePanel> {
   late GraphTimeWindow timeWindow = GraphTimeWindow.leftAligned(
-    TZDateTime.from(widget.t, widget.client.timeZone),
+    DateTime(widget.t, widget.client.timeZone),
     1,
+    false,
   );
 
   @override
   void didUpdateWidget(TidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    timeWindow = timeWindow.copyWith(t: widget.t);
+    timeWindow = timeWindow.copyWith(t: widget.t, mayMove: false);
   }
 
   @override
@@ -326,36 +365,6 @@ class _HourGrid extends StatelessWidget {
 }
 
 class TimeControls extends StatelessWidget {
-  static TZDateTime nextWeekday(TZDateTime t, int weekday) =>
-      t.add(Duration(days: (weekday - t.weekday) % 7));
-
-  // TODO: Joda/FluxCapacitor port. The caveats here:
-  // * Spring-forward hole: 2 AM becomes 1 AM.
-  // * Fall-back ambiguity: 1 AM is in DST.
-  static TZDateTime addDays(TZDateTime t, int days) {
-    final r = DateTime.utc(
-      t.year,
-      t.month,
-      t.day,
-      t.hour,
-      t.minute,
-      t.second,
-      t.millisecond,
-      t.microsecond,
-    ).add(Duration(days: days));
-    return TZDateTime(
-      t.location,
-      r.year,
-      r.month,
-      r.day,
-      r.hour,
-      r.minute,
-      r.second,
-      r.millisecond,
-      r.microsecond,
-    );
-  }
-
   const TimeControls({
     super.key,
     required this.timeZone,
@@ -363,23 +372,18 @@ class TimeControls extends StatelessWidget {
     this.onWindowChanged,
   });
 
-  final Location timeZone;
+  final TimeZone timeZone;
   final GraphTimeWindow timeWindow;
   final void Function(GraphTimeWindow window)? onWindowChanged;
 
   void Function()? _changeTime(int days) => onWindowChanged == null
       ? null
-      : () => onWindowChanged!(
-            timeWindow.copyWith(
-              t0: addDays(timeWindow.t0, days),
-              t: addDays(TZDateTime.from(timeWindow.t, timeZone), days),
-            ),
-          );
+      : () => onWindowChanged!(timeWindow + Period(days: days));
 
   void Function()? _changeDays(int days) => onWindowChanged == null
       ? null
       : () => onWindowChanged!(
-            timeWindow.copyWith(days: days),
+            timeWindow.copyWith(days: days, mayMove: true),
           );
 
   @override
@@ -423,8 +427,9 @@ class TimeControls extends StatelessWidget {
                   : () {
                       onWindowChanged!(
                         GraphTimeWindow.leftAligned(
-                          TZDateTime.now(timeZone),
+                          DateTime.now(timeZone),
                           1,
+                          true,
                         ),
                       );
                     },
@@ -437,11 +442,17 @@ class TimeControls extends StatelessWidget {
                   : () {
                       onWindowChanged!(
                         GraphTimeWindow.leftAligned(
-                          nextWeekday(
-                            TZDateTime.now(timeZone),
-                            DateTime.saturday,
+                          DateTime.resolve(
+                            DateTime.now(timeZone)
+                                    .date
+                                    .nextWeekday(core.DateTime.saturday) &
+                                // This construct does get simpler if we don't
+                                // try to preserve the selected time.
+                                DateTime(timeWindow.t, timeZone).time,
+                            timeZone,
                           ),
                           2,
+                          true,
                         ),
                       );
                       // Even if it's Sunday, go to next Saturday.
