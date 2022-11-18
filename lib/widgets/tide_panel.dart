@@ -332,7 +332,7 @@ class TideGraph extends StatelessWidget {
 class _HourGrid extends StatelessWidget {
   const _HourGrid(this.t, {required this.swatch});
 
-  final DateTime t;
+  final Time t;
   int get hour => t.hour;
   String get label => hour == 0
       ? 'm'

@@ -22,11 +22,24 @@ void main() {
 
   initializeTimeZones();
 
-  runApp(const TripPlanner());
+  runApp(
+    TripPlanner(
+      client: TripPlannerClient.resolveFromRedirect(
+        Uri.parse('https://www.bask.org/trip_planner/'),
+        TripPlannerEndpoints(
+          datapoints: Uri(path: 'datapoints.xml'),
+          tides: Uri(path: 'tides.php'),
+        ),
+        timeZone: TimeZone.forId('America/Los_Angeles'),
+      ),
+    ),
+  );
 }
 
 class TripPlanner extends StatefulWidget {
-  const TripPlanner({super.key});
+  const TripPlanner({super.key, required this.client});
+
+  final FutureOr<TripPlannerClient> client;
 
   @override
   TripPlannerState createState() => TripPlannerState();
@@ -35,16 +48,6 @@ class TripPlanner extends StatefulWidget {
 class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
-  TripPlannerState()
-      : _client = TripPlannerClient.resolveFromRedirect(
-          Uri.parse('https://www.bask.org/trip_planner/'),
-          TripPlannerEndpoints(
-            datapoints: Uri(path: 'datapoints.xml'),
-            tides: Uri(path: 'tides.php'),
-          ),
-          timeZone: TimeZone.forId('America/Los_Angeles'),
-        );
-
   Station? selectedStation;
   Instant t = Instant.now();
 
@@ -52,26 +55,33 @@ class TripPlannerState extends State<TripPlanner> {
   void initState() {
     super.initState();
 
-    // TODO: Surface something to the user.
-    void logException(Object e, StackTrace s) =>
-        log.severe('Exception during initialization.', e, s);
+    () async {
+      try {
+        client = await widget.client;
+        final stations = await client.getDatapoints();
 
-    Future.value(_client).then(
-      (client) {
-        _client = client;
-        client.getDatapoints().then(
-              (stations) => setState(() {
-                this.stations = stations;
-                selectedStation = stations.first;
-              }),
-              onError: logException,
-            );
-      },
-      onError: logException,
-    );
+        setState(() {
+          this.stations = stations;
+          selectedStation = stations.first;
+        });
+      } catch (e, s) {
+        // TODO: Surface something to the user.
+        log.severe('Exception during initialization.', e, s);
+      }
+    }();
   }
 
-  FutureOr<TripPlannerClient> _client;
+  @override
+  void didUpdateWidget(covariant TripPlanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    () async {
+      final client = await widget.client;
+      setState(() => this.client = client);
+    }();
+  }
+
+  late TripPlannerClient client;
 
   var stations = <Station>{};
 
@@ -157,7 +167,7 @@ class TripPlannerState extends State<TripPlanner> {
                                       : boxConstraints.maxWidth,
                                 ),
                                 child: TidePanel(
-                                  client: _client as TripPlannerClient,
+                                  client: client,
                                   station: selectedStation!,
                                   t: t,
                                   onTimeChanged: (t) =>
