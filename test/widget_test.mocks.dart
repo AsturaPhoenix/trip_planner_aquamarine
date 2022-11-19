@@ -7,11 +7,11 @@ import 'dart:async' as _i6;
 import 'dart:typed_data' as _i7;
 
 import 'package:hive_flutter/adapters.dart' as _i2;
-import 'package:joda/time.dart' as _i5;
+import 'package:joda/time.dart' as _i4;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart' as _i3;
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart'
-    as _i4;
+    as _i5;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -44,19 +44,8 @@ class _FakeBlobCache_1 extends _i1.SmartFake implements _i3.BlobCache {
         );
 }
 
-class _FakeTripPlannerHttpClient_2 extends _i1.SmartFake
-    implements _i4.TripPlannerHttpClient {
-  _FakeTripPlannerHttpClient_2(
-    Object parent,
-    Invocation parentInvocation,
-  ) : super(
-          parent,
-          parentInvocation,
-        );
-}
-
-class _FakeTimeZone_3 extends _i1.SmartFake implements _i5.TimeZone {
-  _FakeTimeZone_3(
+class _FakeTimeZone_2 extends _i1.SmartFake implements _i4.TimeZone {
+  _FakeTimeZone_2(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -68,19 +57,19 @@ class _FakeTimeZone_3 extends _i1.SmartFake implements _i5.TimeZone {
 /// A class which mocks [TripPlannerClient].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockTripPlannerClient extends _i1.Mock implements _i4.TripPlannerClient {
+class MockTripPlannerClient extends _i1.Mock implements _i5.TripPlannerClient {
   @override
-  _i2.Box<_i4.Station> get stationCache => (super.noSuchMethod(
+  _i2.Box<_i5.Station> get stationCache => (super.noSuchMethod(
         Invocation.getter(#stationCache),
-        returnValue: _FakeBox_0<_i4.Station>(
+        returnValue: _FakeBox_0<_i5.Station>(
           this,
           Invocation.getter(#stationCache),
         ),
-        returnValueForMissingStub: _FakeBox_0<_i4.Station>(
+        returnValueForMissingStub: _FakeBox_0<_i5.Station>(
           this,
           Invocation.getter(#stationCache),
         ),
-      ) as _i2.Box<_i4.Station>);
+      ) as _i2.Box<_i5.Station>);
   @override
   _i3.BlobCache get tideGraphCache => (super.noSuchMethod(
         Invocation.getter(#tideGraphCache),
@@ -94,29 +83,27 @@ class MockTripPlannerClient extends _i1.Mock implements _i4.TripPlannerClient {
         ),
       ) as _i3.BlobCache);
   @override
-  _i4.TripPlannerHttpClient get httpClient => (super.noSuchMethod(
-        Invocation.getter(#httpClient),
-        returnValue: _FakeTripPlannerHttpClient_2(
-          this,
-          Invocation.getter(#httpClient),
+  set httpClient(
+          _i6.Future<_i5.TripPlannerHttpClient> Function()? _httpClient) =>
+      super.noSuchMethod(
+        Invocation.setter(
+          #httpClient,
+          _httpClient,
         ),
-        returnValueForMissingStub: _FakeTripPlannerHttpClient_2(
-          this,
-          Invocation.getter(#httpClient),
-        ),
-      ) as _i4.TripPlannerHttpClient);
+        returnValueForMissingStub: null,
+      );
   @override
-  _i5.TimeZone get timeZone => (super.noSuchMethod(
+  _i4.TimeZone get timeZone => (super.noSuchMethod(
         Invocation.getter(#timeZone),
-        returnValue: _FakeTimeZone_3(
+        returnValue: _FakeTimeZone_2(
           this,
           Invocation.getter(#timeZone),
         ),
-        returnValueForMissingStub: _FakeTimeZone_3(
+        returnValueForMissingStub: _FakeTimeZone_2(
           this,
           Invocation.getter(#timeZone),
         ),
-      ) as _i5.TimeZone);
+      ) as _i4.TimeZone);
   @override
   void close() => super.noSuchMethod(
         Invocation.method(
@@ -126,21 +113,21 @@ class MockTripPlannerClient extends _i1.Mock implements _i4.TripPlannerClient {
         returnValueForMissingStub: null,
       );
   @override
-  _i6.Stream<Set<_i4.Station>> getDatapoints() => (super.noSuchMethod(
+  _i6.Stream<Set<_i5.Station>> getDatapoints() => (super.noSuchMethod(
         Invocation.method(
           #getDatapoints,
           [],
         ),
-        returnValue: _i6.Stream<Set<_i4.Station>>.empty(),
-        returnValueForMissingStub: _i6.Stream<Set<_i4.Station>>.empty(),
-      ) as _i6.Stream<Set<_i4.Station>>);
+        returnValue: _i6.Stream<Set<_i5.Station>>.empty(),
+        returnValueForMissingStub: _i6.Stream<Set<_i5.Station>>.empty(),
+      ) as _i6.Stream<Set<_i5.Station>>);
   @override
   _i6.Stream<_i7.Uint8List> getTideGraph(
-    _i4.Station? station,
+    _i5.Station? station,
     int? days,
     int? width,
     int? height,
-    _i5.Date? begin,
+    _i4.Date? begin,
   ) =>
       (super.noSuchMethod(
         Invocation.method(

@@ -62,6 +62,24 @@ Future<Uri> resolveRedirects(
   throw RedirectException('Too many redirects', redirects);
 }
 
+class RetryOnDemand<T> {
+  static final log = Logger('RetryOnDemand');
+
+  RetryOnDemand(this._factory) {
+    _cached = _guardedFactory();
+  }
+
+  final Future<T> Function() _factory;
+  Future<T>? _cached;
+
+  Future<T> _guardedFactory() => _factory().onError((Object e, s) {
+        _cached = null;
+        throw e;
+      });
+
+  Future<T> get() => _cached ??= _guardedFactory();
+}
+
 class TripPlannerClient {
   static final log = Logger('TripPlannerClient');
 
@@ -78,13 +96,13 @@ class TripPlannerClient {
   );
   final Box<Station> stationCache;
   final BlobCache tideGraphCache;
-  TripPlannerHttpClient? httpClient;
+  Future<TripPlannerHttpClient> Function()? httpClient;
 
   /// The server uses local time zone, and all the stations are on the West
   /// Coast.
   final TimeZone timeZone;
 
-  void close() => httpClient?.close();
+  void close() => httpClient?.call().then((client) => client.close()).ignore;
 
   Stream<Set<Station>> getDatapoints() {
     final results = StreamController<Set<Station>>();
@@ -99,21 +117,24 @@ class TripPlannerClient {
     }
 
     if (httpClient != null) {
-      httpClient!.getDatapoints().then(
-        (stations) {
+      () async {
+        try {
+          final stations = await (await httpClient!()).getDatapoints();
           log.info('Stations: fetched/refreshed.');
           results.add(stations);
-          stationCache.clear();
-          stationCache.addAll(stations);
-        },
-        onError: (Object e, StackTrace s) {
+          stationCache
+            ..clear()
+            ..addAll(stations);
+        } catch (e, s) {
           if (needResults) {
             results.addError(e, s);
           } else {
             log.warning('Failed to refresh stations.', e, s);
           }
-        },
-      ).whenComplete(results.close);
+        } finally {
+          results.close();
+        }
+      }();
     } else {
       results.close();
     }
@@ -141,19 +162,22 @@ class TripPlannerClient {
     }
 
     if (httpClient != null) {
-      httpClient!.getTideGraph(station, days, width, height, begin).then(
-        (data) {
+      () async {
+        try {
+          final data = await (await httpClient!())
+              .getTideGraph(station, days, width, height, begin);
           results.add(data);
           tideGraphCache[key] = data;
-        },
-        onError: (Object e, StackTrace s) {
+        } catch (e, s) {
           if (needResults) {
             results.addError(e, s);
           } else {
             log.warning('Failed to fetch/refresh tide graph.', e, s);
           }
-        },
-      ).whenComplete(results.close);
+        } finally {
+          results.close();
+        }
+      }();
     } else {
       results.close();
     }

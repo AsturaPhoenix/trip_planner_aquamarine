@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as debug;
 
-import 'package:async/async.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:joda/time.dart';
@@ -26,11 +25,13 @@ void main() {
 
   initializeTimeZones();
 
-  final httpClient = TripPlannerHttpClient.resolveFromRedirect(
-    Uri.parse('https://www.bask.org/trip_planner/'),
-    TripPlannerEndpoints(
-      datapoints: Uri(path: 'datapoints.xml'),
-      tides: Uri(path: 'tides.php'),
+  final httpClientFactory = RetryOnDemand(
+    () => TripPlannerHttpClient.resolveFromRedirect(
+      Uri.parse('https://www.bask.org/trip_planner/'),
+      TripPlannerEndpoints(
+        datapoints: Uri(path: 'datapoints.xml'),
+        tides: Uri(path: 'tides.php'),
+      ),
     ),
   );
 
@@ -52,7 +53,7 @@ void main() {
         return TripPlannerClient(
           await stationCache,
           tideGraphCache,
-          await httpClient,
+          httpClientFactory.get,
           TimeZone.forId('America/Los_Angeles'),
         );
       }(),
@@ -74,10 +75,12 @@ class TripPlannerState extends State<TripPlanner> {
 
   Station? selectedStation;
   Instant t = Instant.now();
+  late Future<TripPlannerClient> client;
+  late Stream<Set<Station>> stations;
 
   @override
   void initState() {
-    super.initState();
+    super.initState;
     setClient(widget.client);
   }
 
@@ -87,44 +90,24 @@ class TripPlannerState extends State<TripPlanner> {
     super.didUpdateWidget(oldWidget);
   }
 
-  TripPlannerClient? client;
-  CancelableOperation<void>? _clientOperation;
   void setClient(FutureOr<TripPlannerClient> value) {
-    _clientOperation?.cancel();
-
-    _clientOperation =
-        CancelableOperation.fromFuture(Future.value(value)).then((value) {
-      client?.close();
-      client = value;
-      setState(() => stations = client!
-          .getDatapoints()
-          .where((stations) => stations.isNotEmpty)
-          .handleError(
-            (e, StackTrace s) =>
-                log.warning('Failed to get station list.', e, s),
-          )
-          .asBroadcastStream());
-      return stations!.first;
-    }).then(
-      (stations) {
-        if (selectedStation == null) {
-          setState(() {
-            selectedStation = stations.first;
-          });
-        }
-      },
-      onError: (e, s) =>
-          // TODO: Surface something to the user.
-          log.severe('Exception during initialization.', e, s),
-    );
+    client = Future.value(value).onError((Object e, s) {
+      // TODO: Surface something to the user.
+      log.severe('Exception during initialization.', e, s);
+      throw e;
+    });
+    stations = Stream.fromFuture(client)
+        .asyncExpand((client) => client.getDatapoints())
+        .where((stations) => stations.isNotEmpty)
+        .handleError(
+          (e, StackTrace s) => log.warning('Failed to get station list.', e, s),
+        );
   }
-
-  Stream<Set<Station>>? stations;
 
   @override
   void dispose() {
     super.dispose();
-    client?.close();
+    client.then((client) => client.close()).ignore();
   }
 
   @override
@@ -155,77 +138,90 @@ class TripPlannerState extends State<TripPlanner> {
 
           const title = Text('BASK Trip Planner');
 
-          return Scaffold(
-            appBar: AppBar(
-              title: Row(
-                children: [
-                  title,
-                  if (selectedStation != null && inlineStationBar)
-                    Expanded(
-                      child: Container(
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: selectedStationBarMinPadding,
-                        ),
-                        child: _SelectedStationBar(
-                          selectedStation!,
-                          blendEdges: true,
-                        ),
-                      ),
-                    ),
-                  if (centeredInlineStationBar)
-                    const Opacity(opacity: 0, child: title),
-                ],
-              ),
-            ),
-            body: Column(
-              children: [
-                if (selectedStation != null && !inlineStationBar)
-                  _SelectedStationBar(selectedStation!, blendEdges: false),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, boxConstraints) {
-                      bool horizontal =
-                          boxConstraints.maxWidth >= boxConstraints.maxHeight;
-                      return Flex(
-                        direction: horizontal ? Axis.horizontal : Axis.vertical,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+          return FutureBuilder(
+            future: client,
+            builder: (context, clientSnapshot) => StreamBuilder(
+              stream: stations,
+              builder: (context, stationsSnapshot) {
+                selectedStation ??= stationsSnapshot.data?.first;
+
+                return Scaffold(
+                  appBar: AppBar(
+                    title: Row(
+                      children: [
+                        title,
+                        if (selectedStation != null && inlineStationBar)
                           Expanded(
-                            child: StreamBuilder(
-                              stream: stations,
-                              builder: (context, snapshot) => Map(
-                                stations: snapshot.data ?? {},
-                                onStationSelected: (station) =>
-                                    setState(() => selectedStation = station),
+                            child: Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: selectedStationBarMinPadding,
+                              ),
+                              child: _SelectedStationBar(
+                                selectedStation!,
+                                blendEdges: true,
                               ),
                             ),
                           ),
-                          if (selectedStation != null)
-                            FittedBox(
-                              alignment: Alignment.topCenter,
-                              fit: BoxFit.scaleDown,
-                              child: Container(
-                                constraints: BoxConstraints(
-                                  maxWidth: horizontal
-                                      ? boxConstraints.maxWidth / 2
-                                      : boxConstraints.maxWidth,
-                                ),
-                                child: TidePanel(
-                                  client: client!,
-                                  station: selectedStation!,
-                                  t: t,
-                                  onTimeChanged: (t) =>
-                                      setState(() => this.t = t),
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                        if (centeredInlineStationBar)
+                          const Opacity(opacity: 0, child: title),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  body: Column(
+                    children: [
+                      if (selectedStation != null && !inlineStationBar)
+                        _SelectedStationBar(
+                          selectedStation!,
+                          blendEdges: false,
+                        ),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, boxConstraints) {
+                            bool horizontal = boxConstraints.maxWidth >=
+                                boxConstraints.maxHeight;
+                            return Flex(
+                              direction:
+                                  horizontal ? Axis.horizontal : Axis.vertical,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: Map(
+                                    stations: stationsSnapshot.data ?? {},
+                                    onStationSelected: (station) => setState(
+                                      () => selectedStation = station,
+                                    ),
+                                  ),
+                                ),
+                                if (selectedStation != null &&
+                                    clientSnapshot.hasData)
+                                  FittedBox(
+                                    alignment: Alignment.topCenter,
+                                    fit: BoxFit.scaleDown,
+                                    child: Container(
+                                      constraints: BoxConstraints(
+                                        maxWidth: horizontal
+                                            ? boxConstraints.maxWidth / 2
+                                            : boxConstraints.maxWidth,
+                                      ),
+                                      child: TidePanel(
+                                        client: clientSnapshot.requireData,
+                                        station: selectedStation!,
+                                        t: t,
+                                        onTimeChanged: (t) =>
+                                            setState(() => this.t = t),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           );
         },

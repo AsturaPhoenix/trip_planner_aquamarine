@@ -302,14 +302,26 @@ class TideGraph extends StatefulWidget {
 class TideGraphState extends State<TideGraph> {
   static final log = Logger('TideGraphState');
 
-  late Stream<Uint8List> graphImages = widget.getTideGraph();
+  late Stream<Uint8List> graphImages;
+
+  @override
+  void initState() {
+    super.initState();
+    getTideGraph();
+  }
+
+  void getTideGraph() {
+    graphImages = widget.getTideGraph().handleError(
+          (e, StackTrace s) => log.warning('Failed to fetch tide graph.', e, s),
+        );
+  }
 
   @override
   void didUpdateWidget(covariant TideGraph oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (widget.isGraphDirty(oldWidget)) {
-      graphImages = widget.getTideGraph();
+      getTideGraph();
     }
   }
 
@@ -329,25 +341,14 @@ class TideGraphState extends State<TideGraph> {
               top: -37,
               child: StreamBuilder(
                 stream: graphImages,
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return Image.memory(
-                      snapshot.requireData,
-                      width: widget.imageWidth.toDouble(),
-                      height: widget.imageHeight.toDouble(),
-                      gaplessPlayback: true,
-                    );
-                  } else {
-                    if (snapshot.hasError) {
-                      log.warning(
-                        'Failed to fetch tide graph.',
-                        snapshot.error,
-                        snapshot.stackTrace,
-                      );
-                    }
-                    return const Text('...');
-                  }
-                },
+                builder: (context, snapshot) => snapshot.hasData
+                    ? Image.memory(
+                        snapshot.requireData,
+                        width: widget.imageWidth.toDouble(),
+                        height: widget.imageHeight.toDouble(),
+                        gaplessPlayback: true,
+                      )
+                    : const Text('...'),
               ),
             ),
             for (int t = 1; t < gridDivisions; ++t)
