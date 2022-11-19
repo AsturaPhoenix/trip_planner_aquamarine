@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
+import 'package:logging/logging.dart';
 
 import '../providers/trip_planner_client.dart';
 
@@ -299,6 +300,8 @@ class TideGraph extends StatefulWidget {
 }
 
 class TideGraphState extends State<TideGraph> {
+  static final log = Logger('TideGraphState');
+
   late Stream<Uint8List> graphImages = widget.getTideGraph();
 
   @override
@@ -326,14 +329,25 @@ class TideGraphState extends State<TideGraph> {
               top: -37,
               child: StreamBuilder(
                 stream: graphImages,
-                builder: (context, snapshot) => snapshot.hasData
-                    ? Image.memory(
-                        snapshot.requireData,
-                        width: widget.imageWidth.toDouble(),
-                        height: widget.imageHeight.toDouble(),
-                        gaplessPlayback: true,
-                      )
-                    : const Text('...'),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Image.memory(
+                      snapshot.requireData,
+                      width: widget.imageWidth.toDouble(),
+                      height: widget.imageHeight.toDouble(),
+                      gaplessPlayback: true,
+                    );
+                  } else {
+                    if (snapshot.hasError) {
+                      log.warning(
+                        'Failed to fetch tide graph.',
+                        snapshot.error,
+                        snapshot.stackTrace,
+                      );
+                    }
+                    return const Text('...');
+                  }
+                },
               ),
             ),
             for (int t = 1; t < gridDivisions; ++t)

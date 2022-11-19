@@ -71,36 +71,52 @@ class TripPlannerClient {
   }
 
   TripPlannerClient(
-      this.stationCache, this.tideGraphCache, this.httpClient, this.timeZone);
+    this.stationCache,
+    this.tideGraphCache,
+    this.httpClient,
+    this.timeZone,
+  );
   final Box<Station> stationCache;
   final BlobCache tideGraphCache;
-  final TripPlannerHttpClient httpClient;
+  TripPlannerHttpClient? httpClient;
 
   /// The server uses local time zone, and all the stations are on the West
   /// Coast.
   final TimeZone timeZone;
 
-  void close() => httpClient.close();
+  void close() => httpClient?.close();
 
   Stream<Set<Station>> getDatapoints() {
     final results = StreamController<Set<Station>>();
+    final bool needResults;
     if (stationCache.isNotEmpty) {
       log.info('Stations: cache hit.');
       results.add({...stationCache.values});
+      needResults = false;
     } else {
       log.info('Stations: cache miss.');
+      needResults = true;
     }
 
-    httpClient.getDatapoints().then(
-      (stations) {
-        log.info('Stations: refreshed.');
-        results.add(stations);
-        stationCache.clear();
-        stationCache.addAll(stations);
-      },
-      onError: (e, StackTrace s) =>
-          log.warning('Failed to fetch/refresh stations.', e, s),
-    ).whenComplete(results.close);
+    if (httpClient != null) {
+      httpClient!.getDatapoints().then(
+        (stations) {
+          log.info('Stations: fetched/refreshed.');
+          results.add(stations);
+          stationCache.clear();
+          stationCache.addAll(stations);
+        },
+        onError: (Object e, StackTrace s) {
+          if (needResults) {
+            results.addError(e, s);
+          } else {
+            log.warning('Failed to refresh stations.', e, s);
+          }
+        },
+      ).whenComplete(results.close);
+    } else {
+      results.close();
+    }
 
     return results.stream;
   }
@@ -113,21 +129,34 @@ class TripPlannerClient {
     Date begin,
   ) {
     final results = StreamController<Uint8List>();
+    final bool needResults;
 
     final key = TideGraphKey(station.id, begin, days).toString();
     final cached = tideGraphCache[key];
     if (cached != null) {
       results.add(cached);
+      needResults = false;
+    } else {
+      needResults = true;
     }
 
-    httpClient.getTideGraph(station, days, width, height, begin).then(
-      (data) {
-        results.add(data);
-        tideGraphCache[key] = data;
-      },
-      onError: (e, StackTrace s) =>
-          log.warning('Failed to fetch/refresh tide graph.', e, s),
-    ).whenComplete(results.close);
+    if (httpClient != null) {
+      httpClient!.getTideGraph(station, days, width, height, begin).then(
+        (data) {
+          results.add(data);
+          tideGraphCache[key] = data;
+        },
+        onError: (Object e, StackTrace s) {
+          if (needResults) {
+            results.addError(e, s);
+          } else {
+            log.warning('Failed to fetch/refresh tide graph.', e, s);
+          }
+        },
+      ).whenComplete(results.close);
+    } else {
+      results.close();
+    }
 
     return results.stream;
   }

@@ -87,15 +87,23 @@ class TripPlannerState extends State<TripPlanner> {
     super.didUpdateWidget(oldWidget);
   }
 
-  late TripPlannerClient client;
+  TripPlannerClient? client;
   CancelableOperation<void>? _clientOperation;
   void setClient(FutureOr<TripPlannerClient> value) {
     _clientOperation?.cancel();
 
     _clientOperation =
         CancelableOperation.fromFuture(Future.value(value)).then((value) {
+      client?.close();
       client = value;
-      setState(() => stations = client.getDatapoints().asBroadcastStream());
+      setState(() => stations = client!
+          .getDatapoints()
+          .where((stations) => stations.isNotEmpty)
+          .handleError(
+            (e, StackTrace s) =>
+                log.warning('Failed to get station list.', e, s),
+          )
+          .asBroadcastStream());
       return stations!.first;
     }).then(
       (stations) {
@@ -112,6 +120,12 @@ class TripPlannerState extends State<TripPlanner> {
   }
 
   Stream<Set<Station>>? stations;
+
+  @override
+  void dispose() {
+    super.dispose();
+    client?.close();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,12 +193,13 @@ class TripPlannerState extends State<TripPlanner> {
                         children: [
                           Expanded(
                             child: StreamBuilder(
-                                stream: stations,
-                                builder: (context, snapshot) => Map(
-                                      stations: snapshot.data ?? {},
-                                      onStationSelected: (station) => setState(
-                                          () => selectedStation = station),
-                                    )),
+                              stream: stations,
+                              builder: (context, snapshot) => Map(
+                                stations: snapshot.data ?? {},
+                                onStationSelected: (station) =>
+                                    setState(() => selectedStation = station),
+                              ),
+                            ),
                           ),
                           if (selectedStation != null)
                             FittedBox(
@@ -197,7 +212,7 @@ class TripPlannerState extends State<TripPlanner> {
                                       : boxConstraints.maxWidth,
                                 ),
                                 child: TidePanel(
-                                  client: client,
+                                  client: client!,
                                   station: selectedStation!,
                                   t: t,
                                   onTimeChanged: (t) =>
