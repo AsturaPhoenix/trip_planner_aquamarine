@@ -3,12 +3,14 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i4;
+import 'dart:async' as _i5;
+import 'dart:typed_data' as _i6;
 
-import 'package:joda/time.dart' as _i3;
+import 'package:joda/time.dart' as _i4;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:trip_planner_aquamarine/persistence/blob_cache.dart' as _i2;
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart'
-    as _i2;
+    as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -21,9 +23,8 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart'
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
-class _FakeTripPlannerEndpoints_0 extends _i1.SmartFake
-    implements _i2.TripPlannerEndpoints {
-  _FakeTripPlannerEndpoints_0(
+class _FakeBlobCache_0 extends _i1.SmartFake implements _i2.BlobCache {
+  _FakeBlobCache_0(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -32,8 +33,9 @@ class _FakeTripPlannerEndpoints_0 extends _i1.SmartFake
         );
 }
 
-class _FakeTimeZone_1 extends _i1.SmartFake implements _i3.TimeZone {
-  _FakeTimeZone_1(
+class _FakeTripPlannerHttpClient_1 extends _i1.SmartFake
+    implements _i3.TripPlannerHttpClient {
+  _FakeTripPlannerHttpClient_1(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -42,8 +44,8 @@ class _FakeTimeZone_1 extends _i1.SmartFake implements _i3.TimeZone {
         );
 }
 
-class _FakeUri_2 extends _i1.SmartFake implements Uri {
-  _FakeUri_2(
+class _FakeTimeZone_2 extends _i1.SmartFake implements _i4.TimeZone {
+  _FakeTimeZone_2(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -55,31 +57,43 @@ class _FakeUri_2 extends _i1.SmartFake implements Uri {
 /// A class which mocks [TripPlannerClient].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockTripPlannerClient extends _i1.Mock implements _i2.TripPlannerClient {
+class MockTripPlannerClient extends _i1.Mock implements _i3.TripPlannerClient {
   @override
-  _i2.TripPlannerEndpoints get endpoints => (super.noSuchMethod(
-        Invocation.getter(#endpoints),
-        returnValue: _FakeTripPlannerEndpoints_0(
+  _i2.BlobCache get tideGraphCache => (super.noSuchMethod(
+        Invocation.getter(#tideGraphCache),
+        returnValue: _FakeBlobCache_0(
           this,
-          Invocation.getter(#endpoints),
+          Invocation.getter(#tideGraphCache),
         ),
-        returnValueForMissingStub: _FakeTripPlannerEndpoints_0(
+        returnValueForMissingStub: _FakeBlobCache_0(
           this,
-          Invocation.getter(#endpoints),
+          Invocation.getter(#tideGraphCache),
         ),
-      ) as _i2.TripPlannerEndpoints);
+      ) as _i2.BlobCache);
   @override
-  _i3.TimeZone get timeZone => (super.noSuchMethod(
+  _i3.TripPlannerHttpClient get httpClient => (super.noSuchMethod(
+        Invocation.getter(#httpClient),
+        returnValue: _FakeTripPlannerHttpClient_1(
+          this,
+          Invocation.getter(#httpClient),
+        ),
+        returnValueForMissingStub: _FakeTripPlannerHttpClient_1(
+          this,
+          Invocation.getter(#httpClient),
+        ),
+      ) as _i3.TripPlannerHttpClient);
+  @override
+  _i4.TimeZone get timeZone => (super.noSuchMethod(
         Invocation.getter(#timeZone),
-        returnValue: _FakeTimeZone_1(
+        returnValue: _FakeTimeZone_2(
           this,
           Invocation.getter(#timeZone),
         ),
-        returnValueForMissingStub: _FakeTimeZone_1(
+        returnValueForMissingStub: _FakeTimeZone_2(
           this,
           Invocation.getter(#timeZone),
         ),
-      ) as _i3.TimeZone);
+      ) as _i4.TimeZone);
   @override
   void close() => super.noSuchMethod(
         Invocation.method(
@@ -89,59 +103,35 @@ class MockTripPlannerClient extends _i1.Mock implements _i2.TripPlannerClient {
         returnValueForMissingStub: null,
       );
   @override
-  _i4.Future<Set<_i2.Station>> getDatapoints() => (super.noSuchMethod(
+  _i5.Future<Set<_i3.Station>> getDatapoints() => (super.noSuchMethod(
         Invocation.method(
           #getDatapoints,
           [],
         ),
-        returnValue: _i4.Future<Set<_i2.Station>>.value(<_i2.Station>{}),
+        returnValue: _i5.Future<Set<_i3.Station>>.value(<_i3.Station>{}),
         returnValueForMissingStub:
-            _i4.Future<Set<_i2.Station>>.value(<_i2.Station>{}),
-      ) as _i4.Future<Set<_i2.Station>>);
+            _i5.Future<Set<_i3.Station>>.value(<_i3.Station>{}),
+      ) as _i5.Future<Set<_i3.Station>>);
   @override
-  Uri tideGraphUrl(
-    _i2.Station? station,
+  _i5.Stream<_i6.Uint8List> getTideGraph(
+    _i3.Station? station,
     int? days,
     int? width,
     int? height,
-    _i3.Date? t,
+    _i4.Date? begin,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
-          #tideGraphUrl,
+          #getTideGraph,
           [
             station,
             days,
             width,
             height,
-            t,
+            begin,
           ],
         ),
-        returnValue: _FakeUri_2(
-          this,
-          Invocation.method(
-            #tideGraphUrl,
-            [
-              station,
-              days,
-              width,
-              height,
-              t,
-            ],
-          ),
-        ),
-        returnValueForMissingStub: _FakeUri_2(
-          this,
-          Invocation.method(
-            #tideGraphUrl,
-            [
-              station,
-              days,
-              width,
-              height,
-              t,
-            ],
-          ),
-        ),
-      ) as Uri);
+        returnValue: _i5.Stream<_i6.Uint8List>.empty(),
+        returnValueForMissingStub: _i5.Stream<_i6.Uint8List>.empty(),
+      ) as _i5.Stream<_i6.Uint8List>);
 }

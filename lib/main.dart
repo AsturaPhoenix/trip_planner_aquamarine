@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:developer' as debug;
 
+import 'package:async/async.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/adapters.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
+import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 
 import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
@@ -22,16 +25,31 @@ void main() {
 
   initializeTimeZones();
 
+  final httpClient = TripPlannerHttpClient.resolveFromRedirect(
+    Uri.parse('https://www.bask.org/trip_planner/'),
+    TripPlannerEndpoints(
+      datapoints: Uri(path: 'datapoints.xml'),
+      tides: Uri(path: 'tides.php'),
+    ),
+  );
+
+  final hive = Hive.initFlutter();
+
   runApp(
     TripPlanner(
-      client: TripPlannerClient.resolveFromRedirect(
-        Uri.parse('https://www.bask.org/trip_planner/'),
-        TripPlannerEndpoints(
-          datapoints: Uri(path: 'datapoints.xml'),
-          tides: Uri(path: 'tides.php'),
-        ),
-        timeZone: TimeZone.forId('America/Los_Angeles'),
-      ),
+      client: () async {
+        await hive;
+        BlobCache.registerAdapters();
+        final tideGraphCache = await BlobCache.open('TideGraphCache');
+        tideGraphCache
+            .evict((blobs, metadata) => blobs > 250); // approx. 20 kB ea.
+
+        return TripPlannerClient(
+          tideGraphCache,
+          await httpClient,
+          TimeZone.forId('America/Los_Angeles'),
+        );
+      }(),
     ),
   );
 }
@@ -54,34 +72,32 @@ class TripPlannerState extends State<TripPlanner> {
   @override
   void initState() {
     super.initState();
-
-    () async {
-      try {
-        client = await widget.client;
-        final stations = await client.getDatapoints();
-
-        setState(() {
-          this.stations = stations;
-          selectedStation = stations.first;
-        });
-      } catch (e, s) {
-        // TODO: Surface something to the user.
-        log.severe('Exception during initialization.', e, s);
-      }
-    }();
+    setClient(widget.client);
   }
 
   @override
   void didUpdateWidget(covariant TripPlanner oldWidget) {
+    setClient(widget.client);
     super.didUpdateWidget(oldWidget);
-
-    () async {
-      final client = await widget.client;
-      setState(() => this.client = client);
-    }();
   }
 
   late TripPlannerClient client;
+  CancelableOperation<void>? _client;
+  void setClient(FutureOr<TripPlannerClient> value) {
+    _client?.cancel();
+    _client = CancelableOperation.fromFuture(Future.value(value)).then((value) {
+      client = value;
+      return client.getDatapoints();
+    }).then(
+      (stations) => setState(() {
+        this.stations = stations;
+        selectedStation = stations.first;
+      }),
+      onError: (e, s) =>
+          // TODO: Surface something to the user.
+          log.severe('Exception during initialization.', e, s),
+    );
+  }
 
   var stations = <Station>{};
 

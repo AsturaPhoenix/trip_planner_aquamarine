@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
+import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
+import 'package:trip_planner_aquamarine/persistence/tide_graph_cache.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
@@ -61,11 +64,51 @@ Future<Uri> resolveRedirects(
 class TripPlannerClient {
   static final log = Logger('TripPlannerClient');
 
-  static Future<TripPlannerClient> resolveFromRedirect(
+  TripPlannerClient(this.tideGraphCache, this.httpClient, this.timeZone);
+  final BlobCache tideGraphCache;
+  final TripPlannerHttpClient httpClient;
+
+  /// The server uses local time zone, and all the stations are on the West
+  /// Coast.
+  final TimeZone timeZone;
+
+  void close() => httpClient.close();
+
+  Future<Set<Station>> getDatapoints() async => httpClient.getDatapoints();
+
+  Stream<Uint8List> getTideGraph(
+    Station station,
+    int days,
+    int width,
+    int height,
+    Date begin,
+  ) {
+    final results = StreamController<Uint8List>();
+
+    final key = TideGraphKey(station.id, begin, days).toString();
+    final cached = tideGraphCache[key];
+    if (cached != null) {
+      results.add(cached);
+    }
+
+    httpClient.getTideGraph(station, days, width, height, begin).then((data) {
+      if (data != null) {
+        results.add(data);
+        tideGraphCache[key] = data;
+      }
+    }).whenComplete(results.close);
+
+    return results.stream;
+  }
+}
+
+class TripPlannerHttpClient {
+  static final log = Logger('TripPlannerHttpClient');
+
+  static Future<TripPlannerHttpClient> resolveFromRedirect(
     Uri base,
     TripPlannerEndpoints relative, {
     int maxRedirects = 5,
-    required TimeZone timeZone,
   }) async {
     final client = Client();
     try {
@@ -79,21 +122,17 @@ class TripPlannerClient {
       }
     }
     log.info('base URL: $base');
-    return TripPlannerClient._(client, relative.resolve(base), timeZone);
+    return TripPlannerHttpClient._(client, relative.resolve(base));
   }
 
-  TripPlannerClient._(this._client, this.endpoints, this.timeZone);
-  final Client _client;
+  TripPlannerHttpClient._(this.client, this.endpoints);
+  final Client client;
   final TripPlannerEndpoints endpoints;
 
-  /// The server uses local time zone, and all the stations are on the West
-  /// Coast.
-  final TimeZone timeZone;
-
-  void close() => _client.close();
+  void close() => client.close();
 
   Future<Set<Station>> getDatapoints() async {
-    final response = await _client.get(endpoints.datapoints);
+    final response = await client.get(endpoints.datapoints);
     final stations = {
       for (final stationNode
           in XmlDocument.parse(response.body).findAllElements('station'))
@@ -106,14 +145,14 @@ class TripPlannerClient {
     return stations;
   }
 
-  Uri tideGraphUrl(
+  Future<Uint8List?> getTideGraph(
     Station station,
     int days,
     int width,
     int height,
-    Date t,
-  ) {
-    return endpoints.tides.replace(
+    Date begin,
+  ) async {
+    final url = endpoints.tides.replace(
       queryParameters: {
         'days': days.toString(),
         'mode': 'graph',
@@ -122,10 +161,26 @@ class TripPlannerClient {
         'type': station.type,
         'width': width.toString(),
         'height': height.toString(),
-        'begin': '${t.year}-${t.month}-${t.day}',
+        'begin': '${begin.year}-${begin.month}-${begin.day}',
         'subord': station.isSubordinate ? '1' : '',
       },
     );
+
+    log.info('get $url');
+
+    try {
+      final response = await client.get(url);
+
+      if (response.statusCode == HttpStatus.ok) {
+        return response.bodyBytes;
+      } else {
+        log.warning(response);
+        return null;
+      }
+    } catch (e, s) {
+      log.warning(e, e, s);
+      return null;
+    }
   }
 }
 

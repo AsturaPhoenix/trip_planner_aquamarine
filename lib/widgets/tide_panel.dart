@@ -1,5 +1,6 @@
 import 'dart:core';
 import 'dart:core' as core;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
@@ -193,8 +194,8 @@ class TidePanelState extends State<TidePanel> {
 
   @override
   void didUpdateWidget(TidePanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
     timeWindow = timeWindow.copyWith(t: widget.t, mayMove: false);
+    super.didUpdateWidget(oldWidget);
   }
 
   @override
@@ -257,21 +258,30 @@ class TideGraph extends StatelessWidget {
     'Sun'
   ];
 
-  const TideGraph({
+  TideGraph({
     super.key,
-    required this.client,
-    required this.station,
+    required TripPlannerClient client,
+    required Station station,
     required this.timeWindow,
     required this.width,
     required this.height,
     required this.overlaySwatch,
     this.onTimeChanged,
-  });
+  }) {
+    graphImages = client.getTideGraph(
+      station,
+      timeWindow.days,
+      imageWidth,
+      imageHeight,
+      timeWindow.t0,
+    );
+  }
 
-  final TripPlannerClient client;
-  final Station station;
+  late final Stream<Uint8List> graphImages;
   final GraphTimeWindow timeWindow;
   final double width, height;
+  int get imageWidth => width.round();
+  int get imageHeight => height.round() + 81;
   final OverlaySwatch overlaySwatch;
   final void Function(DateTime t)? onTimeChanged;
 
@@ -289,16 +299,16 @@ class TideGraph extends StatelessWidget {
           children: [
             Positioned(
               top: -37,
-              child: Image.network(
-                client
-                    .tideGraphUrl(
-                      station,
-                      timeWindow.days,
-                      width.round(),
-                      height.round() + 81,
-                      timeWindow.t0,
-                    )
-                    .toString(),
+              child: StreamBuilder(
+                stream: graphImages,
+                builder: (context, snapshot) => snapshot.hasData
+                    ? Image.memory(
+                        snapshot.requireData,
+                        width: imageWidth.toDouble(),
+                        height: imageHeight.toDouble(),
+                        gaplessPlayback: true,
+                      )
+                    : const Text('...'),
               ),
             ),
             for (int t = 1; t < gridDivisions; ++t)
