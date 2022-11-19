@@ -246,7 +246,7 @@ class TidePanelState extends State<TidePanel> {
   }
 }
 
-class TideGraph extends StatelessWidget {
+class TideGraph extends StatefulWidget {
   static const dayLabels = [
     '',
     'Mon',
@@ -258,26 +258,19 @@ class TideGraph extends StatelessWidget {
     'Sun'
   ];
 
-  TideGraph({
+  const TideGraph({
     super.key,
-    required TripPlannerClient client,
-    required Station station,
+    required this.client,
+    required this.station,
     required this.timeWindow,
     required this.width,
     required this.height,
     required this.overlaySwatch,
     this.onTimeChanged,
-  }) {
-    graphImages = client.getTideGraph(
-      station,
-      timeWindow.days,
-      imageWidth,
-      imageHeight,
-      timeWindow.t0,
-    );
-  }
+  });
 
-  late final Stream<Uint8List> graphImages;
+  final TripPlannerClient client;
+  final Station station;
   final GraphTimeWindow timeWindow;
   final double width, height;
   int get imageWidth => width.round();
@@ -286,15 +279,47 @@ class TideGraph extends StatelessWidget {
   final void Function(DateTime t)? onTimeChanged;
 
   @override
+  State<StatefulWidget> createState() => TideGraphState();
+
+  Stream<Uint8List> getTideGraph() => client.getTideGraph(
+        station,
+        timeWindow.days,
+        imageWidth,
+        imageHeight,
+        timeWindow.t0,
+      );
+
+  bool isGraphDirty(TideGraph oldWidget) =>
+      client != oldWidget.client ||
+      station != oldWidget.station ||
+      timeWindow.days != oldWidget.timeWindow.days ||
+      imageWidth != oldWidget.imageWidth ||
+      imageHeight != oldWidget.imageHeight ||
+      timeWindow.t0 != oldWidget.timeWindow.t0;
+}
+
+class TideGraphState extends State<TideGraph> {
+  late Stream<Uint8List> graphImages = widget.getTideGraph();
+
+  @override
+  void didUpdateWidget(covariant TideGraph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.isGraphDirty(oldWidget)) {
+      graphImages = widget.getTideGraph();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    int gridDivisions = timeWindow.days == 7 ? 14 : 24;
+    int gridDivisions = widget.timeWindow.days == 7 ? 14 : 24;
     return SizedBox(
-      width: width,
-      height: height,
+      width: widget.width,
+      height: widget.height,
       child: DefaultTextStyle(
         style: DefaultTextStyle.of(context)
             .style
-            .copyWith(color: overlaySwatch.text),
+            .copyWith(color: widget.overlaySwatch.text),
         child: Stack(
           children: [
             Positioned(
@@ -304,8 +329,8 @@ class TideGraph extends StatelessWidget {
                 builder: (context, snapshot) => snapshot.hasData
                     ? Image.memory(
                         snapshot.requireData,
-                        width: imageWidth.toDouble(),
-                        height: imageHeight.toDouble(),
+                        width: widget.imageWidth.toDouble(),
+                        height: widget.imageHeight.toDouble(),
                         gaplessPlayback: true,
                       )
                     : const Text('...'),
@@ -313,22 +338,23 @@ class TideGraph extends StatelessWidget {
             ),
             for (int t = 1; t < gridDivisions; ++t)
               Positioned(
-                left: t * width / gridDivisions,
+                left: t * widget.width / gridDivisions,
                 top: 0,
                 bottom: 0,
                 child: _HourGrid(
-                  timeWindow.lerp(t / gridDivisions),
-                  swatch: overlaySwatch.grid,
+                  widget.timeWindow.lerp(t / gridDivisions),
+                  swatch: widget.overlaySwatch.grid,
                 ),
               ),
-            for (int d = 0; d < timeWindow.days; ++d)
+            for (int d = 0; d < widget.timeWindow.days; ++d)
               Positioned(
-                left: d * width / timeWindow.days,
-                width: width / timeWindow.days,
+                left: d * widget.width / widget.timeWindow.days,
+                width: widget.width / widget.timeWindow.days,
                 bottom: 0,
                 child: Text(
-                  dayLabels[
-                      timeWindow.lerp((d + .5) / timeWindow.days).weekday],
+                  TideGraph.dayLabels[widget.timeWindow
+                      .lerp((d + .5) / widget.timeWindow.days)
+                      .weekday],
                   textAlign: TextAlign.center,
                 ),
               )
