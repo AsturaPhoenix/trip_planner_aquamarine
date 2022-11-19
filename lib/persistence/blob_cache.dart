@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:hive/hive.dart';
 import 'package:logging/logging.dart';
+import 'package:trip_planner_aquamarine/persistence/cache_box.dart';
 
 part 'blob_cache.g.dart';
 
@@ -19,20 +20,12 @@ class BlobMetadataRecord implements BlobMetadata {
   late DateTime lastAccess;
   @HiveField(2)
   @override
-  late int accessCount = 0;
+  int accessCount = 0;
 }
 
 /// A function that returns `true` if the described blob should be evicted from
 /// the cache.
 typedef EvictionPolicy = bool Function(int blobs, BlobMetadata metadata);
-
-/// Helps us avoid runtime type check failures after [Future.wait].
-class _BoxOpener<T> {
-  _BoxOpener(this.name);
-  final String name;
-  Future<Box<T>> open() => Hive.openBox<T>(name);
-  Future<void> delete() => Hive.deleteBoxFromDisk(name);
-}
 
 class BlobCache {
   static final defaultLogger = Logger('BlobCache');
@@ -42,30 +35,17 @@ class BlobCache {
   }
 
   static Future<BlobCache> open(String name) async {
-    final log = Logger(name);
-
-    final boxOpeners = [
-      _BoxOpener<String>('$name.accessLog'),
-      _BoxOpener<BlobMetadataRecord>('$name.metadata'),
-      _BoxOpener<Uint8List>('$name.blobs')
-    ];
-    var boxes = await Future.wait(
-      boxOpeners.map(
-        (boxOpener) => boxOpener.open().onError((Object e, s) {
-          log.warning('Failed to open $name; deleting associated boxes.', e, s);
-          throw e;
-        }),
-      ),
-    ).catchError((_) async {
-      await Future.wait(boxOpeners.map((boxOpener) => boxOpener.delete()));
-      return Future.wait(boxOpeners.map((boxOpener) => boxOpener.open()));
-    });
+    final caches = CacheBoxSet();
+    final accessLog = caches.tryOpen<String>('$name.accessLog');
+    final metadata = caches.tryOpen<BlobMetadataRecord>('$name.metadata');
+    final blobs = caches.tryOpen<Uint8List>('$name.blobs');
+    caches.onErrorDeleteAndRetry();
 
     return BlobCache(
-      boxes[0] as Box<String>,
-      boxes[1] as Box<BlobMetadataRecord>,
-      boxes[2] as Box<Uint8List>,
-      log: log,
+      await accessLog,
+      await metadata,
+      await blobs,
+      log: Logger(name),
     );
   }
 

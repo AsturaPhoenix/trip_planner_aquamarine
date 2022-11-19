@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
@@ -64,7 +65,14 @@ Future<Uri> resolveRedirects(
 class TripPlannerClient {
   static final log = Logger('TripPlannerClient');
 
-  TripPlannerClient(this.tideGraphCache, this.httpClient, this.timeZone);
+  static void registerAdapters() {
+    Hive.registerAdapter(StationAdapter());
+    Hive.registerAdapter(LatLngAdapter());
+  }
+
+  TripPlannerClient(
+      this.stationCache, this.tideGraphCache, this.httpClient, this.timeZone);
+  final Box<Station> stationCache;
   final BlobCache tideGraphCache;
   final TripPlannerHttpClient httpClient;
 
@@ -74,7 +82,28 @@ class TripPlannerClient {
 
   void close() => httpClient.close();
 
-  Future<Set<Station>> getDatapoints() async => httpClient.getDatapoints();
+  Stream<Set<Station>> getDatapoints() {
+    final results = StreamController<Set<Station>>();
+    if (stationCache.isNotEmpty) {
+      log.info('Stations: cache hit.');
+      results.add({...stationCache.values});
+    } else {
+      log.info('Stations: cache miss.');
+    }
+
+    httpClient.getDatapoints().then(
+      (stations) {
+        log.info('Stations: refreshed.');
+        results.add(stations);
+        stationCache.clear();
+        stationCache.addAll(stations);
+      },
+      onError: (e, StackTrace s) =>
+          log.warning('Failed to fetch/refresh stations.', e, s),
+    ).whenComplete(results.close);
+
+    return results.stream;
+  }
 
   Stream<Uint8List> getTideGraph(
     Station station,
@@ -91,12 +120,14 @@ class TripPlannerClient {
       results.add(cached);
     }
 
-    httpClient.getTideGraph(station, days, width, height, begin).then((data) {
-      if (data != null) {
+    httpClient.getTideGraph(station, days, width, height, begin).then(
+      (data) {
         results.add(data);
         tideGraphCache[key] = data;
-      }
-    }).whenComplete(results.close);
+      },
+      onError: (e, StackTrace s) =>
+          log.warning('Failed to fetch/refresh tide graph.', e, s),
+    ).whenComplete(results.close);
 
     return results.stream;
   }
@@ -133,6 +164,10 @@ class TripPlannerHttpClient {
 
   Future<Set<Station>> getDatapoints() async {
     final response = await client.get(endpoints.datapoints);
+    if (response.statusCode != HttpStatus.ok) {
+      throw response;
+    }
+
     final stations = {
       for (final stationNode
           in XmlDocument.parse(response.body).findAllElements('station'))
@@ -145,7 +180,7 @@ class TripPlannerHttpClient {
     return stations;
   }
 
-  Future<Uint8List?> getTideGraph(
+  Future<Uint8List> getTideGraph(
     Station station,
     int days,
     int width,
@@ -168,18 +203,12 @@ class TripPlannerHttpClient {
 
     log.info('get $url');
 
-    try {
-      final response = await client.get(url);
+    final response = await client.get(url);
 
-      if (response.statusCode == HttpStatus.ok) {
-        return response.bodyBytes;
-      } else {
-        log.warning(response);
-        return null;
-      }
-    } catch (e, s) {
-      log.warning(e, e, s);
-      return null;
+    if (response.statusCode == HttpStatus.ok) {
+      return response.bodyBytes;
+    } else {
+      throw response;
     }
   }
 }
@@ -221,6 +250,14 @@ class Station {
         title = node.getAttribute('title')!,
         source = node.getAttribute('source'),
         isSubordinate = node.getAttribute('subtype') == 'Subordinate';
+  Station.read(BinaryReader reader)
+      : id = reader.readString(),
+        type = reader.readString(),
+        marker = reader.read() as LatLng,
+        title = reader.readString(),
+        source = reader.read() as String?,
+        isSubordinate = reader.readBool();
+
   final String id;
   final String type;
   String get typeDescription => typeDescriptions[type]!;
@@ -231,4 +268,37 @@ class Station {
   String get typedShortTitle => '$typeDescription: $shortTitle';
   final String? source;
   final bool isSubordinate;
+
+  void write(BinaryWriter writer) => writer
+    ..writeString(id)
+    ..writeString(type)
+    ..write(marker)
+    ..writeString(title)
+    ..write(source)
+    ..writeBool(isSubordinate);
+}
+
+class StationAdapter extends TypeAdapter<Station> {
+  @override
+  final int typeId = 1;
+
+  @override
+  Station read(BinaryReader reader) => Station.read(reader);
+
+  @override
+  void write(BinaryWriter writer, Station obj) => obj.write(writer);
+}
+
+class LatLngAdapter extends TypeAdapter<LatLng> {
+  @override
+  final int typeId = 2;
+
+  @override
+  LatLng read(BinaryReader reader) =>
+      LatLng(reader.readDouble(), reader.readDouble());
+
+  @override
+  void write(BinaryWriter writer, LatLng obj) => writer
+    ..writeDouble(obj.latitude)
+    ..writeDouble(obj.longitude);
 }

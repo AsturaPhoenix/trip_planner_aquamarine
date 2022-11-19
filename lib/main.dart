@@ -8,6 +8,7 @@ import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
+import 'package:trip_planner_aquamarine/persistence/cache_box.dart';
 
 import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
@@ -39,12 +40,17 @@ void main() {
     TripPlanner(
       client: () async {
         await hive;
+
         BlobCache.registerAdapters();
+        TripPlannerClient.registerAdapters();
+
+        final stationCache = CacheBox.tryOpen<Station>('Stations');
         final tideGraphCache = await BlobCache.open('TideGraphCache');
         tideGraphCache
             .evict((blobs, metadata) => blobs > 250); // approx. 20 kB ea.
 
         return TripPlannerClient(
+          await stationCache,
           tideGraphCache,
           await httpClient,
           TimeZone.forId('America/Los_Angeles'),
@@ -82,24 +88,30 @@ class TripPlannerState extends State<TripPlanner> {
   }
 
   late TripPlannerClient client;
-  CancelableOperation<void>? _client;
+  CancelableOperation<void>? _clientOperation;
   void setClient(FutureOr<TripPlannerClient> value) {
-    _client?.cancel();
-    _client = CancelableOperation.fromFuture(Future.value(value)).then((value) {
+    _clientOperation?.cancel();
+
+    _clientOperation =
+        CancelableOperation.fromFuture(Future.value(value)).then((value) {
       client = value;
-      return client.getDatapoints();
+      setState(() => stations = client.getDatapoints().asBroadcastStream());
+      return stations!.first;
     }).then(
-      (stations) => setState(() {
-        this.stations = stations;
-        selectedStation = stations.first;
-      }),
+      (stations) {
+        if (selectedStation == null) {
+          setState(() {
+            selectedStation = stations.first;
+          });
+        }
+      },
       onError: (e, s) =>
           // TODO: Surface something to the user.
           log.severe('Exception during initialization.', e, s),
     );
   }
 
-  var stations = <Station>{};
+  Stream<Set<Station>>? stations;
 
   @override
   Widget build(BuildContext context) {
@@ -166,11 +178,13 @@ class TripPlannerState extends State<TripPlanner> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: Map(
-                              stations: stations,
-                              onStationSelected: (station) =>
-                                  setState(() => selectedStation = station),
-                            ),
+                            child: StreamBuilder(
+                                stream: stations,
+                                builder: (context, snapshot) => Map(
+                                      stations: snapshot.data ?? {},
+                                      onStationSelected: (station) => setState(
+                                          () => selectedStation = station),
+                                    )),
                           ),
                           if (selectedStation != null)
                             FittedBox(
