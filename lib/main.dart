@@ -54,8 +54,8 @@ void main() async {
   tileCache.then(
     (cache) => cache.evict(
       (blobs, metadata) =>
-          // approx. 30 MB @ 60 kB ea.
-          blobs > 500 && blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
+          // approx. 50 MB @ 100 kB ea.
+          blobs > 500 || blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
     ),
   );
 

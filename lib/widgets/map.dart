@@ -51,7 +51,8 @@ class MapState extends State<Map> {
         url: Uri.parse(
           'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer',
         ),
-        fetchLod: 1,
+        fetchLod: 2,
+        levelOfDetail: 14,
         params: WmsParams()
           ..version = '1.3.0'
           ..layers = '0,1,2,3,4,5,6,7',
