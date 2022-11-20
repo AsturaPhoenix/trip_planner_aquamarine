@@ -96,7 +96,21 @@ class MapState extends State<Map> {
     _markerIcons.beginBuild(context);
 
     final markers = <Marker>{};
-    for (final station in widget.stations) {
+
+    // TODO: make this configurable
+    const showTypes = {
+      'tide',
+      'current',
+      'launch',
+      'destination',
+    };
+    // tp.js: show_hide_marker
+    bool stationFilter(Station station) =>
+        showTypes.contains(station.type) &&
+        !((station.type == 'current' || station.type == 'tide') &&
+            station.isLegacy);
+
+    for (final station in widget.stations.where(stationFilter)) {
       final icon = _markerIcons[station.type];
       if (icon != null) {
         // tp.js: create_station

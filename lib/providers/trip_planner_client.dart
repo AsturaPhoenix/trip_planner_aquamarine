@@ -301,6 +301,7 @@ class Station {
       : id = _getId(node),
         type = node.getAttribute('station_type')!,
         marker = latLngFromXml(node.findElements('marker').first),
+        noaaId = node.getAttribute('noaa_id') ?? '',
         title = node.getAttribute('title')!,
         source = node.getAttribute('source'),
         isSubordinate = node.getAttribute('subtype') == 'Subordinate';
@@ -308,6 +309,7 @@ class Station {
       : id = reader.readString(),
         type = reader.readString(),
         marker = reader.read() as LatLng,
+        noaaId = reader.readString(),
         title = reader.readString(),
         source = reader.read() as String?,
         isSubordinate = reader.readBool();
@@ -316,6 +318,8 @@ class Station {
   final String type;
   String get typeDescription => typeDescriptions[type]!;
   final LatLng marker;
+  final String noaaId;
+  bool get isLegacy => noaaId == '';
   final String title;
   String get shortTitle =>
       title.replaceAll(RegExp(r', California( Current)?'), '');
@@ -327,6 +331,7 @@ class Station {
     ..writeString(id)
     ..writeString(type)
     ..write(marker)
+    ..writeString(noaaId)
     ..writeString(title)
     ..write(source)
     ..writeBool(isSubordinate);
