@@ -214,6 +214,7 @@ class TidePanelState extends State<TidePanel> {
             color: theme.colorScheme.secondaryContainer,
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
             child: FittedBox(
+              fit: BoxFit.scaleDown,
               child: Text(
                 '${widget.station.type == 'tide' ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
                 style: theme.textTheme.titleMedium,
