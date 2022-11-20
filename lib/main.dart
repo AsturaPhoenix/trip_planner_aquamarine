@@ -13,7 +13,7 @@ import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
 import 'widgets/tide_panel.dart';
 
-void main() {
+void main() async {
   Logger.root.onRecord.listen(
     (record) => debug.log(
       '${record.level.name}: ${record.time}: ${record.message}',
@@ -35,36 +35,48 @@ void main() {
     ),
   );
 
-  final hive = Hive.initFlutter();
+  await Hive.initFlutter();
+  BlobCache.registerAdapters();
+  TripPlannerClient.registerAdapters();
+
+  final stationCache = CacheBox.tryOpen<Station>('Stations');
+  final tideGraphCache = BlobCache.open('TideGraphCache');
+  final tileCache = BlobCache.open('TileCache');
+
+  final softExpiry = (Instant.now() - const Duration(days: 180)).value;
+  tideGraphCache.then(
+    (cache) => cache.evict(
+      (blobs, metadata) =>
+          // approx. 5 MB @ 20 kB ea.
+          blobs > 250 || blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
+    ),
+  );
+  tileCache.then(
+    (cache) => cache.evict(
+      (blobs, metadata) =>
+          // approx. 30 MB @ 60 kB ea.
+          blobs > 500 && blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
+    ),
+  );
 
   runApp(
     TripPlanner(
-      client: () async {
-        await hive;
-
-        BlobCache.registerAdapters();
-        TripPlannerClient.registerAdapters();
-
-        final stationCache = CacheBox.tryOpen<Station>('Stations');
-        final tideGraphCache = await BlobCache.open('TideGraphCache');
-        tideGraphCache
-            .evict((blobs, metadata) => blobs > 250); // approx. 20 kB ea.
-
-        return TripPlannerClient(
-          await stationCache,
-          tideGraphCache,
-          httpClientFactory.get,
-          TimeZone.forId('America/Los_Angeles'),
-        );
-      }(),
+      client: TripPlannerClient(
+        await stationCache,
+        await tideGraphCache,
+        httpClientFactory.get,
+        TimeZone.forId('America/Los_Angeles'),
+      ),
+      tileCache: await tileCache,
     ),
   );
 }
 
 class TripPlanner extends StatefulWidget {
-  const TripPlanner({super.key, required this.client});
+  const TripPlanner({super.key, required this.client, required this.tileCache});
 
-  final FutureOr<TripPlannerClient> client;
+  final TripPlannerClient client;
+  final BlobCache tileCache;
 
   @override
   TripPlannerState createState() => TripPlannerState();
@@ -75,29 +87,23 @@ class TripPlannerState extends State<TripPlanner> {
 
   Station? selectedStation;
   Instant t = Instant.now();
-  late Future<TripPlannerClient> client;
   late Stream<Set<Station>> stations;
 
   @override
   void initState() {
     super.initState;
-    setClient(widget.client);
+    updateClient();
   }
 
   @override
   void didUpdateWidget(covariant TripPlanner oldWidget) {
-    setClient(widget.client);
     super.didUpdateWidget(oldWidget);
+    updateClient();
   }
 
-  void setClient(FutureOr<TripPlannerClient> value) {
-    client = Future.value(value).onError((Object e, s) {
-      // TODO: Surface something to the user.
-      log.severe('Exception during initialization.', e, s);
-      throw e;
-    });
-    stations = Stream.fromFuture(client)
-        .asyncExpand((client) => client.getDatapoints())
+  void updateClient() {
+    stations = widget.client
+        .getDatapoints()
         .where((stations) => stations.isNotEmpty)
         .handleError(
           (e, StackTrace s) => log.warning('Failed to get station list.', e, s),
@@ -107,7 +113,7 @@ class TripPlannerState extends State<TripPlanner> {
   @override
   void dispose() {
     super.dispose();
-    client.then((client) => client.close()).ignore();
+    widget.client.close();
   }
 
   @override
@@ -138,91 +144,88 @@ class TripPlannerState extends State<TripPlanner> {
 
           const title = Text('BASK Trip Planner');
 
-          return FutureBuilder(
-            future: client,
-            builder: (context, clientSnapshot) => StreamBuilder(
-              stream: stations,
-              builder: (context, stationsSnapshot) {
-                selectedStation ??= stationsSnapshot.data?.first;
+          return StreamBuilder(
+            stream: stations,
+            builder: (context, stationsSnapshot) {
+              selectedStation ??= stationsSnapshot.data?.first;
 
-                return Scaffold(
-                  appBar: AppBar(
-                    title: Row(
-                      children: [
-                        title,
-                        if (selectedStation != null && inlineStationBar)
-                          Expanded(
-                            child: Container(
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: selectedStationBarMinPadding,
-                              ),
-                              child: _SelectedStationBar(
-                                selectedStation!,
-                                blendEdges: true,
-                              ),
+              return Scaffold(
+                appBar: AppBar(
+                  title: Row(
+                    children: [
+                      title,
+                      if (selectedStation != null && inlineStationBar)
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: selectedStationBarMinPadding,
+                            ),
+                            child: _SelectedStationBar(
+                              selectedStation!,
+                              blendEdges: true,
                             ),
                           ),
-                        if (centeredInlineStationBar)
-                          const Opacity(opacity: 0, child: title),
-                      ],
-                    ),
-                  ),
-                  body: Column(
-                    children: [
-                      if (selectedStation != null && !inlineStationBar)
-                        _SelectedStationBar(
-                          selectedStation!,
-                          blendEdges: false,
                         ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, boxConstraints) {
-                            bool horizontal = boxConstraints.maxWidth >=
-                                boxConstraints.maxHeight;
-                            return Flex(
-                              direction:
-                                  horizontal ? Axis.horizontal : Axis.vertical,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: Map(
-                                    stations: stationsSnapshot.data ?? {},
-                                    onStationSelected: (station) => setState(
-                                      () => selectedStation = station,
+                      if (centeredInlineStationBar)
+                        const Opacity(opacity: 0, child: title),
+                    ],
+                  ),
+                ),
+                body: Column(
+                  children: [
+                    if (selectedStation != null && !inlineStationBar)
+                      _SelectedStationBar(
+                        selectedStation!,
+                        blendEdges: false,
+                      ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, boxConstraints) {
+                          bool horizontal = boxConstraints.maxWidth >=
+                              boxConstraints.maxHeight;
+                          return Flex(
+                            direction:
+                                horizontal ? Axis.horizontal : Axis.vertical,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: Map(
+                                  tileCache: widget.tileCache,
+                                  stations: stationsSnapshot.data ?? {},
+                                  onStationSelected: (station) => setState(
+                                    () => selectedStation = station,
+                                  ),
+                                ),
+                              ),
+                              if (selectedStation != null)
+                                FittedBox(
+                                  alignment: Alignment.topCenter,
+                                  fit: BoxFit.scaleDown,
+                                  child: Container(
+                                    constraints: BoxConstraints(
+                                      maxWidth: horizontal
+                                          ? boxConstraints.maxWidth / 2
+                                          : boxConstraints.maxWidth,
+                                    ),
+                                    child: TidePanel(
+                                      client: widget.client,
+                                      station: selectedStation!,
+                                      t: t,
+                                      onTimeChanged: (t) =>
+                                          setState(() => this.t = t),
                                     ),
                                   ),
                                 ),
-                                if (selectedStation != null &&
-                                    clientSnapshot.hasData)
-                                  FittedBox(
-                                    alignment: Alignment.topCenter,
-                                    fit: BoxFit.scaleDown,
-                                    child: Container(
-                                      constraints: BoxConstraints(
-                                        maxWidth: horizontal
-                                            ? boxConstraints.maxWidth / 2
-                                            : boxConstraints.maxWidth,
-                                      ),
-                                      child: TidePanel(
-                                        client: clientSnapshot.requireData,
-                                        station: selectedStation!,
-                                        t: t,
-                                        onTimeChanged: (t) =>
-                                            setState(() => this.t = t),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
+                            ],
+                          );
+                        },
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                  ],
+                ),
+              );
+            },
           );
         },
       ),

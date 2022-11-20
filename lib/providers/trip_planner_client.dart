@@ -164,6 +164,7 @@ class TripPlannerClient {
     if (httpClient != null) {
       () async {
         try {
+          // TODO: Deduplicate current requests, or cancel on unsubscribe.
           final data = await (await httpClient!())
               .getTideGraph(station, days, width, height, begin);
           results.add(data);

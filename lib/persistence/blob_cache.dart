@@ -62,6 +62,12 @@ class BlobCache {
   final Box<BlobMetadataRecord> metadata;
   final Box<Uint8List> blobs;
 
+  void close() {
+    accessLog.close().ignore();
+    metadata.close().ignore();
+    blobs.close().ignore();
+  }
+
   void touch(String key) async {
     final accessKey = await accessLog.add(key);
     // It's not critical that any of this is strongly consistent.

@@ -4,14 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/asset_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
-  const Map({super.key, this.stations = const {}, this.onStationSelected});
+  const Map({
+    super.key,
+    required this.tileCache,
+    this.stations = const {},
+    this.onStationSelected,
+  });
 
+  final BlobCache tileCache;
   final Set<Station> stations;
   final void Function(Station station)? onStationSelected;
 
@@ -35,10 +42,12 @@ class MapState extends State<Map> {
     zoom: 12,
   );
 
-  final chartOverlays = [
+  late final chartOverlays = [
     TileOverlayConfiguration(
       'nautical',
       WmsTileProvider(
+        cache: widget.tileCache,
+        tileType: 'nautical',
         url: Uri.parse(
           'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer',
         ),
@@ -65,6 +74,14 @@ class MapState extends State<Map> {
       });
 
   var _markerIcons = AssetCache<BitmapDescriptor>();
+
+  @override
+  void didUpdateWidget(covariant Map oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    for (final overlay in chartOverlays) {
+      overlay.tileProvider.cache = widget.tileCache;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

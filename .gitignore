@@ -29,6 +29,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+*.dill
 
 # Symbolication related
 app.*.symbols
