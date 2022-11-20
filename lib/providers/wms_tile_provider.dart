@@ -32,7 +32,11 @@ typedef SparseArray<T> = SplayTreeMap<int, T>;
 extension on Point<int> {
   ui.Offset toOffset() => ui.Offset(x.toDouble(), y.toDouble());
   Point<int> operator <<(int z) => Point(x << z, y << z);
-  Point<int> operator >>(int z) => Point(x >> z, y >> z);
+  // On web, >> is limited to int32.
+  // https://github.com/dart-lang/sdk/issues/15361
+  // This is fine since the max zoom level for maps is 22.
+  Point<int> operator >>(int z) =>
+      Point((x >> z).toSigned(32), (y >> z).toSigned(32));
 }
 
 extension on ui.Image {
@@ -87,21 +91,19 @@ class TileLocator extends AreaLocator {
 
   @override
   TileLocator operator +(Point<int> offset) => (super + offset).withLod(lod);
-
-  AreaLocator stripLod() => AreaLocator(zoom, coordinate);
 }
 
-class TileKey extends AreaLocator {
-  const TileKey(this.type, super.zoom, super.coordinate);
-  TileKey.forArea(AreaLocator area, String type)
-      : this(type, area.zoom, area.coordinate);
+class TileKey extends TileLocator {
+  const TileKey(this.type, super.zoom, super.coordinate, super.lod);
+  TileKey.forLocator(TileLocator locator, String type)
+      : this(type, locator.zoom, locator.coordinate, locator.lod);
   final String type;
 
   @override
   get props => [type, ...super.props];
 
   @override
-  String toString() => '$type@$zoom:(${coordinate.x},${coordinate.y})';
+  String toString() => '$type@$zoom:(${coordinate.x},${coordinate.y})+$lod';
 }
 
 // Derived from js-ogc
@@ -202,9 +204,9 @@ class WmsTileProvider implements TileProvider {
   http.Client? _clientInstance;
   Timer? _clientTimer;
 
-  Uri _getTileUrl(AreaLocator locator) {
+  Uri _getTileUrl(TileLocator locator) {
     final bbox = _xyzToBounds(locator);
-    final tileSizeParam = (logicalTileSize << fetchLod).toString();
+    final tileSizeParam = (logicalTileSize << locator.lod).toString();
 
     return url.replace(
       queryParameters: {
@@ -218,7 +220,7 @@ class WmsTileProvider implements TileProvider {
     );
   }
 
-  Future<Uint8List> fetchImageData(AreaLocator locator) async {
+  Future<Uint8List> fetchImageData(TileLocator locator) async {
     final url = _getTileUrl(locator);
     log.info('fetchImage($locator) => get $url');
 
@@ -230,13 +232,13 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
-  final _activeDecodes = <AreaLocator, Future<ui.Image>>{};
+  final _activeDecodes = <TileLocator, Future<ui.Image>>{};
 
-  Future<Uint8List> getImageData(AreaLocator locator) async =>
-      cache[TileKey.forArea(locator, tileType).toString()] ??=
+  Future<Uint8List> getImageData(TileLocator locator) async =>
+      cache[TileKey.forLocator(locator, tileType).toString()] ??=
           await fetchImageData(locator);
 
-  Future<ui.Image> getImage(AreaLocator locator) => _activeDecodes[locator] ??=
+  Future<ui.Image> getImage(TileLocator locator) => _activeDecodes[locator] ??=
           getImageData(locator).then(decodeImage).whenComplete(() {
         // Caution: This can't be a => because we must discard the return value
         // or else the async becomes circular and never completes.
@@ -245,8 +247,8 @@ class WmsTileProvider implements TileProvider {
 
   /// Windows a tile from a larger tile at a higher LOD.
   Future<void> _tileFromLarger(ui.Canvas canvas, TileLocator locator) async {
-    final levelsAbove = fetchLod - locator.lod;
-    final ancestor = locator.stripLod() << levelsAbove;
+    final levelsAbove = min(fetchLod - locator.lod, locator.zoom);
+    final ancestor = locator << levelsAbove;
     final image = await getImage(ancestor);
 
     final size = image.size / (1 << levelsAbove).toDouble();
@@ -265,7 +267,7 @@ class WmsTileProvider implements TileProvider {
   /// Assembles a tile from smaller tiles at a lower LOD.
   Future<void> _tileFromSmaller(ui.Canvas canvas, TileLocator locator) async {
     final levelsBelow = locator.lod - fetchLod;
-    final descendantBasis = locator.stripLod() >> levelsBelow;
+    final descendantBasis = locator >> levelsBelow;
     final sideLength = 1 << levelsBelow;
 
     canvas
@@ -305,19 +307,10 @@ class WmsTileProvider implements TileProvider {
     final tileSize = min(logicalTileSize << locator.lod, preferredTileSize);
     canvas.scale(tileSize.toDouble());
 
-    if (locator.lod < fetchLod) {
+    if (locator.lod <= fetchLod) {
       await _tileFromLarger(canvas, locator);
-    } else if (locator.lod > fetchLod) {
-      await _tileFromSmaller(canvas, locator);
     } else {
-      // This should be equivalent to either of the above for the 0 case.
-      final image = await getImage(locator);
-      canvas.drawImageRect(
-        image,
-        ui.Offset.zero & image.size,
-        ui.Offset.zero & const ui.Size.square(1),
-        _imagePaint,
-      );
+      await _tileFromSmaller(canvas, locator);
     }
 
     final picture = pictureRecorder.endRecording();
