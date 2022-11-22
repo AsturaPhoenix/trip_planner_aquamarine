@@ -1,3 +1,5 @@
+import 'dart:core';
+import 'dart:core' as core;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,7 +7,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
-import 'package:trip_planner_aquamarine/providers/asset_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
 import '../providers/wms_tile_provider.dart';
@@ -42,6 +43,14 @@ class MapState extends State<Map> {
     zoom: 12,
   );
 
+  // TODO: make this configurable
+  static const showMarkerTypes = {
+    'tide',
+    'current',
+    'launch',
+    'destination',
+  };
+
   late final chartOverlays = [
     TileOverlayConfiguration(
       'nautical',
@@ -74,7 +83,28 @@ class MapState extends State<Map> {
         }
       });
 
-  var _markerIcons = AssetCache<BitmapDescriptor>();
+  Future<core.Map<String, BitmapDescriptor?>>? _markerIcons;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final imageConfiguration = createLocalImageConfiguration(context);
+
+    _markerIcons = Future.wait(
+      showMarkerTypes.map(
+        (stationType) => BitmapDescriptor.fromAssetImage(
+          imageConfiguration,
+          'assets/markers/$stationType.png',
+          mipmaps: false,
+        ).then(
+          (icon) => icon, // cast to nullable
+          onError: (e, StackTrace s) =>
+              log.warning('Failed to fetch marker icon "$stationType"', e, s),
+        ),
+      ),
+    ).then((icons) => core.Map.fromIterables(showMarkerTypes, icons));
+  }
 
   @override
   void didUpdateWidget(covariant Map oldWidget) {
@@ -94,80 +124,57 @@ class MapState extends State<Map> {
       overlay.tileProvider.preferredTileSize = tileSize;
     }
 
-    _markerIcons.beginBuild(context);
-
-    final markers = <Marker>{};
-
-    // TODO: make this configurable
-    const showTypes = {
-      'tide',
-      'current',
-      'launch',
-      'destination',
-    };
-    // tp.js: show_hide_marker
-    bool stationFilter(Station station) =>
-        showTypes.contains(station.type) &&
-        !((station.type == 'current' || station.type == 'tide') &&
-            station.isLegacy);
-
-    for (final station in widget.stations.where(stationFilter)) {
-      final icon = _markerIcons[station.type];
-      if (icon != null) {
-        // tp.js: create_station
-        markers.add(
-          Marker(
-            markerId: MarkerId(station.id),
-            position: station.marker,
-            icon: icon,
-            infoWindow: InfoWindow(title: station.typedShortTitle),
-            onTap: () => widget.onStationSelected?.call(station),
-          ),
-        );
-      }
-    }
-
-    _markerIcons
-        .fetchIfNeeded(
-      (configuration, stationType) => BitmapDescriptor.fromAssetImage(
-        configuration,
-        'assets/markers/$stationType.png',
-        mipmaps: false,
-      ),
-    )
-        .then(
-      (cache) {
-        if (cache != null) {
-          setState(() => _markerIcons = cache);
-        }
-      },
-      onError: (e, StackTrace s) => log.warning(
-        'Exception while fetching marker icons.',
-        e,
-        s,
-      ),
-    );
-
     return Stack(
       children: [
-        GoogleMap(
-          mapType: MapType.normal,
-          initialCameraPosition: initialCameraPosition,
-          markers: markers,
-          tileOverlays: {
-            TileOverlay(
-              tileOverlayId: chartOverlay.id,
-              tileProvider: chartOverlay.tileProvider,
-              tileSize: tileSize,
-            ),
-          },
-          onCameraMove: (position) =>
-              setState(() => zoom = position.zoom.toInt()),
-          onMapCreated: (controller) async {
-            setState(() => _gmap = controller);
-            controller.setMapStyle(
-              await DefaultAssetBundle.of(context)
-                  .loadString('assets/nautical-style.json'),
+        FutureBuilder(
+          future: _markerIcons,
+          builder: (context, iconsSnapshot) {
+            final markers = <Marker>{};
+
+            if (iconsSnapshot.hasData) {
+              // tp.js: show_hide_marker
+              bool stationFilter(Station station) =>
+                  showMarkerTypes.contains(station.type) &&
+                  !((station.type == 'current' || station.type == 'tide') &&
+                      station.isLegacy);
+
+              for (final station in widget.stations.where(stationFilter)) {
+                final icon = iconsSnapshot.data![station.type];
+                if (icon != null) {
+                  // tp.js: create_station
+                  markers.add(
+                    Marker(
+                      markerId: MarkerId(station.id),
+                      position: station.marker,
+                      icon: icon,
+                      infoWindow: InfoWindow(title: station.typedShortTitle),
+                      onTap: () => widget.onStationSelected?.call(station),
+                    ),
+                  );
+                }
+              }
+            }
+
+            return GoogleMap(
+              mapType: MapType.normal,
+              initialCameraPosition: initialCameraPosition,
+              markers: markers,
+              tileOverlays: {
+                TileOverlay(
+                  tileOverlayId: chartOverlay.id,
+                  tileProvider: chartOverlay.tileProvider,
+                  tileSize: tileSize,
+                ),
+              },
+              onCameraMove: (position) =>
+                  setState(() => zoom = position.zoom.toInt()),
+              onMapCreated: (controller) async {
+                setState(() => _gmap = controller);
+                controller.setMapStyle(
+                  await DefaultAssetBundle.of(context)
+                      .loadString('assets/nautical-style.json'),
+                );
+              },
             );
           },
         ),
