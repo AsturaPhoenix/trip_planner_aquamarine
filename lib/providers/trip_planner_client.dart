@@ -247,7 +247,7 @@ class TripPlannerHttpClient {
         'mode': 'graph',
         'tcd': station.source,
         'station': station.title,
-        'type': station.type,
+        'type': station.type.name,
         'width': width.toString(),
         'height': height.toString(),
         'begin': '${begin.year}-${begin.month}-${begin.day}',
@@ -272,20 +272,27 @@ LatLng latLngFromXml(XmlElement node) => LatLng(
       double.parse(node.getAttribute('lng')!),
     );
 
+enum StationType {
+  launch('Launch Site'),
+  meeting('Meeting Place'),
+  destination('Destination'),
+  tide('Tide Station'),
+  current('Current Station'),
+  legacy('Legacy Tide and Current Stations'),
+  subordinate('Subordinate Tide and Current Stations'),
+  yourcoast('YourCoast'),
+  nogo('Restricted Area');
+
+  static final _byName = {for (final e in values) e.name: e};
+
+  const StationType(this.description);
+  factory StationType.forName(String name) => _byName[name]!;
+  final String description;
+}
+
 // tp.js: marker_from_xml
 class Station {
   static const idPrefixes = ['t', 'c', 'x'];
-  static const typeDescriptions = {
-    'launch': 'Launch Site',
-    'meeting': 'Meeting Place',
-    'destination': 'Destination',
-    'tide': 'Tide Station',
-    'current': 'Current Station',
-    'legacy': 'Legacy Tide and Current Stations',
-    'subordinate': 'Subordinate Tide and Current Stations',
-    'yourcoast': 'YourCoast',
-    'nogo': 'Restricted Area',
-  };
 
   static String _getId(XmlElement node) {
     for (final prefix in idPrefixes) {
@@ -299,7 +306,7 @@ class Station {
 
   Station.fromXml(XmlElement node)
       : id = _getId(node),
-        type = node.getAttribute('station_type')!,
+        type = StationType.forName(node.getAttribute('station_type')!),
         marker = latLngFromXml(node.findElements('marker').first),
         noaaId = node.getAttribute('noaa_id') ?? '',
         title = node.getAttribute('title')!,
@@ -307,7 +314,7 @@ class Station {
         isSubordinate = node.getAttribute('subtype') == 'Subordinate';
   Station.read(BinaryReader reader)
       : id = reader.readString(),
-        type = reader.readString(),
+        type = StationType.forName(reader.readString()),
         marker = reader.read() as LatLng,
         noaaId = reader.readString(),
         title = reader.readString(),
@@ -315,21 +322,20 @@ class Station {
         isSubordinate = reader.readBool();
 
   final String id;
-  final String type;
-  String get typeDescription => typeDescriptions[type]!;
+  final StationType type;
   final LatLng marker;
   final String noaaId;
   bool get isLegacy => noaaId == '';
   final String title;
   String get shortTitle =>
       title.replaceAll(RegExp(r', California( Current)?'), '');
-  String get typedShortTitle => '$typeDescription: $shortTitle';
+  String get typedShortTitle => '${type.description}: $shortTitle';
   final String? source;
   final bool isSubordinate;
 
   void write(BinaryWriter writer) => writer
     ..writeString(id)
-    ..writeString(type)
+    ..writeString(type.name)
     ..write(marker)
     ..writeString(noaaId)
     ..writeString(title)

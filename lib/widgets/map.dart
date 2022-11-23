@@ -16,11 +16,13 @@ class Map extends StatefulWidget {
     super.key,
     required this.tileCache,
     this.stations = const {},
+    this.selectedStation,
     this.onStationSelected,
   });
 
   final BlobCache tileCache;
   final Set<Station> stations;
+  final Station? selectedStation;
   final void Function(Station station)? onStationSelected;
 
   @override
@@ -34,6 +36,16 @@ class TileOverlayConfiguration<T extends TileProvider> {
       : id = TileOverlayId(id);
 }
 
+class _MarkerIcons {
+  _MarkerIcons({
+    required this.stations,
+    required this.selected,
+    required this.tcSelected,
+  });
+  final core.Map<StationType, BitmapDescriptor> stations;
+  final BitmapDescriptor selected, tcSelected;
+}
+
 class MapState extends State<Map> {
   static final log = Logger('MapState');
 
@@ -45,10 +57,10 @@ class MapState extends State<Map> {
 
   // TODO: make this configurable
   static const showMarkerTypes = {
-    'tide',
-    'current',
-    'launch',
-    'destination',
+    StationType.tide,
+    StationType.current,
+    StationType.launch,
+    StationType.destination,
   };
 
   late final chartOverlays = [
@@ -83,27 +95,43 @@ class MapState extends State<Map> {
         }
       });
 
-  Future<core.Map<String, BitmapDescriptor?>>? _markerIcons;
+  Future<_MarkerIcons>? _markerIcons;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    final imageConfiguration = createLocalImageConfiguration(context);
+    _markerIcons = () async {
+      Future<BitmapDescriptor> loadAsset(
+        String type,
+        ImageConfiguration imageConfiguration,
+      ) =>
+          BitmapDescriptor.fromAssetImage(
+            imageConfiguration,
+            'assets/markers/$type.png',
+            mipmaps: false,
+          );
 
-    _markerIcons = Future.wait(
-      showMarkerTypes.map(
-        (stationType) => BitmapDescriptor.fromAssetImage(
-          imageConfiguration,
-          'assets/markers/$stationType.png',
-          mipmaps: false,
-        ).then(
-          (icon) => icon, // cast to nullable
-          onError: (e, StackTrace s) =>
-              log.warning('Failed to fetch marker icon "$stationType"', e, s),
+      final defaultConfiguration = createLocalImageConfiguration(context);
+      final stations = [
+        for (final stationType in showMarkerTypes)
+          loadAsset(stationType.name, defaultConfiguration)
+      ];
+
+      final selConfiguration =
+          defaultConfiguration.copyWith(size: const Size(22, 21));
+      final selected = loadAsset('sel', selConfiguration);
+      final tcSelected = loadAsset('tc_sel', selConfiguration);
+
+      return _MarkerIcons(
+        stations: core.Map.fromIterables(
+          showMarkerTypes,
+          await Future.wait(stations),
         ),
-      ),
-    ).then((icons) => core.Map.fromIterables(showMarkerTypes, icons));
+        selected: await selected,
+        tcSelected: await tcSelected,
+      );
+    }();
   }
 
   @override
@@ -132,14 +160,17 @@ class MapState extends State<Map> {
             final markers = <Marker>{};
 
             if (iconsSnapshot.hasData) {
+              final markerIcons = iconsSnapshot.data!;
+
               // tp.js: show_hide_marker
               bool stationFilter(Station station) =>
                   showMarkerTypes.contains(station.type) &&
-                  !((station.type == 'current' || station.type == 'tide') &&
+                  !((station.type == StationType.current ||
+                          station.type == StationType.tide) &&
                       station.isLegacy);
 
               for (final station in widget.stations.where(stationFilter)) {
-                final icon = iconsSnapshot.data![station.type];
+                final icon = markerIcons.stations[station.type];
                 if (icon != null) {
                   // tp.js: create_station
                   markers.add(
@@ -148,11 +179,36 @@ class MapState extends State<Map> {
                       position: station.marker,
                       icon: icon,
                       infoWindow: InfoWindow(title: station.typedShortTitle),
+                      zIndex: station.type == StationType.current ? 4 : 3,
                       onTap: () => widget.onStationSelected?.call(station),
                     ),
                   );
                 }
               }
+
+              // tp.js: create_sel_marker
+              void createSelMarker(
+                MarkerId id,
+                BitmapDescriptor icon,
+                LatLng? location,
+              ) =>
+                  markers.add(
+                    Marker(
+                      markerId: id,
+                      anchor: const Offset(.5, .65),
+                      icon: icon,
+                      // tp.js: move_sel_marker
+                      position: location ?? const LatLng(0, 0),
+                      visible: location != null,
+                      zIndex: 1,
+                    ),
+                  );
+
+              createSelMarker(
+                const MarkerId('sel'),
+                markerIcons.selected,
+                widget.selectedStation?.marker,
+              );
             }
 
             return GoogleMap(

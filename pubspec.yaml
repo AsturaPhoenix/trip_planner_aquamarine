@@ -56,6 +56,8 @@ dependencies:
 dependency_overrides:
   google_maps_flutter_android:
     path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_android
+  google_maps_flutter_platform_interface:
+    path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_platform_interface
   google_maps_flutter_web:
     path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_web
 

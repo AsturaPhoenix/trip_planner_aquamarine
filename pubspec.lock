@@ -304,12 +304,11 @@ packages:
     source: hosted
     version: "2.1.12"
   google_maps_flutter_platform_interface:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: google_maps_flutter_platform_interface
-      sha256: cde5d8713fd61f48ba675190be5ab294a022eec966748a2f83063f487d076fbc
-      url: "https://pub.dev"
-    source: hosted
+      path: "../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_platform_interface"
+      relative: true
+    source: path
     version: "2.2.4"
   google_maps_flutter_web:
     dependency: "direct main"

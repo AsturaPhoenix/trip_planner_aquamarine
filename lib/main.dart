@@ -193,6 +193,7 @@ class TripPlannerState extends State<TripPlanner> {
                                 child: Map(
                                   tileCache: widget.tileCache,
                                   stations: stationsSnapshot.data ?? {},
+                                  selectedStation: selectedStation,
                                   onStationSelected: (station) => setState(
                                     () => selectedStation = station,
                                   ),

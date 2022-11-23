@@ -216,7 +216,7 @@ class TidePanelState extends State<TidePanel> {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                '${widget.station.type == 'tide' ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
+                '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
                 style: theme.textTheme.titleMedium,
               ),
             ),
