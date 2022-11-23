@@ -25,7 +25,17 @@ abstract class CacheBox {
         e,
         s,
       );
-      await boxOpener.delete();
+      try {
+        await boxOpener.delete();
+      } catch (e, s) {
+        // Hive may try to delete a lock file that doesn't exist.
+        log.warning(
+          'Exception while deleting box ${boxOpener.name}. '
+          'This is probably fine.',
+          e,
+          s,
+        );
+      }
       return boxOpener.open();
     }
   }
