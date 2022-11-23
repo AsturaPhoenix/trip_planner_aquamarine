@@ -113,14 +113,16 @@ class MockTripPlannerClient extends _i1.Mock implements _i5.TripPlannerClient {
         returnValueForMissingStub: null,
       );
   @override
-  _i6.Stream<Set<_i5.Station>> getDatapoints() => (super.noSuchMethod(
+  _i6.Stream<Map<_i5.StationId, _i5.Station>> getDatapoints() =>
+      (super.noSuchMethod(
         Invocation.method(
           #getDatapoints,
           [],
         ),
-        returnValue: _i6.Stream<Set<_i5.Station>>.empty(),
-        returnValueForMissingStub: _i6.Stream<Set<_i5.Station>>.empty(),
-      ) as _i6.Stream<Set<_i5.Station>>);
+        returnValue: _i6.Stream<Map<_i5.StationId, _i5.Station>>.empty(),
+        returnValueForMissingStub:
+            _i6.Stream<Map<_i5.StationId, _i5.Station>>.empty(),
+      ) as _i6.Stream<Map<_i5.StationId, _i5.Station>>);
   @override
   _i6.Stream<_i7.Uint8List> getTideGraph(
     _i5.Station? station,

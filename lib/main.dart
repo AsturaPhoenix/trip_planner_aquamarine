@@ -1,4 +1,5 @@
-import 'dart:async';
+import 'dart:core';
+import 'dart:core' as core;
 import 'dart:developer' as debug;
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/persistence/cache_box.dart';
+import 'package:trip_planner_aquamarine/util/optional.dart';
 
 import 'providers/trip_planner_client.dart';
 import 'widgets/map.dart';
@@ -87,7 +89,7 @@ class TripPlannerState extends State<TripPlanner> {
 
   Station? selectedStation;
   Instant t = Instant.now();
-  late Stream<Set<Station>> stations;
+  late Stream<core.Map<StationId, Station>> stations;
 
   @override
   void initState() {
@@ -147,7 +149,13 @@ class TripPlannerState extends State<TripPlanner> {
           return StreamBuilder(
             stream: stations,
             builder: (context, stationsSnapshot) {
-              selectedStation ??= stationsSnapshot.data?.first;
+              final stations = stationsSnapshot.data;
+              selectedStation ??= stations?.values.first;
+              final tideCurrentStation = Optional(selectedStation).map(
+                (station) => station.type.isTideCurrent
+                    ? station
+                    : stations![station.tideCurrentStationId],
+              );
 
               return Scaffold(
                 appBar: AppBar(
@@ -192,14 +200,14 @@ class TripPlannerState extends State<TripPlanner> {
                               Expanded(
                                 child: Map(
                                   tileCache: widget.tileCache,
-                                  stations: stationsSnapshot.data ?? {},
+                                  stations: stations ?? {},
                                   selectedStation: selectedStation,
                                   onStationSelected: (station) => setState(
                                     () => selectedStation = station,
                                   ),
                                 ),
                               ),
-                              if (selectedStation != null)
+                              if (tideCurrentStation != null)
                                 FittedBox(
                                   alignment: Alignment.topCenter,
                                   fit: BoxFit.scaleDown,
@@ -211,7 +219,7 @@ class TripPlannerState extends State<TripPlanner> {
                                     ),
                                     child: TidePanel(
                                       client: widget.client,
-                                      station: selectedStation!,
+                                      station: tideCurrentStation,
                                       t: t,
                                       onTimeChanged: (t) =>
                                           setState(() => this.t = t),

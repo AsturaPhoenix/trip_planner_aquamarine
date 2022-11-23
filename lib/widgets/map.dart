@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
+import 'package:trip_planner_aquamarine/util/optional.dart';
 
 import '../providers/wms_tile_provider.dart';
 
@@ -21,8 +22,9 @@ class Map extends StatefulWidget {
   });
 
   final BlobCache tileCache;
-  final Set<Station> stations;
+  final core.Map<StationId, Station> stations;
   final Station? selectedStation;
+
   final void Function(Station station)? onStationSelected;
 
   @override
@@ -43,7 +45,13 @@ class _MarkerIcons {
     required this.tcSelected,
   });
   final core.Map<StationType, BitmapDescriptor> stations;
-  final BitmapDescriptor selected, tcSelected;
+
+  /// Halo for the selected location.
+  final BitmapDescriptor selected,
+
+      /// Halo for a nearby tide/current station, when the selected location is
+      /// not tide/current.
+      tcSelected;
 }
 
 class MapState extends State<Map> {
@@ -165,17 +173,16 @@ class MapState extends State<Map> {
               // tp.js: show_hide_marker
               bool stationFilter(Station station) =>
                   showMarkerTypes.contains(station.type) &&
-                  !((station.type == StationType.current ||
-                          station.type == StationType.tide) &&
-                      station.isLegacy);
+                  !(station.type.isTideCurrent && station.isLegacy);
 
-              for (final station in widget.stations.where(stationFilter)) {
+              for (final station
+                  in widget.stations.values.where(stationFilter)) {
                 final icon = markerIcons.stations[station.type];
                 if (icon != null) {
                   // tp.js: create_station
                   markers.add(
                     Marker(
-                      markerId: MarkerId(station.id),
+                      markerId: MarkerId(station.id.toString()),
                       position: station.marker,
                       icon: icon,
                       infoWindow: InfoWindow(title: station.typedShortTitle),
@@ -187,7 +194,7 @@ class MapState extends State<Map> {
               }
 
               // tp.js: create_sel_marker
-              void createSelMarker(
+              void createSelectionMarker(
                 MarkerId id,
                 BitmapDescriptor icon,
                 LatLng? location,
@@ -204,10 +211,17 @@ class MapState extends State<Map> {
                     ),
                   );
 
-              createSelMarker(
+              createSelectionMarker(
                 const MarkerId('sel'),
                 markerIcons.selected,
                 widget.selectedStation?.marker,
+              );
+
+              createSelectionMarker(
+                const MarkerId('tc_sel'),
+                markerIcons.tcSelected,
+                Optional(widget.selectedStation?.tideCurrentStationId)
+                    .map((tcid) => widget.stations[tcid]?.marker),
               );
             }
 

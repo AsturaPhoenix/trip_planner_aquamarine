@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:hive_flutter/adapters.dart';
@@ -9,6 +11,7 @@ import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/persistence/tide_graph_cache.dart';
+import 'package:trip_planner_aquamarine/util/optional.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
@@ -104,12 +107,14 @@ class TripPlannerClient {
 
   void close() => httpClient?.call().then((client) => client.close()).ignore;
 
-  Stream<Set<Station>> getDatapoints() {
-    final results = StreamController<Set<Station>>();
+  Stream<Map<StationId, Station>> getDatapoints() {
+    final results = StreamController<Map<StationId, Station>>();
     final bool needResults;
     if (stationCache.isNotEmpty) {
       log.info('Stations: cache hit.');
-      results.add({...stationCache.values});
+      results.add(
+        {for (final station in stationCache.values) station.id: station},
+      );
       needResults = false;
     } else {
       log.info('Stations: cache miss.');
@@ -124,7 +129,7 @@ class TripPlannerClient {
           results.add(stations);
           stationCache
             ..clear()
-            ..addAll(stations);
+            ..addAll(stations.values);
         } catch (e, s) {
           if (needResults) {
             results.addError(e, s);
@@ -216,22 +221,17 @@ class TripPlannerHttpClient {
 
   void close() => client.close();
 
-  Future<Set<Station>> getDatapoints() async {
+  Future<Map<StationId, Station>> getDatapoints() async {
     final response = await client.get(endpoints.datapoints);
     if (response.statusCode != HttpStatus.ok) {
       throw response;
     }
 
-    final stations = {
+    return {
       for (final stationNode
           in XmlDocument.parse(response.body).findAllElements('station'))
-        Station.fromXml(stationNode)
+        StationId.fromXml(stationNode): Station.fromXml(stationNode)
     };
-    assert(
-      {for (var s in stations) s.id}.length == stations.length,
-      'Duplicate station ID present.',
-    );
-    return stations;
   }
 
   Future<Uint8List> getTideGraph(
@@ -288,40 +288,72 @@ enum StationType {
   const StationType(this.description);
   factory StationType.forName(String name) => _byName[name]!;
   final String description;
+
+  bool get isTideCurrent => this == tide || this == current;
+}
+
+enum StationIdPrefix { t, c, x }
+
+class StationId extends Equatable {
+  const StationId(this.prefix, this.index);
+  StationId.parse(String string)
+      : prefix = StationIdPrefix.values.singleWhere(
+          (p) => string[0] == p.name,
+          orElse: () =>
+              throw FormatException('Station ID prefix not found.', string, 0),
+        ),
+        index = int.parse(string.substring(1));
+  factory StationId.fromXml(XmlElement stationNode) {
+    for (final prefix in StationIdPrefix.values) {
+      final index = stationNode.getAttribute('${prefix.name}id');
+      if (index != null) {
+        return StationId(prefix, int.parse(index));
+      }
+    }
+    throw FormatException('Missing required .id attribute', stationNode);
+  }
+
+  final StationIdPrefix prefix;
+  final int index;
+
+  @override
+  List<Object?> get props => [prefix, index];
+
+  @override
+  String toString() => '${prefix.name}$index';
 }
 
 // tp.js: marker_from_xml
 class Station {
-  static const idPrefixes = ['t', 'c', 'x'];
-
-  static String _getId(XmlElement node) {
-    for (final prefix in idPrefixes) {
-      final idByType = node.getAttribute('${prefix}id');
-      if (idByType != null) {
-        return prefix + idByType;
-      }
-    }
-    throw FormatException('Missing required .id attribute', node);
-  }
-
   Station.fromXml(XmlElement node)
-      : id = _getId(node),
+      : id = StationId.fromXml(node),
         type = StationType.forName(node.getAttribute('station_type')!),
         marker = latLngFromXml(node.findElements('marker').first),
         noaaId = node.getAttribute('noaa_id') ?? '',
         title = node.getAttribute('title')!,
         source = node.getAttribute('source'),
-        isSubordinate = node.getAttribute('subtype') == 'Subordinate';
+        isSubordinate = node.getAttribute('subtype') == 'Subordinate',
+        tideCurrentStationId =
+            Optional(node.findElements('tide_station').firstOrNull).map(
+                  (tsid) => StationId(StationIdPrefix.t, int.parse(tsid.text)),
+                ) ??
+                Optional(node.findElements('current_station').firstOrNull).map(
+                  (csid) => StationId(StationIdPrefix.c, int.parse(csid.text)),
+                );
   Station.read(BinaryReader reader)
-      : id = reader.readString(),
+      : id = StationId.parse(reader.readString()),
         type = StationType.forName(reader.readString()),
         marker = reader.read() as LatLng,
         noaaId = reader.readString(),
         title = reader.readString(),
         source = reader.read() as String?,
-        isSubordinate = reader.readBool();
+        isSubordinate = reader.readBool(),
+        tideCurrentStationId = (() {
+          final id = reader.readString();
+          return id == '' ? null : StationId.parse(id);
+        }());
 
-  final String id;
+  final StationId id;
   final StationType type;
   final LatLng marker;
   final String noaaId;
@@ -333,14 +365,17 @@ class Station {
   final String? source;
   final bool isSubordinate;
 
+  final StationId? tideCurrentStationId;
+
   void write(BinaryWriter writer) => writer
-    ..writeString(id)
+    ..writeString(id.toString())
     ..writeString(type.name)
     ..write(marker)
     ..writeString(noaaId)
     ..writeString(title)
     ..write(source)
-    ..writeBool(isSubordinate);
+    ..writeBool(isSubordinate)
+    ..writeString(tideCurrentStationId?.toString() ?? '');
 }
 
 class StationAdapter extends TypeAdapter<Station> {
