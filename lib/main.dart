@@ -41,7 +41,7 @@ void main() async {
   BlobCache.registerAdapters();
   TripPlannerClient.registerAdapters();
 
-  final stationCache = CacheBox.tryOpen<Station>('Stations');
+  final stationCache = CacheBox.tryOpen<Station>('StationCache');
   final tideGraphCache = BlobCache.open('TideGraphCache');
   final tileCache = BlobCache.open('TileCache');
 
