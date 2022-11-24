@@ -58,8 +58,10 @@ Future<Uri> resolveRedirects(
           statusCode: response.statusCode,
         ),
       );
-    } else {
+    } else if (response.statusCode == HttpStatus.ok) {
       return url;
+    } else {
+      throw response;
     }
   }
   throw RedirectException('Too many redirects', redirects);
@@ -203,9 +205,9 @@ class TripPlannerHttpClient {
     final client = Client();
     try {
       base = await resolveRedirects(client, base, maxRedirects: maxRedirects);
-    } on ClientException {
+    } on Object {
       // For web during development, we may run into CORS denials, so use a local instance.
-      if (kIsWeb) {
+      if (kIsWeb && kDebugMode) {
         base = Uri.parse('http://localhost/trip_planner/');
       } else {
         rethrow;

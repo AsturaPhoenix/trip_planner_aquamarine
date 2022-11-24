@@ -2,6 +2,7 @@ import 'dart:core';
 import 'dart:core' as core;
 import 'dart:developer' as debug;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:joda/time.dart';
@@ -29,7 +30,9 @@ void main() async {
 
   final httpClientFactory = RetryOnDemand(
     () => TripPlannerHttpClient.resolveFromRedirect(
-      Uri.parse('https://www.bask.org/trip_planner/'),
+      Uri.parse(
+        kIsWeb ? '/trip_planner/' : 'https://www.bask.org/trip_planner/',
+      ),
       TripPlannerEndpoints(
         datapoints: Uri(path: 'datapoints.xml'),
         tides: Uri(path: 'tides.php'),
