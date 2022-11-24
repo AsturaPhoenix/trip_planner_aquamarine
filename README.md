@@ -44,7 +44,9 @@ The `google_maps_flutter_web` package sets `gestureHandling = "auto"`, so gestur
 For web, a typical build is
 
 ```
-flutter build web --base-href "/trip_planner_aquamarine/"
+flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit
 ```
+
+CanvasKit is required to render nautical charts, as the Dart Canvas API does not work wit the HTML renderer.
 
 Remember to add your Google Maps API key to `build/web/index.html`.

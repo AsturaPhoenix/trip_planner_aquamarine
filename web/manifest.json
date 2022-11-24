@@ -1,12 +1,12 @@
 {
-    "name": "trip_planner_aquamarine",
-    "short_name": "trip_planner_aquamarine",
+    "name": "BASK Trip Planner",
+    "short_name": "Trip Planner",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "BASK Trip Planner",
-    "orientation": "portrait-primary",
+    "background_color": "#395BA9",
+    "theme_color": "#395BA9",
+    "description": "Bay Area Sea Kayakers Trip Planner",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
