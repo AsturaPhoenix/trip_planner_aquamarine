@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
@@ -311,6 +312,8 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
+  final _encoder = img.BmpEncoder();
+
   @override
   Future<Tile> getTile(int x, int y, int? zoom) async {
     try {
@@ -319,12 +322,23 @@ class WmsTileProvider implements TileProvider {
         Point(x, y),
         max(min(levelOfDetail - zoom, maxOversample), 0),
       );
-      final image = await getTileContent(locator);
+      final content = await getTileContent(locator);
       try {
-        final data = await image.toByteData(format: ui.ImageByteFormat.png);
-        return Tile(image.width, image.height, data!.buffer.asUint8List());
+        final data = await content.toByteData(
+          format: ui.ImageByteFormat.rawStraightRgba,
+        );
+        final image = img.Image.fromBytes(
+          content.width,
+          content.height,
+          data!.buffer.asUint8List(),
+        );
+        return Tile(
+          image.width,
+          image.height,
+          Uint8List.fromList(_encoder.encodeImage(image)),
+        );
       } finally {
-        image.dispose();
+        content.dispose();
       }
     } catch (e, s) {
       // The Java maps impl caller likes to eat exceptions, so log them.

@@ -211,7 +211,7 @@ void main() {
     }
 
     tester.printToConsole('Frame ratio: ${perf.frameRatio}');
-    expect(perf.frameRatio, greaterThan(.12));
+    expect(perf.frameRatio, greaterThan(.24));
     assert(wmsClient.tilesGenerated == tilesGenerated);
   });
 }
