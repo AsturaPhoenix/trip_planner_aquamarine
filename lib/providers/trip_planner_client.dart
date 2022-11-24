@@ -96,18 +96,19 @@ class TripPlannerClient {
   TripPlannerClient(
     this.stationCache,
     this.tideGraphCache,
-    this.httpClient,
+    this.httpClientFactory,
     this.timeZone,
   );
   final Box<Station> stationCache;
   final BlobCache tideGraphCache;
-  Future<TripPlannerHttpClient> Function()? httpClient;
+  Future<TripPlannerHttpClient> Function()? httpClientFactory;
 
   /// The server uses local time zone, and all the stations are on the West
   /// Coast.
   final TimeZone timeZone;
 
-  void close() => httpClient?.call().then((client) => client.close()).ignore;
+  void close() =>
+      httpClientFactory?.call().then((client) => client.close()).ignore;
 
   Stream<Map<StationId, Station>> getDatapoints() {
     final results = StreamController<Map<StationId, Station>>();
@@ -123,10 +124,10 @@ class TripPlannerClient {
       needResults = true;
     }
 
-    if (httpClient != null) {
+    if (httpClientFactory != null) {
       () async {
         try {
-          final stations = await (await httpClient!()).getDatapoints();
+          final stations = await (await httpClientFactory!()).getDatapoints();
           log.info('Stations: fetched/refreshed.');
           results.add(stations);
           stationCache
@@ -168,11 +169,11 @@ class TripPlannerClient {
       needResults = true;
     }
 
-    if (httpClient != null) {
+    if (httpClientFactory != null) {
       () async {
         try {
           // TODO: Deduplicate current requests, or cancel on unsubscribe.
-          final data = await (await httpClient!())
+          final data = await (await httpClientFactory!())
               .getTideGraph(station, days, width, height, begin);
           results.add(data);
           tideGraphCache[key] = data;
@@ -214,10 +215,10 @@ class TripPlannerHttpClient {
       }
     }
     log.info('base URL: $base');
-    return TripPlannerHttpClient._(client, relative.resolve(base));
+    return TripPlannerHttpClient(client, relative.resolve(base));
   }
 
-  TripPlannerHttpClient._(this.client, this.endpoints);
+  TripPlannerHttpClient(this.client, this.endpoints);
   final Client client;
   final TripPlannerEndpoints endpoints;
 

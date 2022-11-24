@@ -3,15 +3,14 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i6;
-import 'dart:typed_data' as _i7;
+import 'dart:async' as _i4;
+import 'dart:typed_data' as _i5;
 
-import 'package:hive_flutter/adapters.dart' as _i2;
-import 'package:joda/time.dart' as _i4;
+import 'package:http/http.dart' as _i2;
+import 'package:joda/time.dart' as _i6;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart' as _i3;
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart'
-    as _i5;
+    as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -24,8 +23,8 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart'
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
-class _FakeBox_0<E> extends _i1.SmartFake implements _i2.Box<E> {
-  _FakeBox_0(
+class _FakeClient_0 extends _i1.SmartFake implements _i2.Client {
+  _FakeClient_0(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -34,8 +33,9 @@ class _FakeBox_0<E> extends _i1.SmartFake implements _i2.Box<E> {
         );
 }
 
-class _FakeBlobCache_1 extends _i1.SmartFake implements _i3.BlobCache {
-  _FakeBlobCache_1(
+class _FakeTripPlannerEndpoints_1 extends _i1.SmartFake
+    implements _i3.TripPlannerEndpoints {
+  _FakeTripPlannerEndpoints_1(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -44,66 +44,35 @@ class _FakeBlobCache_1 extends _i1.SmartFake implements _i3.BlobCache {
         );
 }
 
-class _FakeTimeZone_2 extends _i1.SmartFake implements _i4.TimeZone {
-  _FakeTimeZone_2(
-    Object parent,
-    Invocation parentInvocation,
-  ) : super(
-          parent,
-          parentInvocation,
-        );
-}
-
-/// A class which mocks [TripPlannerClient].
+/// A class which mocks [TripPlannerHttpClient].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockTripPlannerClient extends _i1.Mock implements _i5.TripPlannerClient {
+class MockTripPlannerHttpClient extends _i1.Mock
+    implements _i3.TripPlannerHttpClient {
   @override
-  _i2.Box<_i5.Station> get stationCache => (super.noSuchMethod(
-        Invocation.getter(#stationCache),
-        returnValue: _FakeBox_0<_i5.Station>(
+  _i2.Client get client => (super.noSuchMethod(
+        Invocation.getter(#client),
+        returnValue: _FakeClient_0(
           this,
-          Invocation.getter(#stationCache),
+          Invocation.getter(#client),
         ),
-        returnValueForMissingStub: _FakeBox_0<_i5.Station>(
+        returnValueForMissingStub: _FakeClient_0(
           this,
-          Invocation.getter(#stationCache),
+          Invocation.getter(#client),
         ),
-      ) as _i2.Box<_i5.Station>);
+      ) as _i2.Client);
   @override
-  _i3.BlobCache get tideGraphCache => (super.noSuchMethod(
-        Invocation.getter(#tideGraphCache),
-        returnValue: _FakeBlobCache_1(
+  _i3.TripPlannerEndpoints get endpoints => (super.noSuchMethod(
+        Invocation.getter(#endpoints),
+        returnValue: _FakeTripPlannerEndpoints_1(
           this,
-          Invocation.getter(#tideGraphCache),
+          Invocation.getter(#endpoints),
         ),
-        returnValueForMissingStub: _FakeBlobCache_1(
+        returnValueForMissingStub: _FakeTripPlannerEndpoints_1(
           this,
-          Invocation.getter(#tideGraphCache),
+          Invocation.getter(#endpoints),
         ),
-      ) as _i3.BlobCache);
-  @override
-  set httpClient(
-          _i6.Future<_i5.TripPlannerHttpClient> Function()? _httpClient) =>
-      super.noSuchMethod(
-        Invocation.setter(
-          #httpClient,
-          _httpClient,
-        ),
-        returnValueForMissingStub: null,
-      );
-  @override
-  _i4.TimeZone get timeZone => (super.noSuchMethod(
-        Invocation.getter(#timeZone),
-        returnValue: _FakeTimeZone_2(
-          this,
-          Invocation.getter(#timeZone),
-        ),
-        returnValueForMissingStub: _FakeTimeZone_2(
-          this,
-          Invocation.getter(#timeZone),
-        ),
-      ) as _i4.TimeZone);
+      ) as _i3.TripPlannerEndpoints);
   @override
   void close() => super.noSuchMethod(
         Invocation.method(
@@ -113,23 +82,25 @@ class MockTripPlannerClient extends _i1.Mock implements _i5.TripPlannerClient {
         returnValueForMissingStub: null,
       );
   @override
-  _i6.Stream<Map<_i5.StationId, _i5.Station>> getDatapoints() =>
+  _i4.Future<Map<_i3.StationId, _i3.Station>> getDatapoints() =>
       (super.noSuchMethod(
         Invocation.method(
           #getDatapoints,
           [],
         ),
-        returnValue: _i6.Stream<Map<_i5.StationId, _i5.Station>>.empty(),
+        returnValue: _i4.Future<Map<_i3.StationId, _i3.Station>>.value(
+            <_i3.StationId, _i3.Station>{}),
         returnValueForMissingStub:
-            _i6.Stream<Map<_i5.StationId, _i5.Station>>.empty(),
-      ) as _i6.Stream<Map<_i5.StationId, _i5.Station>>);
+            _i4.Future<Map<_i3.StationId, _i3.Station>>.value(
+                <_i3.StationId, _i3.Station>{}),
+      ) as _i4.Future<Map<_i3.StationId, _i3.Station>>);
   @override
-  _i6.Stream<_i7.Uint8List> getTideGraph(
-    _i5.Station? station,
+  _i4.Future<_i5.Uint8List> getTideGraph(
+    _i3.Station? station,
     int? days,
     int? width,
     int? height,
-    _i4.Date? begin,
+    _i6.Date? begin,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -142,7 +113,8 @@ class MockTripPlannerClient extends _i1.Mock implements _i5.TripPlannerClient {
             begin,
           ],
         ),
-        returnValue: _i6.Stream<_i7.Uint8List>.empty(),
-        returnValueForMissingStub: _i6.Stream<_i7.Uint8List>.empty(),
-      ) as _i6.Stream<_i7.Uint8List>);
+        returnValue: _i4.Future<_i5.Uint8List>.value(_i5.Uint8List(0)),
+        returnValueForMissingStub:
+            _i4.Future<_i5.Uint8List>.value(_i5.Uint8List(0)),
+      ) as _i4.Future<_i5.Uint8List>);
 }
