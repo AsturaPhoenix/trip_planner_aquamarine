@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
@@ -13,14 +14,22 @@ import 'package:trip_planner_aquamarine/util/optional.dart';
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
+  static const initialCameraPosition = CameraPosition(
+    // Center map on Alcatraz, to show the interesting points around the Bay.
+    target: LatLng(37.8331, -122.4165),
+    zoom: 12,
+  );
+
   const Map({
     super.key,
+    required this.client,
     required this.tileCache,
     this.stations = const {},
     this.selectedStation,
     this.onStationSelected,
   });
 
+  final http.Client client;
   final BlobCache tileCache;
   final core.Map<StationId, Station> stations;
   final Station? selectedStation;
@@ -57,12 +66,6 @@ class _MarkerIcons {
 class MapState extends State<Map> {
   static final log = Logger('MapState');
 
-  static const initialCameraPosition = CameraPosition(
-    // Center map on Alcatraz, to show the interesting points around the Bay.
-    target: LatLng(37.8331, -122.4165),
-    zoom: 12,
-  );
-
   // TODO: make this configurable
   static const showMarkerTypes = {
     StationType.tide,
@@ -75,6 +78,7 @@ class MapState extends State<Map> {
     TileOverlayConfiguration(
       'nautical',
       WmsTileProvider(
+        client: widget.client,
         cache: widget.tileCache,
         tileType: 'nautical',
         url: Uri.parse(
@@ -90,7 +94,7 @@ class MapState extends State<Map> {
   ];
   GoogleMapController? _gmap;
 
-  int zoom = initialCameraPosition.zoom.toInt();
+  int zoom = Map.initialCameraPosition.zoom.toInt();
   int chartOverlayIndex = 0;
   TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
       chartOverlays[chartOverlayIndex];
@@ -146,6 +150,7 @@ class MapState extends State<Map> {
   void didUpdateWidget(covariant Map oldWidget) {
     super.didUpdateWidget(oldWidget);
     for (final overlay in chartOverlays) {
+      overlay.tileProvider.client = widget.client;
       overlay.tileProvider.cache = widget.tileCache;
     }
   }
@@ -227,7 +232,7 @@ class MapState extends State<Map> {
 
             return GoogleMap(
               mapType: MapType.normal,
-              initialCameraPosition: initialCameraPosition,
+              initialCameraPosition: Map.initialCameraPosition,
               markers: markers,
               tileOverlays: {
                 TileOverlay(

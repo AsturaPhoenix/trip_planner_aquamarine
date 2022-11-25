@@ -5,6 +5,7 @@ import 'dart:developer' as debug;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/adapters.dart';
+import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
@@ -66,21 +67,28 @@ void main() async {
 
   runApp(
     TripPlanner(
-      client: TripPlannerClient(
+      tripPlannerClient: TripPlannerClient(
         await stationCache,
         await tideGraphCache,
         httpClientFactory.get,
         TimeZone.forId('America/Los_Angeles'),
       ),
+      wmsClient: http.Client(),
       tileCache: await tileCache,
     ),
   );
 }
 
 class TripPlanner extends StatefulWidget {
-  const TripPlanner({super.key, required this.client, required this.tileCache});
+  const TripPlanner({
+    super.key,
+    required this.tripPlannerClient,
+    required this.wmsClient,
+    required this.tileCache,
+  });
 
-  final TripPlannerClient client;
+  final TripPlannerClient tripPlannerClient;
+  final http.Client wmsClient;
   final BlobCache tileCache;
 
   @override
@@ -107,7 +115,7 @@ class TripPlannerState extends State<TripPlanner> {
   }
 
   void updateClient() {
-    stations = widget.client
+    stations = widget.tripPlannerClient
         .getDatapoints()
         .where((stations) => stations.isNotEmpty)
         .handleError(
@@ -118,7 +126,7 @@ class TripPlannerState extends State<TripPlanner> {
   @override
   void dispose() {
     super.dispose();
-    widget.client.close();
+    widget.tripPlannerClient.close();
   }
 
   @override
@@ -202,6 +210,7 @@ class TripPlannerState extends State<TripPlanner> {
                             children: [
                               Expanded(
                                 child: Map(
+                                  client: widget.wmsClient,
                                   tileCache: widget.tileCache,
                                   stations: stations ?? {},
                                   selectedStation: selectedStation,
@@ -221,7 +230,7 @@ class TripPlannerState extends State<TripPlanner> {
                                           : boxConstraints.maxWidth,
                                     ),
                                     child: TidePanel(
-                                      client: widget.client,
+                                      client: widget.tripPlannerClient,
                                       station: tideCurrentStation,
                                       t: t,
                                       onTimeChanged: (t) =>

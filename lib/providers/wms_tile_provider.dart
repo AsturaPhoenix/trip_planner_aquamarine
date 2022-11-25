@@ -16,7 +16,7 @@ part 'wms_tile_provider.g.dart';
 
 @JsonSerializable()
 class WmsParams {
-  late String layers;
+  String layers = '';
   String styles = '';
   String version = '1.1.1';
   bool transparent = true;
@@ -157,6 +157,7 @@ class WmsTileProvider implements TileProvider {
   }
 
   WmsTileProvider({
+    required this.client,
     required this.cache,
     required this.tileType,
     required this.url,
@@ -167,6 +168,7 @@ class WmsTileProvider implements TileProvider {
     required this.params,
   });
 
+  http.Client client;
   BlobCache cache;
   String tileType;
 
@@ -187,22 +189,10 @@ class WmsTileProvider implements TileProvider {
   int preferredTileSize;
   WmsParams params;
 
-  void dispose() => cache.close();
-
-  static const _clientKeepAlive = Duration(minutes: 1);
-
-  http.Client get client {
-    _clientTimer?.cancel();
-    _clientTimer = Timer(_clientKeepAlive, () {
-      _clientInstance!.close();
-      _clientInstance = null;
-    });
-
-    return _clientInstance ??= http.Client();
+  void dispose() {
+    cache.close();
+    client.close();
   }
-
-  http.Client? _clientInstance;
-  Timer? _clientTimer;
 
   Uri _getTileUrl(TileLocator locator) {
     final bbox = _xyzToBounds(locator);
