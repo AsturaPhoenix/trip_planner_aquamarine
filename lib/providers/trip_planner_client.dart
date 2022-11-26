@@ -360,7 +360,7 @@ class Station {
   final StationType type;
   final LatLng marker;
   final String noaaId;
-  bool get isLegacy => noaaId == '';
+  bool get isLegacy => type.isTideCurrent && noaaId == '';
   final String title;
   String get shortTitle =>
       title.replaceAll(RegExp(r', California( Current)?'), '');

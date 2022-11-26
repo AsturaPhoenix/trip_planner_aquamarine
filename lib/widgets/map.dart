@@ -197,6 +197,11 @@ class MapState extends State<Map> {
                     Marker(
                       markerId: MarkerId(station.id.toString()),
                       position: station.marker,
+                      alpha: station.isLegacy
+                          ? .3
+                          : station.isSubordinate
+                              ? .6
+                              : 1,
                       icon: icon,
                       infoWindow: InfoWindow(title: station.typedShortTitle),
                       zIndex: station.type == StationType.current ? 4 : 3,
