@@ -35,10 +35,6 @@ flutter upgrade
 
 For local web, you'll need a local trip planner at `http://localhost/trip_planner/` with `Header set Access-Control-Allow-Origin *` to serve resources that would otherwise be CORS restricted.
 
-### Quirks
-
-The `google_maps_flutter_web` package sets `gestureHandling = "auto"`, so gesture handling will appear to be in cooperative mode (e.g. ctrl + scroll to zoom) whenever the Chrome dev tools window is open or after the Dart Debug Extension is closed.
-
 ## Building
 
 For web, a typical build is
