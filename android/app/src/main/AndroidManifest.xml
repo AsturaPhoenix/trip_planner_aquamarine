@@ -1,7 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.trip_planner_aquamarine">
-   <application
-        android:label="trip_planner_aquamarine"
+    package="org.bask.trip_planner_aquamarine">
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <application
+        android:label="Trip Planner"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

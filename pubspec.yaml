@@ -50,6 +50,7 @@ dependencies:
     path: ../joda_time
   json_annotation: ^4.7.0
   logging: ^1.1.0
+  permission_handler: ^10.2.0
   pointer_interceptor: ^0.9.3+3
   timezone: ^0.9.0
   xml: ^6.2.2

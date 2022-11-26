@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -108,6 +109,13 @@ class MapState extends State<Map> {
       });
 
   Future<_MarkerIcons>? _markerIcons;
+  late final Future<bool> locationEnabled;
+
+  @override
+  void initState() {
+    super.initState();
+    locationEnabled = Permission.locationWhenInUse.request().isGranted;
+  }
 
   @override
   void didChangeDependencies() {
@@ -230,26 +238,30 @@ class MapState extends State<Map> {
               );
             }
 
-            return GoogleMap(
-              mapType: MapType.normal,
-              initialCameraPosition: Map.initialCameraPosition,
-              markers: markers,
-              tileOverlays: {
-                TileOverlay(
-                  tileOverlayId: chartOverlay.id,
-                  tileProvider: chartOverlay.tileProvider,
-                  tileSize: tileSize,
-                ),
-              },
-              onCameraMove: (position) =>
-                  setState(() => zoom = position.zoom.toInt()),
-              onMapCreated: (controller) async {
-                setState(() => _gmap = controller);
-                controller.setMapStyle(
-                  await DefaultAssetBundle.of(context)
-                      .loadString('assets/nautical-style.json'),
-                );
-              },
+            return FutureBuilder(
+              future: locationEnabled,
+              builder: (context, locationEnabledSnapshot) => GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition: Map.initialCameraPosition,
+                markers: markers,
+                myLocationEnabled: locationEnabledSnapshot.data ?? false,
+                tileOverlays: {
+                  TileOverlay(
+                    tileOverlayId: chartOverlay.id,
+                    tileProvider: chartOverlay.tileProvider,
+                    tileSize: tileSize,
+                  ),
+                },
+                onCameraMove: (position) =>
+                    setState(() => zoom = position.zoom.toInt()),
+                onMapCreated: (controller) async {
+                  setState(() => _gmap = controller);
+                  controller.setMapStyle(
+                    await DefaultAssetBundle.of(context)
+                        .loadString('assets/nautical-style.json'),
+                  );
+                },
+              ),
             );
           },
         ),
@@ -272,11 +284,11 @@ class MapState extends State<Map> {
 
   @override
   void dispose() {
+    super.dispose();
     _gmap?.dispose();
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
     }
-    super.dispose();
   }
 }
 
