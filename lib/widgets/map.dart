@@ -2,6 +2,7 @@ import 'dart:core';
 import 'dart:core' as core;
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -216,10 +217,11 @@ class MapState extends State<Map> {
                 final markerIcons = iconsSnapshot.data!;
 
                 if (positionSnapshot.hasData) {
+                  const markerId = MarkerId('current location');
                   final position = positionSnapshot.data!;
                   markers.add(
                     Marker(
-                      markerId: const MarkerId('current location'),
+                      markerId: markerId,
                       anchor: const Offset(.5, .5),
                       position: LatLng(position.latitude, position.longitude),
                       // This icon will be transparent, but we want something of
@@ -228,7 +230,12 @@ class MapState extends State<Map> {
                       alpha: 0,
                       // TODO: This text does not update while the info window
                       // is shown.
-                      infoWindow: InfoWindow(title: formatPosition(position)),
+                      infoWindow: InfoWindow(
+                        title: formatPosition(position),
+                        // No need for kIsWeb since we haven't implemented a
+                        // location widget for web yet.
+                        onTap: () => _gmap!.hideMarkerInfoWindow(markerId),
+                      ),
                       // Take precedence over other markers.
                       zIndex: 10,
                     ),
@@ -245,18 +252,30 @@ class MapState extends State<Map> {
                   final icon = markerIcons.stations[station.type];
                   if (icon != null) {
                     // tp.js: create_station
+                    final markerId = MarkerId(station.id.toString());
+                    final visualMinor = [
+                          station.isLegacy,
+                          station.isSubordinate
+                        ].indexOf(true) %
+                        3;
+                    final visualMajor = station.type.isTideCurrent ? 1 : 0;
                     markers.add(
                       Marker(
-                        markerId: MarkerId(station.id.toString()),
+                        markerId: markerId,
                         position: station.marker,
-                        alpha: station.isLegacy
-                            ? .3
-                            : station.isSubordinate
-                                ? .6
-                                : 1,
+                        alpha: (1 + visualMinor) / 3,
                         icon: icon,
-                        infoWindow: InfoWindow(title: station.typedShortTitle),
-                        zIndex: station.type == StationType.current ? 4 : 3,
+                        infoWindow: InfoWindow(
+                          title: station.typedShortTitle,
+                          onTap: kIsWeb
+                              ? null
+                              : () => _gmap!.hideMarkerInfoWindow(markerId),
+                        ),
+                        // In tp.js, this is 4 for current stations and 3 for
+                        // everything else. However, on smaller screens we
+                        // should try to keep touch response consistent with
+                        // alpha.
+                        zIndex: (3 + 3 * visualMajor + visualMinor).toDouble(),
                         onTap: () => widget.onStationSelected?.call(station),
                       ),
                     );
