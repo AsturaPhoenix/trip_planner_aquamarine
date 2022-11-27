@@ -3,6 +3,7 @@ import 'dart:core' as core;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -64,6 +65,20 @@ class _MarkerIcons {
       tcSelected;
 }
 
+/// I'm not sure there's an official source, but this seems to be a consensus
+/// format for reporting to the Coast Guard.
+String formatPosition(Position position) {
+  String formatPolar(
+    double polar,
+    String positiveSuffix,
+    String negativeSuffix,
+  ) =>
+      "${polar.abs().truncate()}° ${(polar.abs() % 1 * 60).toStringAsFixed(2)}'"
+      ' ${polar >= 0 ? positiveSuffix : negativeSuffix}';
+  return '${formatPolar(position.latitude, 'N', 'S')}, '
+      '${formatPolar(position.longitude, 'E', 'W')}';
+}
+
 class MapState extends State<Map> {
   static final log = Logger('MapState');
 
@@ -110,11 +125,22 @@ class MapState extends State<Map> {
 
   Future<_MarkerIcons>? _markerIcons;
   late final Future<bool> locationEnabled;
+  Stream<Position>? _positionStream;
 
   @override
   void initState() {
     super.initState();
-    locationEnabled = Permission.locationWhenInUse.request().isGranted;
+    locationEnabled = Permission.locationWhenInUse
+        .request()
+        .isGranted
+        .catchError((_) => false)
+      ..then((locationEnabled) {
+        // This probably isn't the most efficient way to do this. If battery use
+        // is a problem, try querying on tap instead.
+        if (locationEnabled) {
+          setState(() => _positionStream = Geolocator.getPositionStream());
+        }
+      });
   }
 
   @override
@@ -181,98 +207,121 @@ class MapState extends State<Map> {
       children: [
         FutureBuilder(
           future: _markerIcons,
-          builder: (context, iconsSnapshot) {
-            final markers = <Marker>{};
+          builder: (context, iconsSnapshot) => StreamBuilder(
+            stream: _positionStream,
+            builder: (context, positionSnapshot) {
+              final markers = <Marker>{};
 
-            if (iconsSnapshot.hasData) {
-              final markerIcons = iconsSnapshot.data!;
+              if (iconsSnapshot.hasData) {
+                final markerIcons = iconsSnapshot.data!;
 
-              // tp.js: show_hide_marker
-              bool stationFilter(Station station) =>
-                  showMarkerTypes.contains(station.type) &&
-                  !(station.type.isTideCurrent && station.isLegacy);
-
-              for (final station
-                  in widget.stations.values.where(stationFilter)) {
-                final icon = markerIcons.stations[station.type];
-                if (icon != null) {
-                  // tp.js: create_station
+                if (positionSnapshot.hasData) {
+                  final position = positionSnapshot.data!;
                   markers.add(
                     Marker(
-                      markerId: MarkerId(station.id.toString()),
-                      position: station.marker,
-                      alpha: station.isLegacy
-                          ? .3
-                          : station.isSubordinate
-                              ? .6
-                              : 1,
-                      icon: icon,
-                      infoWindow: InfoWindow(title: station.typedShortTitle),
-                      zIndex: station.type == StationType.current ? 4 : 3,
-                      onTap: () => widget.onStationSelected?.call(station),
+                      markerId: const MarkerId('current location'),
+                      anchor: const Offset(.5, .5),
+                      position: LatLng(position.latitude, position.longitude),
+                      // This icon will be transparent, but we want something of
+                      //roughly this size and anchored at the center.
+                      icon: markerIcons.selected,
+                      alpha: 0,
+                      // TODO: This text does not update while the info window
+                      // is shown.
+                      infoWindow: InfoWindow(title: formatPosition(position)),
+                      // Take precedence over other markers.
+                      zIndex: 10,
                     ),
                   );
                 }
+
+                // tp.js: show_hide_marker
+                bool stationFilter(Station station) =>
+                    showMarkerTypes.contains(station.type) &&
+                    !(station.type.isTideCurrent && station.isLegacy);
+
+                for (final station
+                    in widget.stations.values.where(stationFilter)) {
+                  final icon = markerIcons.stations[station.type];
+                  if (icon != null) {
+                    // tp.js: create_station
+                    markers.add(
+                      Marker(
+                        markerId: MarkerId(station.id.toString()),
+                        position: station.marker,
+                        alpha: station.isLegacy
+                            ? .3
+                            : station.isSubordinate
+                                ? .6
+                                : 1,
+                        icon: icon,
+                        infoWindow: InfoWindow(title: station.typedShortTitle),
+                        zIndex: station.type == StationType.current ? 4 : 3,
+                        onTap: () => widget.onStationSelected?.call(station),
+                      ),
+                    );
+                  }
+                }
+
+                // tp.js: create_sel_marker
+                void createSelectionMarker(
+                  MarkerId id,
+                  BitmapDescriptor icon,
+                  LatLng? location,
+                ) =>
+                    markers.add(
+                      Marker(
+                        markerId: id,
+                        anchor: const Offset(.5, .65),
+                        icon: icon,
+                        // tp.js: move_sel_marker
+                        position: location ?? const LatLng(0, 0),
+                        visible: location != null,
+                        zIndex: 1,
+                      ),
+                    );
+
+                createSelectionMarker(
+                  const MarkerId('sel'),
+                  markerIcons.selected,
+                  widget.selectedStation?.marker,
+                );
+
+                createSelectionMarker(
+                  const MarkerId('tc_sel'),
+                  markerIcons.tcSelected,
+                  Optional(widget.selectedStation?.tideCurrentStationId)
+                      .map((tcid) => widget.stations[tcid]?.marker),
+                );
               }
 
-              // tp.js: create_sel_marker
-              void createSelectionMarker(
-                MarkerId id,
-                BitmapDescriptor icon,
-                LatLng? location,
-              ) =>
-                  markers.add(
-                    Marker(
-                      markerId: id,
-                      anchor: const Offset(.5, .65),
-                      icon: icon,
-                      // tp.js: move_sel_marker
-                      position: location ?? const LatLng(0, 0),
-                      visible: location != null,
-                      zIndex: 1,
+              return FutureBuilder(
+                future: locationEnabled,
+                builder: (context, locationEnabledSnapshot) => GoogleMap(
+                  mapType: MapType.normal,
+                  initialCameraPosition: Map.initialCameraPosition,
+                  markers: markers,
+                  myLocationEnabled: locationEnabledSnapshot.data ?? false,
+                  tileOverlays: {
+                    TileOverlay(
+                      tileOverlayId: chartOverlay.id,
+                      tileProvider: chartOverlay.tileProvider,
+                      tileSize: tileSize,
                     ),
-                  );
-
-              createSelectionMarker(
-                const MarkerId('sel'),
-                markerIcons.selected,
-                widget.selectedStation?.marker,
+                  },
+                  onCameraMove: (position) =>
+                      setState(() => zoom = position.zoom.toInt()),
+                  onMapCreated: (controller) async {
+                    setState(() => _gmap = controller);
+                    controller.setMapStyle(
+                      await DefaultAssetBundle.of(context)
+                          .loadString('assets/nautical-style.json'),
+                    );
+                  },
+                ),
               );
-
-              createSelectionMarker(
-                const MarkerId('tc_sel'),
-                markerIcons.tcSelected,
-                Optional(widget.selectedStation?.tideCurrentStationId)
-                    .map((tcid) => widget.stations[tcid]?.marker),
-              );
-            }
-
-            return FutureBuilder(
-              future: locationEnabled,
-              builder: (context, locationEnabledSnapshot) => GoogleMap(
-                mapType: MapType.normal,
-                initialCameraPosition: Map.initialCameraPosition,
-                markers: markers,
-                myLocationEnabled: locationEnabledSnapshot.data ?? false,
-                tileOverlays: {
-                  TileOverlay(
-                    tileOverlayId: chartOverlay.id,
-                    tileProvider: chartOverlay.tileProvider,
-                    tileSize: tileSize,
-                  ),
-                },
-                onCameraMove: (position) =>
-                    setState(() => zoom = position.zoom.toInt()),
-                onMapCreated: (controller) async {
-                  setState(() => _gmap = controller);
-                  controller.setMapStyle(
-                    await DefaultAssetBundle.of(context)
-                        .loadString('assets/nautical-style.json'),
-                  );
-                },
-              ),
-            );
-          },
+            },
+          ),
         ),
         if (_gmap != null)
           Positioned(
