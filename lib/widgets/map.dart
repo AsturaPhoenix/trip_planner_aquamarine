@@ -272,14 +272,19 @@ class MapState extends State<Map> {
         ),
         if (_gmap != null)
           Positioned(
+            top: 64,
             bottom: 115,
             right: 10,
-            child: PointerInterceptor(
-              child: _LodControls(
-                zoom: zoom,
-                lod: chartOverlay.tileProvider.levelOfDetail,
-                maxOversample: chartOverlay.tileProvider.maxOversample,
-                setLod: _setLod,
+            child: FittedBox(
+              alignment: Alignment.bottomLeft,
+              fit: BoxFit.scaleDown,
+              child: PointerInterceptor(
+                child: _LodControls(
+                  zoom: zoom,
+                  lod: chartOverlay.tileProvider.levelOfDetail,
+                  maxOversample: chartOverlay.tileProvider.maxOversample,
+                  setLod: _setLod,
+                ),
               ),
             ),
           ),
