@@ -213,7 +213,7 @@ class WmsTileProvider implements TileProvider {
 
   Future<Uint8List> fetchImageData(TileLocator locator) async {
     final url = _getTileUrl(locator);
-    log.info('fetchImage($locator) => get $url');
+    log.fine('fetchImage($locator) => get $url');
 
     final response = await client.get(url);
     if (response.statusCode == HttpStatus.ok) {

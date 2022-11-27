@@ -87,10 +87,10 @@ class BlobCache {
   Uint8List? operator [](String key) {
     final blob = blobs.get(key);
     if (blob != null) {
-      log.info('$key: cache hit');
+      log.fine('$key: cache hit');
       touch(key);
     } else {
-      log.info('$key: cache miss');
+      log.fine('$key: cache miss');
     }
     return blob;
   }
@@ -123,7 +123,7 @@ class BlobCache {
         blobs.delete(key);
         ++evictions;
       } else {
-        log.info('Evicted $evictions blobs');
+        log.fine('Evicted $evictions blobs');
         return;
       }
     }

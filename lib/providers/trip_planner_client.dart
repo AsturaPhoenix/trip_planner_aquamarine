@@ -114,13 +114,13 @@ class TripPlannerClient {
     final results = StreamController<Map<StationId, Station>>();
     final bool needResults;
     if (stationCache.isNotEmpty) {
-      log.info('Stations: cache hit.');
+      log.fine('Stations: cache hit.');
       results.add(
         {for (final station in stationCache.values) station.id: station},
       );
       needResults = false;
     } else {
-      log.info('Stations: cache miss.');
+      log.fine('Stations: cache miss.');
       needResults = true;
     }
 
@@ -128,7 +128,7 @@ class TripPlannerClient {
       () async {
         try {
           final stations = await (await httpClientFactory!()).getDatapoints();
-          log.info('Stations: fetched/refreshed.');
+          log.fine('Stations: fetched/refreshed.');
           results.add(stations);
           stationCache
             ..clear()
@@ -258,7 +258,7 @@ class TripPlannerHttpClient {
       },
     );
 
-    log.info('get $url');
+    log.fine('get $url');
 
     final response = await client.get(url);
 

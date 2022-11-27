@@ -121,37 +121,41 @@ class MapState extends State<Map> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    _markerIcons = () async {
-      Future<BitmapDescriptor> loadAsset(
-        String type,
-        ImageConfiguration imageConfiguration,
-      ) =>
-          BitmapDescriptor.fromAssetImage(
-            imageConfiguration,
-            'assets/markers/$type.png',
-            mipmaps: false,
-          );
+    Future<BitmapDescriptor> loadAsset(
+      String type,
+      ImageConfiguration imageConfiguration,
+    ) =>
+        BitmapDescriptor.fromAssetImage(
+          imageConfiguration,
+          'assets/markers/$type.png',
+          mipmaps: false,
+        );
 
-      final defaultConfiguration = createLocalImageConfiguration(context);
-      final stations = [
-        for (final stationType in showMarkerTypes)
-          loadAsset(stationType.name, defaultConfiguration)
-      ];
+    final defaultConfiguration = createLocalImageConfiguration(context);
+    final stations = [
+      for (final stationType in showMarkerTypes)
+        loadAsset(stationType.name, defaultConfiguration)
+    ];
 
-      final selConfiguration =
-          defaultConfiguration.copyWith(size: const Size(22, 21));
-      final selected = loadAsset('sel', selConfiguration);
-      final tcSelected = loadAsset('tc_sel', selConfiguration);
+    final selConfiguration =
+        defaultConfiguration.copyWith(size: const Size(22, 21));
+    final selected = loadAsset('sel', selConfiguration);
+    final tcSelected = loadAsset('tc_sel', selConfiguration);
 
-      return _MarkerIcons(
-        stations: core.Map.fromIterables(
-          showMarkerTypes,
-          await Future.wait(stations),
-        ),
-        selected: await selected,
-        tcSelected: await tcSelected,
-      );
-    }();
+    _markerIcons = (() async => _MarkerIcons(
+          stations: core.Map.fromIterables(
+            showMarkerTypes,
+            await Future.wait(stations),
+          ),
+          selected: await selected,
+          tcSelected: await tcSelected,
+        ))();
+
+    final maxOversample =
+        2 + (defaultConfiguration.devicePixelRatio?.floor() ?? 1) - 1;
+    for (final overlay in chartOverlays) {
+      overlay.tileProvider.maxOversample = maxOversample;
+    }
   }
 
   @override
