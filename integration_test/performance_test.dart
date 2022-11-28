@@ -1,5 +1,3 @@
-// ignore_for_file: avoid_print
-
 import 'dart:async';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html';
@@ -10,9 +8,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:integration_test/integration_test.dart';
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:http/http.dart' as http;
+import 'package:integration_test/integration_test.dart';
+
+import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
 class FakeWmsClient extends Fake implements http.Client {

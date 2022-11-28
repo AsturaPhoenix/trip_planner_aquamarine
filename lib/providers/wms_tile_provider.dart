@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -27,8 +26,6 @@ class WmsParams {
 
   Map<String, dynamic> toJson() => _$WmsParamsToJson(this);
 }
-
-typedef SparseArray<T> = SplayTreeMap<int, T>;
 
 extension on Point<int> {
   ui.Offset toOffset() => ui.Offset(x.toDouble(), y.toDouble());
@@ -283,7 +280,7 @@ class WmsTileProvider implements TileProvider {
     canvas.restore();
   }
 
-  /// Gets a tile image. This may be cached, composited, or fetched.
+  /// Gets a tile image, composited from cached or fetched resources.
   ///
   /// The caller is responsible for calling `dispose` on the image.
   Future<ui.Image> getTileContent(TileLocator locator) async {
