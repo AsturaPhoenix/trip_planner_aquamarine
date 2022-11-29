@@ -31,6 +31,10 @@ flutter channel master
 flutter upgrade
 ```
 
+### https://github.com/flutter/flutter/issues/116212
+
+You may also want to edit your `flutter/lib/src/material/scrollbar.dart` to patch an animation error. This is not currently forked.
+
 ### CORS
 
 For local web, you'll need a local trip planner at `http://localhost/trip_planner/` with `Header set Access-Control-Allow-Origin *` to serve resources that would otherwise be CORS restricted.
