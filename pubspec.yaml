@@ -46,7 +46,6 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   http: ^0.13.5
-  image: ^3.2.2
   joda:
     path: ../joda_time
   json_annotation: ^4.7.0
@@ -57,8 +56,12 @@ dependencies:
   xml: ^6.2.2
 
 dependency_overrides:
+  google_maps_flutter:
+    path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter
   google_maps_flutter_android:
     path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_android
+  google_maps_flutter_ios:
+    path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_ios
   google_maps_flutter_platform_interface:
     path: ../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_platform_interface
   google_maps_flutter_web:

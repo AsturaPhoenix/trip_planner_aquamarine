@@ -55,13 +55,12 @@ class FakeWmsClient extends Fake implements http.Client {
   }
 
   @override
-  Future<http.Response> get(Uri url, {Map<String, String>? headers}) =>
-      generateTile(url)
-          .then((image) => image.toByteData(format: ui.ImageByteFormat.png))
-          .then(
-            (data) =>
-                http.Response.bytes(data!.buffer.asUint8List(), HttpStatus.ok),
-          );
+  Future<http.Response> get(Uri url, {Map<String, String>? headers}) async {
+    final image = await generateTile(url);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return http.Response.bytes(data!.buffer.asUint8List(), HttpStatus.ok);
+  }
 
   @override
   void close() {}
@@ -84,7 +83,7 @@ Future<void> watchTiles(int minCount) {
 
   void awaitLoad(ImageElement img) {
     loading.add(img);
-    img.decode().whenComplete(() {
+    img.decode().catchError((_) {}).whenComplete(() {
       loading.remove(img);
 
       if (watched.length >= minCount && loading.isEmpty) {
@@ -210,7 +209,7 @@ void main() {
     }
 
     tester.printToConsole('Frame ratio: ${perf.frameRatio}');
-    expect(perf.frameRatio, greaterThan(.24));
+    expect(perf.frameRatio, greaterThan(.4));
     assert(wmsClient.tilesGenerated == tilesGenerated);
   });
 }

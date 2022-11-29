@@ -7,10 +7,10 @@ import 'dart:ui' as ui;
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
 import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
+import 'package:trip_planner_aquamarine/platform/compositor.dart';
 
 part 'wms_tile_provider.g.dart';
 
@@ -35,10 +35,6 @@ extension on Point<int> {
   // This is fine since the max zoom level for maps is 22.
   Point<int> operator >>(int z) =>
       Point((x >> z).toSigned(32), (y >> z).toSigned(32));
-}
-
-extension on ui.Image {
-  ui.Size get size => ui.Size(width.toDouble(), height.toDouble());
 }
 
 class AreaLocator extends Equatable {
@@ -124,29 +120,6 @@ class WmsTileProvider implements TileProvider {
     _epsg3857Extent,
   ); // y starts from top
 
-  static final _imagePaint = ui.Paint();
-
-  static Future<ui.Image> decodeImage(Uint8List data) async {
-    final buffer = await ui.ImmutableBuffer.fromUint8List(data);
-    final ui.ImageDescriptor imageDescriptor;
-    try {
-      imageDescriptor = await ui.ImageDescriptor.encoded(buffer);
-    } finally {
-      buffer.dispose();
-    }
-
-    try {
-      final codec = await imageDescriptor.instantiateCodec();
-      try {
-        return (await codec.getNextFrame()).image;
-      } finally {
-        codec.dispose();
-      }
-    } finally {
-      imageDescriptor.dispose();
-    }
-  }
-
   /// Convert xyz tile coordinates to mercator bounds.
   static ui.Rect _xyzToBounds(AreaLocator xyz) {
     final wmsTileSize = _epsg3857Extent * 2 / (1 << xyz.zoom);
@@ -220,45 +193,55 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
-  final _activeDecodes = <TileLocator, Future<ui.Image>>{};
+  static const _memoryCacheSize = 16;
+  final _memoryCache = <TileLocator, Future<CompositorImage>>{};
 
   Future<Uint8List> getImageData(TileLocator locator) async =>
       cache[TileKey.forLocator(locator, tileType).toString()] ??=
           await fetchImageData(locator);
 
-  Future<ui.Image> getImage(TileLocator locator) => _activeDecodes[locator] ??=
-          getImageData(locator).then(decodeImage).whenComplete(() {
-        // Caution: This can't be a => because we must discard the return value
-        // or else the async becomes circular and never completes.
-        _activeDecodes.remove(locator);
-      });
+  Future<CompositorImage> getImage(TileLocator locator) {
+    final image = _memoryCache[locator] ??=
+        getImageData(locator).then(CompositorImage.decode);
+    if (_memoryCache.length > _memoryCacheSize) {
+      _memoryCache
+          .remove(_memoryCache.keys.first)!
+          .then((image) => image.dispose());
+    }
+    return image.then((image) => image.clone());
+  }
 
   /// Windows a tile from a larger tile at a higher LOD.
-  Future<void> _tileFromLarger(ui.Canvas canvas, TileLocator locator) async {
+  Future<void> _tileFromLarger(
+    Compositor compositor,
+    TileLocator locator,
+  ) async {
     final levelsAbove = min(fetchLod - locator.lod, locator.zoom);
     final ancestor = locator << levelsAbove;
+
+    final srcSize = logicalTileSize << locator.lod;
+    final offset =
+        ((locator.coordinate - (ancestor.coordinate << levelsAbove)) * srcSize)
+            .toOffset();
     final image = await getImage(ancestor);
-
-    final size = image.size / (1 << levelsAbove).toDouble();
-    final offset = (locator.coordinate - (ancestor.coordinate << levelsAbove))
-        .toOffset()
-        .scale(size.width, size.height);
-
-    canvas.drawImageRect(
+    compositor.composite(
       image,
-      offset & size,
+      offset & ui.Size.square(srcSize.toDouble()),
       ui.Offset.zero & const ui.Size.square(1),
-      _imagePaint,
     );
+    image.dispose();
   }
 
   /// Assembles a tile from smaller tiles at a lower LOD.
-  Future<void> _tileFromSmaller(ui.Canvas canvas, TileLocator locator) async {
+  Future<void> _tileFromSmaller(
+    Compositor compositor,
+    TileLocator locator,
+  ) async {
     final levelsBelow = locator.lod - fetchLod;
     final descendantBasis = locator >> levelsBelow;
     final sideLength = 1 << levelsBelow;
 
-    canvas
+    compositor
       ..save()
       ..scale(1 / sideLength);
 
@@ -268,48 +251,42 @@ class WmsTileProvider implements TileProvider {
         final descendantLocator = descendantBasis + offset;
 
         final image = await getImage(descendantLocator);
-        canvas.drawImageRect(
+        compositor.composite(
           image,
-          ui.Offset.zero & image.size,
+          ui.Offset.zero &
+              ui.Size.square(
+                (logicalTileSize << descendantLocator.lod).toDouble(),
+              ),
           offset.toOffset() & const ui.Size.square(1),
-          _imagePaint,
         );
+        image.dispose();
       }
     }
 
-    canvas.restore();
+    compositor.restore();
   }
 
   /// Gets a tile image, composited from cached or fetched resources.
   ///
   /// The caller is responsible for calling `dispose` on the image.
   Future<ui.Image> getTileContent(TileLocator locator) async {
-    final pictureRecorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(pictureRecorder);
-
     // Keep the natural resolution afforded by the LOD if we want to display at
     // a higher resolution, but don't waste bytes beyond the preferred size to
     // minimize encoding time.
     //
     // Also go ahead and normalize the tile size to 1.
     final tileSize = min(logicalTileSize << locator.lod, preferredTileSize);
-    canvas.scale(tileSize.toDouble());
+    final compositor = Compositor(tileSize);
+    compositor.scale(tileSize.toDouble());
 
     if (locator.lod <= fetchLod) {
-      await _tileFromLarger(canvas, locator);
+      await _tileFromLarger(compositor, locator);
     } else {
-      await _tileFromSmaller(canvas, locator);
+      await _tileFromSmaller(compositor, locator);
     }
 
-    final picture = pictureRecorder.endRecording();
-    try {
-      return picture.toImage(tileSize, tileSize);
-    } finally {
-      picture.dispose();
-    }
+    return compositor.toImage();
   }
-
-  final _encoder = img.BmpEncoder();
 
   @override
   Future<Tile> getTile(int x, int y, int? zoom) async {
@@ -319,24 +296,7 @@ class WmsTileProvider implements TileProvider {
         Point(x, y),
         max(min(levelOfDetail - zoom, maxOversample), 0),
       );
-      final content = await getTileContent(locator);
-      try {
-        final data = await content.toByteData(
-          format: ui.ImageByteFormat.rawStraightRgba,
-        );
-        final image = img.Image.fromBytes(
-          content.width,
-          content.height,
-          data!.buffer.asUint8List(),
-        );
-        return Tile(
-          image.width,
-          image.height,
-          Uint8List.fromList(_encoder.encodeImage(image)),
-        );
-      } finally {
-        content.dispose();
-      }
+      return ImageTile(await getTileContent(locator));
     } catch (e, s) {
       // The Java maps impl caller likes to eat exceptions, so log them.
       log.warning('getTile($x, $y, $zoom)', e, s);

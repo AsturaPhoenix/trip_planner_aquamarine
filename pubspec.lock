@@ -349,10 +349,9 @@ packages:
   google_maps_flutter:
     dependency: "direct main"
     description:
-      name: google_maps_flutter
-      sha256: "460b8c3318c5be1346e7182b848e3c2b83fe65f2f5d404c871ac7e134ee59801"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../flutter/plugins/packages/google_maps_flutter/google_maps_flutter"
+      relative: true
+    source: path
     version: "2.2.1"
   google_maps_flutter_android:
     dependency: "direct overridden"
@@ -362,12 +361,11 @@ packages:
     source: path
     version: "2.3.3"
   google_maps_flutter_ios:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: google_maps_flutter_ios
-      sha256: "43a71553d9973af6886b6984e246dac18b8a62dc59581904d8d1292388b05ea5"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../flutter/plugins/packages/google_maps_flutter/google_maps_flutter_ios"
+      relative: true
+    source: path
     version: "2.1.12"
   google_maps_flutter_platform_interface:
     dependency: "direct overridden"
@@ -456,7 +454,7 @@ packages:
     source: hosted
     version: "4.0.2"
   image:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: image
       sha256: f6ffe2895e3c86c6ad5a27e6302cf807403463e397cb2f0c580f619ac2fa588b
