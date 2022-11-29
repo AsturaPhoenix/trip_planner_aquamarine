@@ -79,28 +79,10 @@ class FakeBlobCache extends Fake implements BlobCache {
 
 Future<void> watchTiles(int minCount) {
   final completer = Completer<void>();
-  final watched = <ImageElement>{}, loading = <ImageElement>{};
-
-  void awaitLoad(ImageElement img) {
-    loading.add(img);
-    img.decode().catchError((_) {}).whenComplete(() {
-      loading.remove(img);
-
-      if (watched.length >= minCount && loading.isEmpty) {
-        completer.complete();
-      }
-    });
-  }
 
   void scan() {
-    watched.removeWhere((img) => !img.isConnected!);
-    loading.removeWhere((img) => !img.isConnected!);
-
-    for (final ImageElement img
-        in document.querySelectorAll('img[src^="blob:"]')) {
-      if (watched.add(img)) {
-        awaitLoad(img);
-      }
+    if (document.querySelectorAll('div > canvas').length >= minCount) {
+      completer.complete();
     }
   }
 
@@ -109,8 +91,6 @@ Future<void> watchTiles(int minCount) {
       document,
       childList: true,
       subtree: true,
-      attributes: true,
-      attributeFilter: const ['src'],
     );
 
   scan();
@@ -209,7 +189,7 @@ void main() {
     }
 
     tester.printToConsole('Frame ratio: ${perf.frameRatio}');
-    expect(perf.frameRatio, greaterThan(.4));
+    expect(perf.frameRatio, greaterThan(.9));
     assert(wmsClient.tilesGenerated == tilesGenerated);
   });
 }

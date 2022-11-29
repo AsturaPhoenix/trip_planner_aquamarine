@@ -9,8 +9,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
-import 'package:trip_planner_aquamarine/platform/compositor.dart';
+
+import '../persistence/blob_cache.dart';
+import '../platform/compositor.dart'
+    if (dart.library.html) '../platform/compositor_web.dart';
 
 part 'wms_tile_provider.g.dart';
 
