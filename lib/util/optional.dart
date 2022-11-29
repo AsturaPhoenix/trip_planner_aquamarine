@@ -1,4 +1,7 @@
 class Optional<T extends Object> {
+  static Optional<String> string(String value) =>
+      Optional(value == '' ? null : value);
+
   Optional(this.value);
   final T? value;
 

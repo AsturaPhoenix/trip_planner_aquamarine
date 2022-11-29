@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart';
@@ -15,11 +16,16 @@ import 'package:trip_planner_aquamarine/util/optional.dart';
 import 'package:xml/xml.dart';
 
 class TripPlannerEndpoints {
-  TripPlannerEndpoints({required this.datapoints, required this.tides});
+  TripPlannerEndpoints({
+    required this.base,
+    required this.datapoints,
+    required this.tides,
+  });
 
-  final Uri datapoints, tides;
+  final Uri base, datapoints, tides;
 
   TripPlannerEndpoints resolve(Uri base) => TripPlannerEndpoints(
+        base: base,
         datapoints: base.resolveUri(datapoints),
         tides: base.resolveUri(tides),
       );
@@ -193,16 +199,21 @@ class TripPlannerClient {
 
     return results.stream;
   }
+
+  ImageProvider getImage(Uri relative) => TripPlannerImage._(
+        relative,
+        (() async => (await httpClientFactory!.call()).endpoints.base)(),
+      );
 }
 
 class TripPlannerHttpClient {
   static final log = Logger('TripPlannerHttpClient');
 
   static Future<TripPlannerHttpClient> resolveFromRedirect(
-    Uri base,
     TripPlannerEndpoints relative, {
     int maxRedirects = 5,
   }) async {
+    var base = relative.base;
     final client = Client();
     try {
       base = await resolveRedirects(client, base, maxRedirects: maxRedirects);
@@ -342,7 +353,8 @@ class Station {
                 ) ??
                 Optional(node.findElements('current_station').firstOrNull).map(
                   (csid) => StationId(StationIdPrefix.c, int.parse(csid.text)),
-                );
+                ),
+        details = node.findElements('details').firstOrNull?.text;
   Station.read(BinaryReader reader)
       : id = StationId.parse(reader.readString()),
         type = StationType.forName(reader.readString()),
@@ -351,10 +363,9 @@ class Station {
         title = reader.readString(),
         source = reader.read() as String?,
         isSubordinate = reader.readBool(),
-        tideCurrentStationId = (() {
-          final id = reader.readString();
-          return id == '' ? null : StationId.parse(id);
-        }());
+        tideCurrentStationId =
+            Optional.string(reader.readString()).map(StationId.parse),
+        details = Optional.string(reader.readString()).value;
 
   final StationId id;
   final StationType type;
@@ -367,8 +378,8 @@ class Station {
   String get typedShortTitle => '${type.description}: $shortTitle';
   final String? source;
   final bool isSubordinate;
-
   final StationId? tideCurrentStationId;
+  final String? details;
 
   void write(BinaryWriter writer) => writer
     ..writeString(id.toString())
@@ -378,7 +389,8 @@ class Station {
     ..writeString(title)
     ..write(source)
     ..writeBool(isSubordinate)
-    ..writeString(tideCurrentStationId?.toString() ?? '');
+    ..writeString(tideCurrentStationId?.toString() ?? '')
+    ..writeString(details ?? '');
 }
 
 class StationAdapter extends TypeAdapter<Station> {
@@ -404,4 +416,47 @@ class LatLngAdapter extends TypeAdapter<LatLng> {
   void write(BinaryWriter writer, LatLng obj) => writer
     ..writeDouble(obj.latitude)
     ..writeDouble(obj.longitude);
+}
+
+class TripPlannerImageKey extends Equatable {
+  const TripPlannerImageKey(this.uri);
+  final Uri uri;
+
+  @override
+  get props => [uri];
+}
+
+class DelegatingImageStreamCompleter extends ImageStreamCompleter {
+  set delegate(ImageStreamCompleter value) {
+    final listener = ImageStreamListener(
+      (image, _) => setImage(image),
+      onChunk: reportImageChunkEvent,
+      onError: (e, s) => reportError(exception: e, stack: s),
+    );
+    value.addListener(listener);
+    addOnLastListenerRemovedCallback(() => value.removeListener(listener));
+  }
+}
+
+class TripPlannerImage extends ImageProvider<TripPlannerImageKey> {
+  TripPlannerImage._(this.relative, this.base);
+  final Uri relative;
+  final Future<Uri> base;
+
+  @override
+  Future<TripPlannerImageKey> obtainKey(ImageConfiguration configuration) =>
+      Future.value(TripPlannerImageKey(relative));
+
+  @override
+  ImageStreamCompleter loadBuffer(
+    TripPlannerImageKey key,
+    DecoderBufferCallback decode,
+  ) {
+    final completer = DelegatingImageStreamCompleter();
+    base.then((base) {
+      final net = NetworkImage(base.resolveUri(relative).toString());
+      completer.delegate = net.loadBuffer(net, decode);
+    });
+    return completer;
+  }
 }

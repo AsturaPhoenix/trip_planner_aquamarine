@@ -40,6 +40,7 @@ dependencies:
   async: ^2.10.0
   collection: ^1.17.0
   equatable: ^2.0.5
+  flutter_html: ^3.0.0-alpha.6
   geolocator: ^9.0.2
   google_maps_flutter: ^2.2.1
   google_maps_flutter_web: ^0.4.0+3

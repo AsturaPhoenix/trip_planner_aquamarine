@@ -34,13 +34,15 @@ class OverlaySwatch {
 }
 
 class TidePanel extends StatefulWidget {
+  static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
+
   TidePanel({
     super.key,
     required this.client,
     required this.station,
     required this.t,
-    this.graphWidth = 455,
-    this.graphHeight = 231,
+    this.graphWidth = defaultGraphWidth,
+    this.graphHeight = defaultGraphHeight,
     OverlaySwatch? overlaySwatch,
     this.onTimeChanged,
   }) : overlaySwatch =
@@ -205,45 +207,44 @@ class TidePanelState extends State<TidePanel> {
 
     // TODO: visual feedback of current selections (today/weekend/days)
     // TODO: date picker
-    return SizedBox(
-      width: widget.graphWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: theme.colorScheme.secondaryContainer,
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
-                style: theme.textTheme.titleMedium,
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: theme.colorScheme.secondaryContainer,
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
+              style: theme.textTheme.titleMedium,
             ),
           ),
-          FittedBox(
-            child: TideGraph(
-              client: widget.client,
-              station: widget.station,
-              timeWindow: timeWindow,
-              width: widget.graphWidth,
-              height: widget.graphHeight,
-              overlaySwatch: widget.overlaySwatch,
-              onTimeChanged: widget.onTimeChanged,
-            ),
+        ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: TideGraph(
+            client: widget.client,
+            station: widget.station,
+            timeWindow: timeWindow,
+            width: widget.graphWidth,
+            height: widget.graphHeight,
+            overlaySwatch: widget.overlaySwatch,
+            onTimeChanged: widget.onTimeChanged,
           ),
-          FittedBox(
-            child: TimeControls(
-              timeZone: widget.client.timeZone,
-              timeWindow: timeWindow,
-              onWindowChanged: (timeWindow) {
-                setState(() => this.timeWindow = timeWindow);
-                widget.onTimeChanged?.call(timeWindow.t);
-              },
-            ),
+        ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: TimeControls(
+            timeZone: widget.client.timeZone,
+            timeWindow: timeWindow,
+            onWindowChanged: (timeWindow) {
+              setState(() => this.timeWindow = timeWindow);
+              widget.onTimeChanged?.call(timeWindow.t);
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

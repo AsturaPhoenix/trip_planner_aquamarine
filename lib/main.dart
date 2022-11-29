@@ -1,6 +1,7 @@
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:developer' as debug;
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,11 +10,12 @@ import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:timezone/data/latest.dart';
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
-import 'package:trip_planner_aquamarine/persistence/cache_box.dart';
-import 'package:trip_planner_aquamarine/util/optional.dart';
 
+import 'persistence/blob_cache.dart';
+import 'persistence/cache_box.dart';
 import 'providers/trip_planner_client.dart';
+import 'util/optional.dart';
+import 'widgets/details_panel.dart';
 import 'widgets/map.dart';
 import 'widgets/tide_panel.dart';
 
@@ -31,10 +33,10 @@ void main() async {
 
   final httpClientFactory = RetryOnDemand(
     () => TripPlannerHttpClient.resolveFromRedirect(
-      Uri.parse(
-        kIsWeb ? '/trip_planner/' : 'https://www.bask.org/trip_planner/',
-      ),
       TripPlannerEndpoints(
+        base: kIsWeb
+            ? Uri(path: '/trip_planner/')
+            : Uri.parse('https://www.bask.org/trip_planner/'),
         datapoints: Uri(path: 'datapoints.xml'),
         tides: Uri(path: 'tides.php'),
       ),
@@ -95,12 +97,15 @@ class TripPlanner extends StatefulWidget {
   TripPlannerState createState() => TripPlannerState();
 }
 
-class TripPlannerState extends State<TripPlanner> {
+class TripPlannerState extends State<TripPlanner>
+    with SingleTickerProviderStateMixin {
   static final log = Logger('TripPlannerState');
 
   Station? selectedStation;
   Instant t = Instant.now();
   late Stream<core.Map<StationId, Station>> stations;
+
+  late final panelTabController = TabController(length: 2, vsync: this);
 
   @override
   void initState() {
@@ -136,6 +141,24 @@ class TripPlannerState extends State<TripPlanner> {
       theme: ThemeData(
         colorSchemeSeed: const Color(0xffbbccff),
         scaffoldBackgroundColor: const Color(0xffbbccff),
+        scrollbarTheme: ScrollbarThemeData(
+          thumbColor: MaterialStateProperty.resolveWith(
+            (states) => states.isEmpty ? const Color(0x38000000) : null,
+          ),
+          thumbVisibility: const MaterialStatePropertyAll(true),
+        ),
+        tabBarTheme: const TabBarTheme(
+          indicator: BoxDecoration(
+            color: Color(0x40bbccff),
+            border: Border(
+              bottom: BorderSide(width: 2, color: Color(0x40000000)),
+            ),
+          ),
+          labelColor: Colors.black,
+          labelPadding: EdgeInsets.all(4),
+          labelStyle: TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       home: LayoutBuilder(
         builder: (context, boxConstraints) {
@@ -154,6 +177,8 @@ class TripPlannerState extends State<TripPlanner> {
                       (_SelectedStationBar.blendedHorizontalPadding +
                           selectedStationBarMinPadding) +
                   titleAreaPadding;
+          final horizontal =
+              boxConstraints.maxWidth >= boxConstraints.maxHeight;
 
           const title = Text('BASK Trip Planner');
 
@@ -199,48 +224,68 @@ class TripPlannerState extends State<TripPlanner> {
                         blendEdges: false,
                       ),
                     Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, boxConstraints) {
-                          bool horizontal = boxConstraints.maxWidth >=
-                              boxConstraints.maxHeight;
-                          return Flex(
-                            direction:
-                                horizontal ? Axis.horizontal : Axis.vertical,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                child: Map(
-                                  client: widget.wmsClient,
-                                  tileCache: widget.tileCache,
-                                  stations: stations ?? {},
-                                  selectedStation: selectedStation,
-                                  onStationSelected: (station) => setState(
-                                    () => selectedStation = station,
-                                  ),
-                                ),
+                      child: Flex(
+                        direction: horizontal ? Axis.horizontal : Axis.vertical,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: Map(
+                              client: widget.wmsClient,
+                              tileCache: widget.tileCache,
+                              stations: stations ?? {},
+                              selectedStation: selectedStation,
+                              onStationSelected: (station) => setState(
+                                () => selectedStation = station,
                               ),
-                              if (tideCurrentStation != null)
-                                FittedBox(
-                                  alignment: Alignment.topCenter,
-                                  fit: BoxFit.scaleDown,
-                                  child: Container(
-                                    constraints: BoxConstraints(
-                                      maxWidth: horizontal
-                                          ? boxConstraints.maxWidth / 2
-                                          : boxConstraints.maxWidth,
-                                    ),
-                                    child: TidePanel(
-                                      client: widget.tripPlannerClient,
-                                      station: tideCurrentStation,
-                                      t: t,
-                                      onTimeChanged: (t) =>
-                                          setState(() => this.t = t),
-                                    ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: horizontal
+                                ? min(
+                                    boxConstraints.maxWidth / 2,
+                                    TidePanel.defaultGraphWidth,
+                                  )
+                                : boxConstraints.maxWidth,
+                            height: horizontal
+                                ? null
+                                : TidePanel.defaultGraphHeight + 97,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Material(
+                                  color: const Color(0xff8899cc),
+                                  child: TabBar(
+                                    controller: panelTabController,
+                                    tabs: const [
+                                      Text('Tides'),
+                                      Text('Details')
+                                    ],
                                   ),
                                 ),
-                            ],
-                          );
-                        },
+                                Expanded(
+                                  child: TabBarView(
+                                    controller: panelTabController,
+                                    children: [
+                                      tideCurrentStation == null
+                                          ? Container()
+                                          : TidePanel(
+                                              client: widget.tripPlannerClient,
+                                              station: tideCurrentStation,
+                                              t: t,
+                                              onTimeChanged: (t) =>
+                                                  setState(() => this.t = t),
+                                            ),
+                                      DetailsPanel(
+                                        client: widget.tripPlannerClient,
+                                        station: selectedStation,
+                                      )
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
