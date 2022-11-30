@@ -11,6 +11,7 @@ import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
 
 import '../persistence/blob_cache.dart';
+import '../persistence/memory_cache.dart';
 import '../platform/compositor.dart'
     if (dart.library.html) '../platform/compositor_web.dart';
 
@@ -195,22 +196,19 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
-  static const _memoryCacheSize = 16;
-  final _memoryCache = <TileLocator, Future<CompositorImage>>{};
+  final _memoryCache = MemoryCache<TileLocator, Future<CompositorImage>>(
+    capacity: 32,
+    onEvict: (image) async => (await image).dispose(),
+  );
 
   Future<Uint8List> getImageData(TileLocator locator) async =>
       cache[TileKey.forLocator(locator, tileType).toString()] ??=
           await fetchImageData(locator);
 
-  Future<CompositorImage> getImage(TileLocator locator) {
-    final image = _memoryCache[locator] ??=
-        getImageData(locator).then(CompositorImage.decode);
-    if (_memoryCache.length > _memoryCacheSize) {
-      _memoryCache
-          .remove(_memoryCache.keys.first)!
-          .then((image) => image.dispose());
-    }
-    return image.then((image) => image.clone());
+  Future<CompositorImage> getImage(TileLocator locator) async {
+    final image = await (_memoryCache[locator] ??=
+        getImageData(locator).then(CompositorImage.decode));
+    return image.clone();
   }
 
   /// Windows a tile from a larger tile at a higher LOD.
