@@ -292,10 +292,10 @@ class _Scaffold extends StatelessWidget {
                           TidePanel.defaultGraphWidth,
                         )
                       : constraints.maxWidth,
-                  height: horizontal ? null : TidePanel.defaultGraphHeight + 97,
                   child: _Panel(
                     tripPlannerClient: tripPlannerClient,
                     tabController: panelTabController,
+                    horizontal: horizontal,
                     selectedStation: selectedStation,
                     tideCurrentStation: tideCurrentStation,
                     t: t,
@@ -376,6 +376,7 @@ class _Panel extends StatelessWidget {
   const _Panel({
     required this.tripPlannerClient,
     required this.tabController,
+    required this.horizontal,
     this.selectedStation,
     this.tideCurrentStation,
     required this.t,
@@ -384,40 +385,62 @@ class _Panel extends StatelessWidget {
 
   final TripPlannerClient tripPlannerClient;
   final TabController tabController;
+  final bool horizontal;
   final Station? selectedStation, tideCurrentStation;
   final Instant t;
   final void Function(Instant)? onTimeChanged;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Material(
-            color: const Color(0xff8899cc),
-            child: TabBar(
-              controller: tabController,
-              tabs: const [Text('Tides'), Text('Details')],
-            ),
+  Widget build(BuildContext context) {
+    final viewport = TabBarView(
+      controller: tabController,
+      children: [
+        tideCurrentStation == null
+            ? Container()
+            : TidePanel(
+                client: tripPlannerClient,
+                station: tideCurrentStation!,
+                t: t,
+                onTimeChanged: onTimeChanged,
+              ),
+        DetailsPanel(
+          client: tripPlannerClient,
+          station: selectedStation,
+        )
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: const Color(0xff8899cc),
+          child: TabBar(
+            controller: tabController,
+            tabs: const [Text('Tides'), Text('Details')],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: tabController,
-              children: [
-                tideCurrentStation == null
-                    ? Container()
-                    : TidePanel(
-                        client: tripPlannerClient,
-                        station: tideCurrentStation!,
-                        t: t,
-                        onTimeChanged: onTimeChanged,
-                      ),
-                DetailsPanel(
-                  client: tripPlannerClient,
-                  station: selectedStation,
-                )
-              ],
-            ),
-          ),
-        ],
-      );
+        ),
+        horizontal
+            ? Expanded(child: viewport)
+            : LayoutBuilder(
+                builder: (context, boxConstraints) {
+                  double scale(
+                    double nominalWidth,
+                    double nominalHeight,
+                  ) =>
+                      nominalHeight *
+                      min(1, boxConstraints.maxWidth / nominalWidth);
+                  return SizedBox(
+                    height: scale(
+                          TidePanel.defaultGraphWidth,
+                          TidePanel.defaultGraphHeight + 31,
+                        ) +
+                        scale(529, 40),
+                    child: viewport,
+                  );
+                },
+              ),
+      ],
+    );
+  }
 }

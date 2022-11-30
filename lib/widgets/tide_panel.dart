@@ -1,5 +1,6 @@
 import 'dart:core';
 import 'dart:core' as core;
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -207,44 +208,58 @@ class TidePanelState extends State<TidePanel> {
 
     // TODO: visual feedback of current selections (today/weekend/days)
     // TODO: date picker
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          color: theme.colorScheme.secondaryContainer,
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
-              style: theme.textTheme.titleMedium,
-            ),
+    return LayoutBuilder(
+      builder: (context, boxConstraints) => FittedBox(
+        alignment: Alignment.topCenter,
+        fit: BoxFit.scaleDown,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: max(widget.graphWidth, boxConstraints.maxWidth),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: theme.colorScheme.secondaryContainer,
+                padding:
+                    const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                constraints:
+                    BoxConstraints(minWidth: widget.graphWidth, minHeight: 31),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.center,
+                child: TideGraph(
+                  client: widget.client,
+                  station: widget.station,
+                  timeWindow: timeWindow,
+                  width: widget.graphWidth,
+                  height: widget.graphHeight,
+                  overlaySwatch: widget.overlaySwatch,
+                  onTimeChanged: widget.onTimeChanged,
+                ),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: TimeControls(
+                  timeZone: widget.client.timeZone,
+                  timeWindow: timeWindow,
+                  onWindowChanged: (timeWindow) {
+                    setState(() => this.timeWindow = timeWindow);
+                    widget.onTimeChanged?.call(timeWindow.t);
+                  },
+                ),
+              ),
+            ],
           ),
         ),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: TideGraph(
-            client: widget.client,
-            station: widget.station,
-            timeWindow: timeWindow,
-            width: widget.graphWidth,
-            height: widget.graphHeight,
-            overlaySwatch: widget.overlaySwatch,
-            onTimeChanged: widget.onTimeChanged,
-          ),
-        ),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: TimeControls(
-            timeZone: widget.client.timeZone,
-            timeWindow: timeWindow,
-            onWindowChanged: (timeWindow) {
-              setState(() => this.timeWindow = timeWindow);
-              widget.onTimeChanged?.call(timeWindow.t);
-            },
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
