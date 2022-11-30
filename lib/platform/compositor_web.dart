@@ -8,7 +8,12 @@ import 'package:google_maps_flutter_web/google_maps_flutter_web.dart';
 class CompositorImage {
   static Future<CompositorImage> decode(Uint8List data) async {
     final image = ImageElement(src: Url.createObjectUrl(Blob([data])));
-    await image.decode();
+    try {
+      await image.decode();
+    } on DomException {
+      // This can fail transiently under high parallelism, so retry once.
+      await image.decode();
+    }
     return CompositorImage(image);
   }
 
