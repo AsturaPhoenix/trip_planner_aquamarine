@@ -136,11 +136,16 @@ class TripPlannerState extends State<TripPlanner>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme =
+        ColorScheme.fromSeed(seedColor: const Color(0xffbbccff)).copyWith(
+      background: const Color(0xffbbccff),
+      secondary: const Color(0xff8899cc),
+    );
     return MaterialApp(
       title: 'BASK Trip Planner',
       theme: ThemeData(
-        colorSchemeSeed: const Color(0xffbbccff),
-        scaffoldBackgroundColor: const Color(0xffbbccff),
+        colorScheme: colorScheme,
+        scaffoldBackgroundColor: colorScheme.background,
         scrollbarTheme: ScrollbarThemeData(
           thumbColor: MaterialStateProperty.resolveWith(
             (states) => states.isEmpty ? const Color(0x38000000) : null,
@@ -149,7 +154,7 @@ class TripPlannerState extends State<TripPlanner>
         ),
         tabBarTheme: const TabBarTheme(
           indicator: BoxDecoration(
-            color: Color(0x40bbccff),
+            color: Color(0x40ffffff),
             border: Border(
               bottom: BorderSide(width: 2, color: Color(0x40000000)),
             ),
@@ -157,7 +162,7 @@ class TripPlannerState extends State<TripPlanner>
           labelColor: Colors.black,
           labelPadding: EdgeInsets.all(4),
           labelStyle: TextStyle(fontWeight: FontWeight.bold),
-          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       home: LayoutBuilder(
@@ -392,6 +397,8 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     final viewport = TabBarView(
       controller: tabController,
       children: [
@@ -414,7 +421,7 @@ class _Panel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-          color: const Color(0xff8899cc),
+          color: theme.colorScheme.secondary,
           child: TabBar(
             controller: tabController,
             tabs: const [Text('Tides'), Text('Details')],
