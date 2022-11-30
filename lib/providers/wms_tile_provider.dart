@@ -12,8 +12,7 @@ import 'package:logging/logging.dart';
 
 import '../persistence/blob_cache.dart';
 import '../persistence/memory_cache.dart';
-import '../platform/compositor.dart'
-    if (dart.library.html) '../platform/compositor_web.dart';
+import '../platform/compositor.dart';
 
 part 'wms_tile_provider.g.dart';
 
