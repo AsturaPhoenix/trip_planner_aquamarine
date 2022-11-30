@@ -162,138 +162,150 @@ class TripPlannerState extends State<TripPlanner>
       ),
       home: LayoutBuilder(
         builder: (context, boxConstraints) {
-          const double selectedStationBarMinWidth = 480,
-              titleAreaPadding = 164,
-              selectedStationBarMinPadding = 16;
-          final centeredInlineStationBar = boxConstraints.maxWidth >=
-              selectedStationBarMinWidth +
-                  2 *
-                      (_SelectedStationBar.blendedHorizontalPadding +
-                          selectedStationBarMinPadding +
-                          titleAreaPadding);
-          final inlineStationBar = boxConstraints.maxWidth >=
-              selectedStationBarMinWidth +
-                  2 *
-                      (_SelectedStationBar.blendedHorizontalPadding +
-                          selectedStationBarMinPadding) +
-                  titleAreaPadding;
-          final horizontal =
-              boxConstraints.maxWidth >= boxConstraints.maxHeight;
-
-          const title = Text('BASK Trip Planner');
-
           return StreamBuilder(
             stream: stations,
             builder: (context, stationsSnapshot) {
               final stations = stationsSnapshot.data;
               selectedStation ??= stations?.values.first;
-              final tideCurrentStation = Optional(selectedStation).map(
-                (station) => station.type.isTideCurrent
-                    ? station
-                    : stations![station.tideCurrentStationId],
-              );
 
-              return Scaffold(
-                appBar: AppBar(
-                  title: Row(
-                    children: [
-                      title,
-                      if (selectedStation != null && inlineStationBar)
-                        Expanded(
-                          child: Container(
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: selectedStationBarMinPadding,
-                            ),
-                            child: _SelectedStationBar(
-                              selectedStation!,
-                              blendEdges: true,
-                            ),
-                          ),
-                        ),
-                      if (centeredInlineStationBar)
-                        const Opacity(opacity: 0, child: title),
-                    ],
-                  ),
-                ),
-                body: Column(
-                  children: [
-                    if (selectedStation != null && !inlineStationBar)
-                      _SelectedStationBar(
-                        selectedStation!,
-                        blendEdges: false,
-                      ),
-                    Expanded(
-                      child: Flex(
-                        direction: horizontal ? Axis.horizontal : Axis.vertical,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: Map(
-                              client: widget.wmsClient,
-                              tileCache: widget.tileCache,
-                              stations: stations ?? {},
-                              selectedStation: selectedStation,
-                              onStationSelected: (station) => setState(
-                                () => selectedStation = station,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: horizontal
-                                ? min(
-                                    boxConstraints.maxWidth / 2,
-                                    TidePanel.defaultGraphWidth,
-                                  )
-                                : boxConstraints.maxWidth,
-                            height: horizontal
-                                ? null
-                                : TidePanel.defaultGraphHeight + 97,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Material(
-                                  color: const Color(0xff8899cc),
-                                  child: TabBar(
-                                    controller: panelTabController,
-                                    tabs: const [
-                                      Text('Tides'),
-                                      Text('Details')
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: TabBarView(
-                                    controller: panelTabController,
-                                    children: [
-                                      tideCurrentStation == null
-                                          ? Container()
-                                          : TidePanel(
-                                              client: widget.tripPlannerClient,
-                                              station: tideCurrentStation,
-                                              t: t,
-                                              onTimeChanged: (t) =>
-                                                  setState(() => this.t = t),
-                                            ),
-                                      DetailsPanel(
-                                        client: widget.tripPlannerClient,
-                                        station: selectedStation,
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              return _Scaffold(
+                wmsClient: widget.wmsClient,
+                tripPlannerClient: widget.tripPlannerClient,
+                tileCache: widget.tileCache,
+                panelTabController: panelTabController,
+                constraints: boxConstraints,
+                stations: stations,
+                selectedStation: selectedStation,
+                onStationSelected: (station) =>
+                    setState(() => selectedStation = station),
+                t: t,
+                onTimeChanged: (t) => setState(() => this.t = t),
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _Scaffold extends StatelessWidget {
+  const _Scaffold({
+    required this.wmsClient,
+    required this.tripPlannerClient,
+    required this.tileCache,
+    required this.panelTabController,
+    required this.constraints,
+    this.stations,
+    this.selectedStation,
+    this.onStationSelected,
+    required this.t,
+    this.onTimeChanged,
+  });
+
+  final http.Client wmsClient;
+  final TripPlannerClient tripPlannerClient;
+  final BlobCache tileCache;
+  final TabController panelTabController;
+  final BoxConstraints constraints;
+  final core.Map<StationId, Station>? stations;
+  final Station? selectedStation;
+  final void Function(Station)? onStationSelected;
+  final Instant t;
+  final void Function(Instant)? onTimeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const double selectedStationBarMinWidth = 480,
+        titleAreaPadding = 164,
+        selectedStationBarMinPadding = 16;
+    final centeredInlineStationBar = constraints.maxWidth >=
+        selectedStationBarMinWidth +
+            2 *
+                (_SelectedStationBar.blendedHorizontalPadding +
+                    selectedStationBarMinPadding +
+                    titleAreaPadding);
+    final inlineStationBar = constraints.maxWidth >=
+        selectedStationBarMinWidth +
+            2 *
+                (_SelectedStationBar.blendedHorizontalPadding +
+                    selectedStationBarMinPadding) +
+            titleAreaPadding;
+    final horizontal = constraints.maxWidth >= constraints.maxHeight;
+
+    final tideCurrentStation = Optional(selectedStation).map(
+      (station) => station.type.isTideCurrent
+          ? station
+          : stations![station.tideCurrentStationId],
+    );
+
+    const title = Text('BASK Trip Planner');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            title,
+            if (selectedStation != null && inlineStationBar)
+              Expanded(
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: selectedStationBarMinPadding,
+                  ),
+                  child: _SelectedStationBar(
+                    selectedStation!,
+                    blendEdges: true,
+                  ),
+                ),
+              ),
+            if (centeredInlineStationBar)
+              const Opacity(opacity: 0, child: title),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          if (selectedStation != null && !inlineStationBar)
+            _SelectedStationBar(
+              selectedStation!,
+              blendEdges: false,
+            ),
+          Expanded(
+            child: Flex(
+              direction: horizontal ? Axis.horizontal : Axis.vertical,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Map(
+                    client: wmsClient,
+                    tileCache: tileCache,
+                    stations: stations ?? {},
+                    selectedStation: selectedStation,
+                    onStationSelected: onStationSelected,
+                  ),
+                ),
+                SizedBox(
+                  width: horizontal
+                      ? min(
+                          constraints.maxWidth / 2,
+                          TidePanel.defaultGraphWidth,
+                        )
+                      : constraints.maxWidth,
+                  height: horizontal ? null : TidePanel.defaultGraphHeight + 97,
+                  child: _Panel(
+                    tripPlannerClient: tripPlannerClient,
+                    tabController: panelTabController,
+                    selectedStation: selectedStation,
+                    tideCurrentStation: tideCurrentStation,
+                    t: t,
+                    onTimeChanged: onTimeChanged,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -357,5 +369,55 @@ class _SelectedStationBar extends StatelessWidget {
             ),
           ),
         ),
+      );
+}
+
+class _Panel extends StatelessWidget {
+  const _Panel({
+    required this.tripPlannerClient,
+    required this.tabController,
+    this.selectedStation,
+    this.tideCurrentStation,
+    required this.t,
+    this.onTimeChanged,
+  });
+
+  final TripPlannerClient tripPlannerClient;
+  final TabController tabController;
+  final Station? selectedStation, tideCurrentStation;
+  final Instant t;
+  final void Function(Instant)? onTimeChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: const Color(0xff8899cc),
+            child: TabBar(
+              controller: tabController,
+              tabs: const [Text('Tides'), Text('Details')],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: tabController,
+              children: [
+                tideCurrentStation == null
+                    ? Container()
+                    : TidePanel(
+                        client: tripPlannerClient,
+                        station: tideCurrentStation!,
+                        t: t,
+                        onTimeChanged: onTimeChanged,
+                      ),
+                DetailsPanel(
+                  client: tripPlannerClient,
+                  station: selectedStation,
+                )
+              ],
+            ),
+          ),
+        ],
       );
 }
