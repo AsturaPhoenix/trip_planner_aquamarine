@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/trip_planner_client.dart';
 import '../util/optional.dart';
@@ -79,6 +80,8 @@ class DetailsPanel extends StatelessWidget {
                       },
                     )
                   },
+                  onLinkTap: (url, _, __, ___) =>
+                      Optional(url).map((url) => launchUrl(Uri.parse(url))),
                 ),
               ),
             ),
