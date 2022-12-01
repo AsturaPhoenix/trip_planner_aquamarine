@@ -93,15 +93,12 @@ class TripPlanner extends StatefulWidget {
   TripPlannerState createState() => TripPlannerState();
 }
 
-class TripPlannerState extends State<TripPlanner>
-    with SingleTickerProviderStateMixin {
+class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
   Station? selectedStation;
   Instant t = Instant.now();
   late Stream<core.Map<StationId, Station>> stations;
-
-  late final panelTabController = TabController(length: 2, vsync: this);
 
   @override
   void initState() {
@@ -172,7 +169,6 @@ class TripPlannerState extends State<TripPlanner>
                   wmsClient: widget.wmsClient,
                   tripPlannerClient: widget.tripPlannerClient,
                   tileCache: widget.tileCache,
-                  panelTabController: panelTabController,
                   constraints: boxConstraints,
                   stations: stations,
                   selectedStation: selectedStation,
@@ -193,7 +189,6 @@ class _Scaffold extends StatelessWidget {
     required this.wmsClient,
     required this.tripPlannerClient,
     required this.tileCache,
-    required this.panelTabController,
     required this.constraints,
     this.stations,
     this.selectedStation,
@@ -205,7 +200,6 @@ class _Scaffold extends StatelessWidget {
   final http.Client wmsClient;
   final TripPlannerClient tripPlannerClient;
   final BlobCache tileCache;
-  final TabController panelTabController;
   final BoxConstraints constraints;
   final core.Map<StationId, Station>? stations;
   final Station? selectedStation;
@@ -284,23 +278,23 @@ class _Scaffold extends StatelessWidget {
                     onStationSelected: onStationSelected,
                   ),
                 ),
-                SizedBox(
-                  width: horizontal
-                      ? min(
-                          constraints.maxWidth / 2,
-                          TidePanel.defaultGraphWidth,
-                        )
-                      : constraints.maxWidth,
-                  child: _Panel(
-                    tripPlannerClient: tripPlannerClient,
-                    tabController: panelTabController,
-                    horizontal: horizontal,
-                    selectedStation: selectedStation,
-                    tideCurrentStation: tideCurrentStation,
-                    t: t,
-                    onTimeChanged: onTimeChanged,
+                if (selectedStation != null)
+                  SizedBox(
+                    width: horizontal
+                        ? min(
+                            constraints.maxWidth / 2,
+                            TidePanel.defaultGraphWidth,
+                          )
+                        : constraints.maxWidth,
+                    child: _Panel(
+                      tripPlannerClient: tripPlannerClient,
+                      horizontal: horizontal,
+                      selectedStation: selectedStation!,
+                      tideCurrentStation: tideCurrentStation,
+                      t: t,
+                      onTimeChanged: onTimeChanged,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -371,23 +365,53 @@ class _SelectedStationBar extends StatelessWidget {
       );
 }
 
-class _Panel extends StatelessWidget {
+class _Panel extends StatefulWidget {
   const _Panel({
     required this.tripPlannerClient,
-    required this.tabController,
     required this.horizontal,
-    this.selectedStation,
+    required this.selectedStation,
     this.tideCurrentStation,
     required this.t,
     this.onTimeChanged,
   });
 
   final TripPlannerClient tripPlannerClient;
-  final TabController tabController;
   final bool horizontal;
-  final Station? selectedStation, tideCurrentStation;
+  final Station selectedStation;
+  final Station? tideCurrentStation;
   final Instant t;
   final void Function(Instant)? onTimeChanged;
+
+  int get tabCount => tideCurrentStation == null ? 1 : 2;
+
+  @override
+  _PanelState createState() => _PanelState();
+}
+
+class _PanelState extends State<_Panel> with TickerProviderStateMixin {
+  late TabController tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    tabController = TabController(
+      length: widget.tabCount,
+      vsync: this,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _Panel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tabCount != oldWidget.tabCount) {
+      int delta = widget.tabCount - oldWidget.tabCount;
+      tabController = TabController(
+        length: widget.tabCount,
+        initialIndex: max(tabController.index + delta, 0),
+        vsync: this,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -396,20 +420,17 @@ class _Panel extends StatelessWidget {
     final viewport = TabBarView(
       controller: tabController,
       children: [
-        tideCurrentStation == null
-            ? const Text('No tide/current station selected.')
-            : TidePanel(
-                client: tripPlannerClient,
-                station: tideCurrentStation!,
-                t: t,
-                onTimeChanged: onTimeChanged,
-              ),
-        selectedStation == null
-            ? const Text('No location selected.')
-            : DetailsPanel(
-                client: tripPlannerClient,
-                station: selectedStation!,
-              )
+        if (widget.tideCurrentStation != null)
+          TidePanel(
+            client: widget.tripPlannerClient,
+            station: widget.tideCurrentStation!,
+            t: widget.t,
+            onTimeChanged: widget.onTimeChanged,
+          ),
+        DetailsPanel(
+          client: widget.tripPlannerClient,
+          station: widget.selectedStation,
+        )
       ],
     );
 
@@ -424,10 +445,13 @@ class _Panel extends StatelessWidget {
             elevation: .25,
             child: TabBar(
               controller: tabController,
-              tabs: const [Text('Tides'), Text('Details')],
+              tabs: [
+                if (widget.tideCurrentStation != null) const Text('Tides'),
+                const Text('Details')
+              ],
             ),
           ),
-          horizontal
+          widget.horizontal
               ? Expanded(child: viewport)
               : LayoutBuilder(
                   builder: (context, boxConstraints) => SizedBox(
