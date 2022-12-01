@@ -133,63 +133,59 @@ class TripPlannerState extends State<TripPlanner>
   }
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme =
-        ColorScheme.fromSeed(seedColor: const Color(0xffbbccff)).copyWith(
-      background: const Color(0xffbbccff),
-      secondary: const Color(0xff8899cc),
-    );
-    return MaterialApp(
-      title: 'BASK Trip Planner',
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: colorScheme.background,
-        scrollbarTheme: ScrollbarThemeData(
-          thumbColor: MaterialStateProperty.resolveWith(
-            (states) => states.isEmpty ? const Color(0x38000000) : null,
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'BASK Trip Planner',
+        theme: ThemeData(
+          colorScheme:
+              ColorScheme.fromSeed(seedColor: const Color(0xffbbccff)).copyWith(
+            background: const Color(0xffbbccff),
+            secondary: const Color(0xff8899cc),
           ),
-          thumbVisibility: const MaterialStatePropertyAll(true),
-        ),
-        tabBarTheme: const TabBarTheme(
-          indicator: BoxDecoration(
-            color: Color(0x40ffffff),
-            border: Border(
-              bottom: BorderSide(width: 2, color: Color(0x40000000)),
+          scrollbarTheme: ScrollbarThemeData(
+            thumbColor: MaterialStateProperty.resolveWith(
+              (states) => states.isEmpty ? const Color(0x38000000) : null,
             ),
+            thumbVisibility: const MaterialStatePropertyAll(true),
           ),
-          labelColor: Colors.black,
-          labelPadding: EdgeInsets.all(4),
-          labelStyle: TextStyle(fontWeight: FontWeight.bold),
-          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+          tabBarTheme: const TabBarTheme(
+            indicator: BoxDecoration(
+              color: Color(0x40ffffff),
+              border: Border(
+                bottom: BorderSide(width: 2, color: Color(0x40000000)),
+              ),
+            ),
+            labelColor: Colors.black,
+            labelPadding: EdgeInsets.all(4),
+            labelStyle: TextStyle(fontWeight: FontWeight.bold),
+            unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+          ),
         ),
-      ),
-      home: LayoutBuilder(
-        builder: (context, boxConstraints) {
-          return StreamBuilder(
-            stream: stations,
-            builder: (context, stationsSnapshot) {
-              final stations = stationsSnapshot.data;
-              selectedStation ??= stations?.values.first;
+        home: LayoutBuilder(
+          builder: (context, boxConstraints) {
+            return StreamBuilder(
+              stream: stations,
+              builder: (context, stationsSnapshot) {
+                final stations = stationsSnapshot.data;
+                selectedStation ??= stations?.values.first;
 
-              return _Scaffold(
-                wmsClient: widget.wmsClient,
-                tripPlannerClient: widget.tripPlannerClient,
-                tileCache: widget.tileCache,
-                panelTabController: panelTabController,
-                constraints: boxConstraints,
-                stations: stations,
-                selectedStation: selectedStation,
-                onStationSelected: (station) =>
-                    setState(() => selectedStation = station),
-                t: t,
-                onTimeChanged: (t) => setState(() => this.t = t),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
+                return _Scaffold(
+                  wmsClient: widget.wmsClient,
+                  tripPlannerClient: widget.tripPlannerClient,
+                  tileCache: widget.tileCache,
+                  panelTabController: panelTabController,
+                  constraints: boxConstraints,
+                  stations: stations,
+                  selectedStation: selectedStation,
+                  onStationSelected: (station) =>
+                      setState(() => selectedStation = station),
+                  t: t,
+                  onTimeChanged: (t) => setState(() => this.t = t),
+                );
+              },
+            );
+          },
+        ),
+      );
 }
 
 class _Scaffold extends StatelessWidget {
@@ -417,25 +413,30 @@ class _Panel extends StatelessWidget {
       ],
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Material(
-          color: theme.colorScheme.secondary,
-          child: TabBar(
-            controller: tabController,
-            tabs: const [Text('Tides'), Text('Details')],
+    return Material(
+      color: theme.colorScheme.background,
+      elevation: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: theme.colorScheme.secondary,
+            elevation: .25,
+            child: TabBar(
+              controller: tabController,
+              tabs: const [Text('Tides'), Text('Details')],
+            ),
           ),
-        ),
-        horizontal
-            ? Expanded(child: viewport)
-            : LayoutBuilder(
-                builder: (context, boxConstraints) => SizedBox(
-                  height: TidePanel.estimateHeight(boxConstraints.maxWidth),
-                  child: viewport,
+          horizontal
+              ? Expanded(child: viewport)
+              : LayoutBuilder(
+                  builder: (context, boxConstraints) => SizedBox(
+                    height: TidePanel.estimateHeight(boxConstraints.maxWidth),
+                    child: viewport,
+                  ),
                 ),
-              ),
-      ],
+        ],
+      ),
     );
   }
 }

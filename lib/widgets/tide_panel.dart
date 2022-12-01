@@ -231,17 +231,22 @@ class TidePanelState extends State<TidePanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
+              Material(
                 color: theme.colorScheme.secondaryContainer,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                constraints:
-                    BoxConstraints(minWidth: widget.graphWidth, minHeight: 31),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: ${widget.station.shortTitle}',
-                    style: theme.textTheme.titleMedium,
+                elevation: 1,
+                textStyle: theme.textTheme.titleMedium,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                  constraints: BoxConstraints(
+                    minWidth: widget.graphWidth,
+                    minHeight: 31,
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                        '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: '
+                        '${widget.station.shortTitle}'),
                   ),
                 ),
               ),
@@ -467,7 +472,7 @@ class TimeDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
         color: Theme.of(context).colorScheme.secondaryContainer,
-        elevation: 1,
+        elevation: .5,
         textStyle: const TextStyle(
           fontWeight: FontWeight.bold,
           color: Color(0xffaa0000),
