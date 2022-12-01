@@ -37,6 +37,8 @@ class OverlaySwatch {
 class TidePanel extends StatefulWidget {
   static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
 
+  // TODO: It might be nice to use a layout dryrun, but right now it looks like
+  // we'd have to override a lot to make that happen.
   static double estimateHeight(
     double maxWidth, {
     double graphWidth = defaultGraphWidth,
@@ -221,66 +223,81 @@ class TidePanelState extends State<TidePanel> {
     // TODO: visual feedback of current selections (today/weekend/days)
     // TODO: date picker
     return LayoutBuilder(
-      builder: (context, boxConstraints) => FittedBox(
-        alignment: Alignment.topCenter,
-        fit: BoxFit.scaleDown,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: max(widget.graphWidth, boxConstraints.maxWidth),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Material(
-                color: theme.colorScheme.secondaryContainer,
-                elevation: 1,
-                textStyle: theme.textTheme.titleMedium,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                  constraints: BoxConstraints(
-                    minWidth: widget.graphWidth,
-                    minHeight: 31,
+      builder: (context, boxConstraints) {
+        var effectiveMaxWidth = double.infinity;
+        // Compensating for width scaling can inflate the time controls a
+        // little, so do a couple layout estimations.
+        for (int i = 0; i < 2; ++i) {
+          final preferredHeight = TidePanel.estimateHeight(
+            effectiveMaxWidth,
+            graphWidth: widget.graphWidth,
+            graphHeight: widget.graphHeight,
+          );
+          effectiveMaxWidth = boxConstraints.maxWidth *
+              max(1, preferredHeight / boxConstraints.maxHeight);
+        }
+
+        return FittedBox(
+          alignment: Alignment.topCenter,
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: max(widget.graphWidth, effectiveMaxWidth),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Material(
+                  color: theme.colorScheme.secondaryContainer,
+                  elevation: 1,
+                  textStyle: theme.textTheme.titleMedium,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                    constraints: BoxConstraints(
+                      minWidth: widget.graphWidth,
+                      minHeight: 31,
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                          '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: '
+                          '${widget.station.shortTitle}'),
+                    ),
                   ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                        '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: '
-                        '${widget.station.shortTitle}'),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: TideGraph(
+                    client: widget.client,
+                    station: widget.station,
+                    timeWindow: timeWindow,
+                    width: widget.graphWidth,
+                    height: widget.graphHeight,
+                    overlaySwatch: widget.overlaySwatch,
+                    onTimeChanged: widget.onTimeChanged,
                   ),
                 ),
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: TideGraph(
-                  client: widget.client,
-                  station: widget.station,
-                  timeWindow: timeWindow,
-                  width: widget.graphWidth,
-                  height: widget.graphHeight,
-                  overlaySwatch: widget.overlaySwatch,
-                  onTimeChanged: widget.onTimeChanged,
+                TimeDisplay(
+                  t: DateTime(timeWindow.t, widget.client.timeZone),
+                  contentWidth: widget.graphWidth,
                 ),
-              ),
-              TimeDisplay(
-                t: DateTime(timeWindow.t, widget.client.timeZone),
-                contentWidth: widget.graphWidth,
-              ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: TimeControls(
-                  timeZone: widget.client.timeZone,
-                  timeWindow: timeWindow,
-                  onWindowChanged: (timeWindow) {
-                    setState(() => this.timeWindow = timeWindow);
-                    widget.onTimeChanged?.call(timeWindow.t);
-                  },
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: TimeControls(
+                    timeZone: widget.client.timeZone,
+                    timeWindow: timeWindow,
+                    onWindowChanged: (timeWindow) {
+                      setState(() => this.timeWindow = timeWindow);
+                      widget.onTimeChanged?.call(timeWindow.t);
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
