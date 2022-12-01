@@ -430,22 +430,10 @@ class _Panel extends StatelessWidget {
         horizontal
             ? Expanded(child: viewport)
             : LayoutBuilder(
-                builder: (context, boxConstraints) {
-                  double scale(
-                    double nominalWidth,
-                    double nominalHeight,
-                  ) =>
-                      nominalHeight *
-                      min(1, boxConstraints.maxWidth / nominalWidth);
-                  return SizedBox(
-                    height: scale(
-                          TidePanel.defaultGraphWidth,
-                          TidePanel.defaultGraphHeight + 31,
-                        ) +
-                        scale(529, 40),
-                    child: viewport,
-                  );
-                },
+                builder: (context, boxConstraints) => SizedBox(
+                  height: TidePanel.estimateHeight(boxConstraints.maxWidth),
+                  child: viewport,
+                ),
               ),
       ],
     );

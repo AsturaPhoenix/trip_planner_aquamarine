@@ -37,6 +37,16 @@ class OverlaySwatch {
 class TidePanel extends StatefulWidget {
   static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
 
+  static double estimateHeight(
+    double maxWidth, {
+    double graphWidth = defaultGraphWidth,
+    double graphHeight = defaultGraphHeight,
+  }) {
+    double scale(double nominalWidth, double nominalHeight) =>
+        nominalHeight * min(1, maxWidth / nominalWidth);
+    return scale(graphWidth, graphHeight + 31 + 24) + scale(529, 40);
+  }
+
   TidePanel({
     super.key,
     required this.client,
@@ -247,6 +257,10 @@ class TidePanelState extends State<TidePanel> {
                   onTimeChanged: widget.onTimeChanged,
                 ),
               ),
+              TimeDisplay(
+                t: DateTime(timeWindow.t, widget.client.timeZone),
+                contentWidth: widget.graphWidth,
+              ),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: TimeControls(
@@ -266,18 +280,25 @@ class TidePanelState extends State<TidePanel> {
   }
 }
 
-class TideGraph extends StatefulWidget {
-  static const dayLabels = [
-    '',
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun'
-  ];
+const dayLabels = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const monthLabels = [
+  '',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+class TideGraph extends StatefulWidget {
   const TideGraph({
     super.key,
     required this.client,
@@ -351,9 +372,7 @@ class TideGraphState extends State<TideGraph> {
       width: widget.width,
       height: widget.height,
       child: DefaultTextStyle(
-        style: DefaultTextStyle.of(context)
-            .style
-            .copyWith(color: widget.overlaySwatch.text),
+        style: TextStyle(color: widget.overlaySwatch.text),
         child: Stack(
           children: [
             Positioned(
@@ -386,7 +405,7 @@ class TideGraphState extends State<TideGraph> {
                 width: widget.width / widget.timeWindow.days,
                 bottom: 0,
                 child: Text(
-                  TideGraph.dayLabels[widget.timeWindow
+                  dayLabels[widget.timeWindow
                       .lerp((d + .5) / widget.timeWindow.days)
                       .weekday],
                   textAlign: TextAlign.center,
@@ -430,6 +449,48 @@ class _HourGrid extends StatelessWidget {
                       : swatch.hourly,
             ),
           ],
+        ),
+      );
+}
+
+class TimeDisplay extends StatelessWidget {
+  const TimeDisplay({super.key, required this.t, this.contentWidth});
+  final DateTime t;
+  final double? contentWidth;
+
+  String get dateString =>
+      '${dayLabels[t.weekday]} ${monthLabels[t.month]} ${t.day}, ${t.year}';
+
+  String get timeString => '${t.hour12}:${t.minute.toString().padLeft(2, '0')} '
+      '${t.hour < 12 ? 'AM' : 'PM'} ${t.timeZoneOffset.abbreviation}';
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        elevation: 1,
+        textStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Color(0xffaa0000),
+        ),
+        child: Align(
+          alignment: Alignment.center,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            width: contentWidth,
+            child: Row(
+              children: [
+                Text(dateString),
+                const Spacer(),
+                Text(timeString, textAlign: TextAlign.center),
+                const Spacer(),
+                const Text(
+                  '(move the slider to change)',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: Colors.black45, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
         ),
       );
 }
