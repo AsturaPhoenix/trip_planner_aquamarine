@@ -33,13 +33,9 @@ void main() async {
 
   final httpClientFactory = RetryOnDemand(
     () => TripPlannerHttpClient.resolveFromRedirect(
-      TripPlannerEndpoints(
-        base: kIsWeb
-            ? Uri(path: '/trip_planner/')
-            : Uri.parse('https://www.bask.org/trip_planner/'),
-        datapoints: Uri(path: 'datapoints.xml'),
-        tides: Uri(path: 'tides.php'),
-      ),
+      kIsWeb
+          ? Uri(path: '/trip_planner/')
+          : Uri.parse('https://www.bask.org/trip_planner/'),
     ),
   );
 

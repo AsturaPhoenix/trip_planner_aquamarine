@@ -34,9 +34,8 @@ class _FakeClient_0 extends _i1.SmartFake implements _i2.Client {
         );
 }
 
-class _FakeTripPlannerEndpoints_1 extends _i1.SmartFake
-    implements _i3.TripPlannerEndpoints {
-  _FakeTripPlannerEndpoints_1(
+class _FakeUri_1 extends _i1.SmartFake implements Uri {
+  _FakeUri_1(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -84,17 +83,41 @@ class MockTripPlannerHttpClient extends _i1.Mock
         ),
       ) as _i2.Client);
   @override
-  _i3.TripPlannerEndpoints get endpoints => (super.noSuchMethod(
-        Invocation.getter(#endpoints),
-        returnValue: _FakeTripPlannerEndpoints_1(
+  Uri get baseUrl => (super.noSuchMethod(
+        Invocation.getter(#baseUrl),
+        returnValue: _FakeUri_1(
           this,
-          Invocation.getter(#endpoints),
+          Invocation.getter(#baseUrl),
         ),
-        returnValueForMissingStub: _FakeTripPlannerEndpoints_1(
+        returnValueForMissingStub: _FakeUri_1(
           this,
-          Invocation.getter(#endpoints),
+          Invocation.getter(#baseUrl),
         ),
-      ) as _i3.TripPlannerEndpoints);
+      ) as Uri);
+  @override
+  Uri get datapointsUrl => (super.noSuchMethod(
+        Invocation.getter(#datapointsUrl),
+        returnValue: _FakeUri_1(
+          this,
+          Invocation.getter(#datapointsUrl),
+        ),
+        returnValueForMissingStub: _FakeUri_1(
+          this,
+          Invocation.getter(#datapointsUrl),
+        ),
+      ) as Uri);
+  @override
+  Uri get tidesUrl => (super.noSuchMethod(
+        Invocation.getter(#tidesUrl),
+        returnValue: _FakeUri_1(
+          this,
+          Invocation.getter(#tidesUrl),
+        ),
+        returnValueForMissingStub: _FakeUri_1(
+          this,
+          Invocation.getter(#tidesUrl),
+        ),
+      ) as Uri);
   @override
   void close() => super.noSuchMethod(
         Invocation.method(

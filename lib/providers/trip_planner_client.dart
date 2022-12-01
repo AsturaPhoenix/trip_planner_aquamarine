@@ -15,22 +15,6 @@ import 'package:trip_planner_aquamarine/persistence/tide_graph_cache.dart';
 import 'package:trip_planner_aquamarine/util/optional.dart';
 import 'package:xml/xml.dart';
 
-class TripPlannerEndpoints {
-  TripPlannerEndpoints({
-    required this.base,
-    required this.datapoints,
-    required this.tides,
-  });
-
-  final Uri base, datapoints, tides;
-
-  TripPlannerEndpoints resolve(Uri base) => TripPlannerEndpoints(
-        base: base,
-        datapoints: base.resolveUri(datapoints),
-        tides: base.resolveUri(tides),
-      );
-}
-
 class _RedirectInfo implements RedirectInfo {
   _RedirectInfo({
     required this.location,
@@ -202,7 +186,7 @@ class TripPlannerClient {
 
   ImageProvider getImage(Uri relative) => TripPlannerImage._(
         relative,
-        (() async => (await httpClientFactory!.call()).endpoints.base)(),
+        (() async => (await httpClientFactory!.call()).baseUrl)(),
       );
 }
 
@@ -210,33 +194,35 @@ class TripPlannerHttpClient {
   static final log = Logger('TripPlannerHttpClient');
 
   static Future<TripPlannerHttpClient> resolveFromRedirect(
-    TripPlannerEndpoints relative, {
+    Uri baseUrl, {
     int maxRedirects = 5,
   }) async {
-    var base = relative.base;
     final client = Client();
     try {
-      base = await resolveRedirects(client, base, maxRedirects: maxRedirects);
+      baseUrl =
+          await resolveRedirects(client, baseUrl, maxRedirects: maxRedirects);
     } on Object {
       // For web during development, we may run into CORS denials, so use a local instance.
       if (kIsWeb && kDebugMode) {
-        base = Uri.parse('http://localhost/trip_planner/');
+        baseUrl = Uri.parse('http://localhost/trip_planner/');
       } else {
         rethrow;
       }
     }
-    log.info('base URL: $base');
-    return TripPlannerHttpClient(client, relative.resolve(base));
+    log.info('base URL: $baseUrl');
+    return TripPlannerHttpClient(client, baseUrl);
   }
 
-  TripPlannerHttpClient(this.client, this.endpoints);
+  TripPlannerHttpClient(this.client, this.baseUrl);
   final Client client;
-  final TripPlannerEndpoints endpoints;
+  final Uri baseUrl;
 
   void close() => client.close();
 
+  late final datapointsUrl = baseUrl.resolve('datapoints.xml');
+
   Future<Map<StationId, Station>> getDatapoints() async {
-    final response = await client.get(endpoints.datapoints);
+    final response = await client.get(datapointsUrl);
     if (response.statusCode != HttpStatus.ok) {
       throw response;
     }
@@ -248,6 +234,8 @@ class TripPlannerHttpClient {
     };
   }
 
+  late final tidesUrl = baseUrl.resolve('tides.php');
+
   Future<Uint8List> getTideGraph(
     Station station,
     int days,
@@ -255,7 +243,7 @@ class TripPlannerHttpClient {
     int height,
     Date begin,
   ) async {
-    final url = endpoints.tides.replace(
+    final url = tidesUrl.replace(
       queryParameters: {
         'days': days.toString(),
         'mode': 'graph',
