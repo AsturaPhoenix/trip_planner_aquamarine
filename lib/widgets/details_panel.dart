@@ -21,6 +21,10 @@ class DetailsPanel extends StatelessWidget {
   final Station station;
   final double preferredHeight;
 
+  void onLinkTap(String? url, _, __, ____) =>
+      // TODO: error indicator and/or change rendering if we can't launch
+      Optional(url).map((url) => launchUrl(Uri.parse(url)));
+
   @override
   Widget build(BuildContext context) {
     final hasScrollbar = const {
@@ -37,9 +41,13 @@ class DetailsPanel extends StatelessWidget {
           ),
           child: Padding(
             padding: EdgeInsets.fromLTRB(4, 4, hasScrollbar ? 8 : 4, 4),
-            child: station.type.isTideCurrent
-                ? TideCurrentDetails(client: client, station: station)
-                : PoiDetails(client: client, station: station),
+            child: (station.type.isTideCurrent
+                ? TideCurrentDetails.new
+                : PoiDetails.new)(
+              client: client,
+              station: station,
+              onLinkTap: onLinkTap,
+            ),
           ),
         ),
       ),
@@ -48,9 +56,15 @@ class DetailsPanel extends StatelessWidget {
 }
 
 class PoiDetails extends StatelessWidget {
-  const PoiDetails({super.key, required this.client, required this.station});
+  const PoiDetails({
+    super.key,
+    required this.client,
+    required this.station,
+    this.onLinkTap,
+  });
   final TripPlannerClient client;
   final Station station;
+  final OnTap? onLinkTap;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -108,10 +122,7 @@ class PoiDetails extends StatelessWidget {
               },
             )
           },
-          onLinkTap: (url, _, __, ___) =>
-              // TODO: error indicator and/or change rendering if we can't
-              // launch
-              Optional(url).map((url) => launchUrl(Uri.parse(url))),
+          onLinkTap: onLinkTap,
         ),
       );
 }
@@ -121,9 +132,11 @@ class TideCurrentDetails extends StatefulWidget {
     super.key,
     required this.client,
     required this.station,
+    this.onLinkTap,
   });
   final TripPlannerClient client;
   final Station station;
+  final OnTap? onLinkTap;
 
   @override
   TideCurrentDetailsState createState() => TideCurrentDetailsState();
@@ -171,6 +184,7 @@ class TideCurrentDetailsState extends State<TideCurrentDetails> {
                   'font[face="monospace"]': Style(fontFamily: 'RobotoMono'),
                 },
                 customRenders: {tableMatcher(): tableRender()},
+                onLinkTap: widget.onLinkTap,
               )
             : snapshot.hasError
                 ? Text(snapshot.error?.toString() ?? 'Error')
