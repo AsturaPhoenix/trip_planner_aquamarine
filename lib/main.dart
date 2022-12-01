@@ -112,7 +112,9 @@ class TripPlannerState extends State<TripPlanner>
   @override
   void didUpdateWidget(covariant TripPlanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    updateClient();
+    if (widget.tripPlannerClient != oldWidget.tripPlannerClient) {
+      updateClient();
+    }
   }
 
   void updateClient() {
@@ -399,17 +401,19 @@ class _Panel extends StatelessWidget {
       controller: tabController,
       children: [
         tideCurrentStation == null
-            ? Container()
+            ? const Text('No tide/current station selected.')
             : TidePanel(
                 client: tripPlannerClient,
                 station: tideCurrentStation!,
                 t: t,
                 onTimeChanged: onTimeChanged,
               ),
-        DetailsPanel(
-          client: tripPlannerClient,
-          station: selectedStation,
-        )
+        selectedStation == null
+            ? const Text('No location selected.')
+            : DetailsPanel(
+                client: tripPlannerClient,
+                station: selectedStation!,
+              )
       ],
     );
 

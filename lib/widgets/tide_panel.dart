@@ -198,8 +198,10 @@ class TidePanelState extends State<TidePanel> {
 
   @override
   void didUpdateWidget(TidePanel oldWidget) {
-    timeWindow = timeWindow.copyWith(t: widget.t, mayMove: false);
     super.didUpdateWidget(oldWidget);
+    if (widget.t != oldWidget.t) {
+      timeWindow = timeWindow.copyWith(t: widget.t, mayMove: false);
+    }
   }
 
   @override

@@ -9,6 +9,7 @@ This is a prototype cross-platform port of the BASK Trip Planner, for better off
 The following git repos should exist as siblings to `trip_planner_aquamarine`:
 * `git@github.com:AsturaPhoenix/joda_time.git`
 * `git@github.com:AsturaPhoenix/flutter-plugins.git`, branch: `dev`
+* `git@github.com:AsturaPhoenix/flutter_html.git`, branch: `rosswang`
 
 ### Configuration
 

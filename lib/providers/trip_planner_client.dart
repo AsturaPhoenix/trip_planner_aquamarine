@@ -188,6 +188,9 @@ class TripPlannerClient {
         relative,
         (() async => (await httpClientFactory!.call()).baseUrl)(),
       );
+
+  Future<String> getTideCurrentStationDetails(Station station) async =>
+      (await httpClientFactory!.call()).getTideCurrentStationDetails(station);
 }
 
 class TripPlannerHttpClient {
@@ -263,6 +266,27 @@ class TripPlannerHttpClient {
 
     if (response.statusCode == HttpStatus.ok) {
       return response.bodyBytes;
+    } else {
+      throw response;
+    }
+  }
+
+  Future<String> getTideCurrentStationDetails(Station station) async {
+    final url = tidesUrl.replace(
+      queryParameters: {
+        'mode': 'about',
+        'tcd': station.source,
+        'station': station.title,
+        'head': '${station.type.description}: ${station.shortTitle}',
+      },
+    );
+
+    log.fine('get $url');
+
+    final response = await client.get(url);
+
+    if (response.statusCode == HttpStatus.ok) {
+      return response.body;
     } else {
       throw response;
     }
