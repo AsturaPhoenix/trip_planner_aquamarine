@@ -166,9 +166,11 @@ class TideCurrentDetailsState extends State<TideCurrentDetails> {
             ? Html(
                 data: snapshot.data,
                 style: {
+                  'body': Style(textAlign: TextAlign.center),
                   'table': Style(
                     backgroundColor: const Color(0xffcbdcff),
                     fontSize: FontSize(.8, Unit.em),
+                    textAlign: TextAlign.left,
                   ),
                   'td': Style(
                     border: Border.all(width: 0),
