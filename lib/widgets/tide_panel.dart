@@ -546,8 +546,19 @@ class TideGraphState extends State<TideGraph> {
                 value: widget.timeWindow.t.millisecondsSinceEpoch.toDouble(),
                 min: widget.timeWindow.t0.millisecondsSinceEpoch.toDouble(),
                 max: widget.timeWindow.tf.millisecondsSinceEpoch.toDouble(),
-                onChanged: (double value) => widget.onTimeChanged
-                    ?.call(Instant.fromMillisecondsSinceEpoch(value.toInt())),
+                onChanged: (double value) => widget.onTimeChanged?.call(
+                  Instant.fromMillisecondsSinceEpoch(
+                    // Limit this to an exclusive upper bound for more intuitive
+                    // behavior. There's no functional problem if we let the
+                    // user select the inclusive found, but the date display can
+                    // be confusing to the user since it then shows the next
+                    // day.
+                    min(
+                      value.toInt(),
+                      widget.timeWindow.tf.millisecondsSinceEpoch - 1,
+                    ),
+                  ),
+                ),
               ),
             ),
             for (int t = 1; t < gridDivisions; ++t)
