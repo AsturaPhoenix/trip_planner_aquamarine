@@ -1,8 +1,8 @@
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:math';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
@@ -70,6 +70,23 @@ class TidePanel extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() => TidePanelState();
+}
+
+/// Determines how to correct [GraphTimeWindow]s where [GraphTimeWindow.t] falls
+/// outside the window bounds.
+enum TimeWindowCorrectionPolicy {
+  /// The bounds are adjusted. The adjustment is chosen to minimize the number
+  /// of changes while "scrolling", so `t < t0` will adjust to a right-aligned
+  /// window and `t > t0 + timespan` will adjust to a left-aligned window.
+  preserveTime,
+
+  /// [GraphTimeWindow.t] is clamped to the bounds.
+  preserveBounds,
+
+  /// The bounds are adjusted as in [preserveTime], but if an adjustment to
+  /// [GraphTimeWindow.days] would be necessary due to DST quirks,
+  /// [GraphTimeWindow.t] is adjusted instead.
+  preserveDays,
 }
 
 /// Represents a consistent time window configuration that is valid for the
@@ -141,32 +158,43 @@ class GraphTimeWindow {
     return GraphTimeWindow._(t0, t, days);
   }
 
-  /// [t0] is set from the year, month, and day, and location of the given time,
-  /// and is adjusted so that the window includes [t].
+  /// Creates a time window corresponding with an `xtide` graph.
   ///
-  /// The adjustment is chosen to minimize the number of changes while
-  /// "scrolling", so `t < t0` will adjust to a right-aligned window and
-  /// `t > t0 + timespan` will adjust to a left-aligned window.
-  ///
-  /// If [mayMove] is true, [t] may be adjusted instead to minimize the window
-  /// adjustment in DST edge cases.
-  factory GraphTimeWindow(DateTime t0, Instant t, int days, bool mayMove) {
+  /// [t0] may be adjusted to conform with `xtide` behavior. Then if [t] falls
+  /// outside the window, it is adjusted according to [correctionPolicy].
+  factory GraphTimeWindow(
+    DateTime t0,
+    Instant t,
+    int days,
+    TimeWindowCorrectionPolicy correctionPolicy,
+  ) {
     t0 = _quantizeT0(t0, days);
 
     if (t < t0) {
-      return GraphTimeWindow.rightAligned(
-        DateTime(t, t0.timeZone),
-        days,
-        mayMove,
-      );
-    } else if (t0 + Period(days: days) < t) {
-      return GraphTimeWindow.leftAligned(
-        DateTime(t, t0.timeZone),
-        days,
-        mayMove,
-      );
+      if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
+        return GraphTimeWindow._(t0, t0, days);
+      } else {
+        return GraphTimeWindow.rightAligned(
+          DateTime(t, t0.timeZone),
+          days,
+          correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
+        );
+      }
     } else {
-      return GraphTimeWindow._(t0, t, days);
+      final tf = t0 + Duration(days: days);
+      if (tf < t) {
+        if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
+          return GraphTimeWindow._(t0, tf, days);
+        } else {
+          return GraphTimeWindow.leftAligned(
+            DateTime(t, t0.timeZone),
+            days,
+            correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
+          );
+        }
+      } else {
+        return GraphTimeWindow._(t0, t, days);
+      }
     }
   }
 
@@ -174,6 +202,7 @@ class GraphTimeWindow {
   final Instant t;
   final int days;
   Duration get timespan => Duration(days: days);
+  Instant get tf => t0 + timespan;
   DateTime lerp(double f) => t0 + timespan * f;
 
   /// Creates a copy with the given overrides, potentially adjusting the window
@@ -182,9 +211,14 @@ class GraphTimeWindow {
     DateTime? t0,
     Instant? t,
     int? days,
-    required bool mayMove,
+    required TimeWindowCorrectionPolicy correctionPolicy,
   }) =>
-      GraphTimeWindow(t0 ?? this.t0, t ?? this.t, days ?? this.days, mayMove);
+      GraphTimeWindow(
+        t0 ?? this.t0,
+        t ?? this.t,
+        days ?? this.days,
+        correctionPolicy,
+      );
 
   /// Shifts a [GraphTimeWindow] by the given [Period]. If [t] falls on a DST
   /// edge case, it is adjusted. Furthermore, if [days] = 1,
@@ -196,7 +230,7 @@ class GraphTimeWindow {
       t0: t0.add(period, fallBack: Resolvers.fallBackLater),
       t: DateTime(t, t0.timeZone)
           .add(period, fallBack: Resolvers.fallBackLater),
-      mayMove: true,
+      correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
     );
   }
 }
@@ -212,7 +246,10 @@ class TidePanelState extends State<TidePanel> {
   void didUpdateWidget(TidePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.t != oldWidget.t) {
-      timeWindow = timeWindow.copyWith(t: widget.t, mayMove: false);
+      timeWindow = timeWindow.copyWith(
+        t: widget.t,
+        correctionPolicy: TimeWindowCorrectionPolicy.preserveTime,
+      );
     }
   }
 
@@ -339,7 +376,7 @@ class TideGraph extends StatefulWidget {
   int get imageWidth => width.round();
   int get imageHeight => height.round() + 81;
   final OverlaySwatch overlaySwatch;
-  final void Function(DateTime t)? onTimeChanged;
+  final void Function(Instant t)? onTimeChanged;
 
   @override
   State<StatefulWidget> createState() => TideGraphState();
@@ -359,6 +396,88 @@ class TideGraph extends StatefulWidget {
       imageWidth != oldWidget.imageWidth ||
       imageHeight != oldWidget.imageHeight ||
       timeWindow.t0 != oldWidget.timeWindow.t0;
+}
+
+class RectangularSliderThumbShape extends SliderComponentShape {
+  RectangularSliderThumbShape({
+    this.width = 2,
+    this.elevation = 1.0,
+    this.pressedElevation = 6.0,
+  });
+  final double width;
+
+  /// The resting elevation adds shadow to the unpressed thumb.
+  ///
+  /// The default is 1.
+  ///
+  /// Use 0 for no shadow. The higher the value, the larger the shadow. For
+  /// example, a value of 12 will create a very large shadow.
+  ///
+  final double elevation;
+
+  /// The pressed elevation adds shadow to the pressed thumb.
+  ///
+  /// The default is 6.
+  ///
+  /// Use 0 for no shadow. The higher the value, the larger the shadow. For
+  /// example, a value of 12 will create a very large shadow.
+  final double pressedElevation;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      Size.fromWidth(width);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+
+    final colorValue = ColorTween(
+      begin: sliderTheme.disabledThumbColor,
+      end: sliderTheme.thumbColor,
+    ).evaluate(enableAnimation)!;
+
+    final elevationValue = Tween<double>(
+      begin: elevation,
+      end: pressedElevation,
+    ).evaluate(activationAnimation);
+
+    final rect = Rect.fromCenter(
+      center: center,
+      width: width,
+      height: parentBox.size.height,
+    );
+
+    final path = Path()..addRect(rect);
+
+    if (kDebugMode && debugDisableShadows) {
+      if (elevation > 0.0) {
+        canvas.drawPath(
+          path,
+          Paint()
+            ..color = Colors.black
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = elevation * 2.0,
+        );
+      }
+    } else {
+      canvas.drawShadow(path, Colors.black, elevationValue, true);
+    }
+
+    canvas.drawRect(rect, Paint()..color = colorValue);
+  }
 }
 
 class TideGraphState extends State<TideGraph> {
@@ -409,6 +528,26 @@ class TideGraphState extends State<TideGraph> {
                         gaplessPlayback: true,
                       )
                     : const Text('...'),
+              ),
+            ),
+            SliderTheme(
+              data: SliderThemeData(
+                mouseCursor: MaterialStateProperty.resolveWith(
+                  (states) => states.contains(MaterialState.dragged)
+                      ? SystemMouseCursors.grabbing
+                      : SystemMouseCursors.grab,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+                thumbColor: Theme.of(context).colorScheme.tertiary,
+                thumbShape: RectangularSliderThumbShape(),
+                trackHeight: 0,
+              ),
+              child: Slider(
+                value: widget.timeWindow.t.millisecondsSinceEpoch.toDouble(),
+                min: widget.timeWindow.t0.millisecondsSinceEpoch.toDouble(),
+                max: widget.timeWindow.tf.millisecondsSinceEpoch.toDouble(),
+                onChanged: (double value) => widget.onTimeChanged
+                    ?.call(Instant.fromMillisecondsSinceEpoch(value.toInt())),
               ),
             ),
             for (int t = 1; t < gridDivisions; ++t)
@@ -487,34 +626,38 @@ class TimeDisplay extends StatelessWidget {
       '${t.hour < 12 ? 'AM' : 'PM'} ${t.timeZoneOffset.abbreviation}';
 
   @override
-  Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        elevation: .5,
-        textStyle: const TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Color(0xffaa0000),
-        ),
-        child: Align(
-          alignment: Alignment.center,
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            width: contentWidth,
-            child: Row(
-              children: [
-                Text(dateString),
-                const Spacer(),
-                Text(timeString, textAlign: TextAlign.center),
-                const Spacer(),
-                const Text(
-                  '(move the slider to change)',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(color: Colors.black45, fontSize: 12),
-                ),
-              ],
-            ),
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colorScheme.secondaryContainer,
+      elevation: .5,
+      textStyle: TextStyle(
+        fontWeight: FontWeight.bold,
+        color: colorScheme.tertiary,
+      ),
+      child: Align(
+        alignment: Alignment.center,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          width: contentWidth,
+          child: Row(
+            children: [
+              Text(dateString),
+              const Spacer(),
+              Text(timeString, textAlign: TextAlign.center),
+              const Spacer(),
+              const Text(
+                '(move the slider to change)',
+                textAlign: TextAlign.right,
+                style: TextStyle(color: Colors.black45, fontSize: 12),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class TimeControls extends StatelessWidget {
@@ -536,7 +679,10 @@ class TimeControls extends StatelessWidget {
   void Function()? _changeDays(int days) => onWindowChanged == null
       ? null
       : () => onWindowChanged!(
-            timeWindow.copyWith(days: days, mayMove: true),
+            timeWindow.copyWith(
+              days: days,
+              correctionPolicy: TimeWindowCorrectionPolicy.preserveDays,
+            ),
           );
 
   @override

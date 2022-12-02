@@ -137,6 +137,7 @@ class TripPlannerState extends State<TripPlanner> {
               ColorScheme.fromSeed(seedColor: const Color(0xffbbccff)).copyWith(
             background: const Color(0xffbbccff),
             secondary: const Color(0xff8899cc),
+            tertiary: const Color(0xffaa0000),
           ),
           scrollbarTheme: ScrollbarThemeData(
             thumbColor: MaterialStateProperty.resolveWith(
