@@ -654,14 +654,15 @@ class TimeDisplay extends StatelessWidget {
           width: contentWidth,
           child: Row(
             children: [
-              Text(dateString),
-              const Spacer(),
-              Text(timeString, textAlign: TextAlign.center),
-              const Spacer(),
-              const Text(
-                '(move the slider to change)',
-                textAlign: TextAlign.right,
-                style: TextStyle(color: Colors.black45, fontSize: 12),
+              Expanded(child: Text(dateString)),
+              Expanded(child: Text(timeString, textAlign: TextAlign.right)),
+              const SizedBox(
+                width: 195,
+                child: Text(
+                  '(move the slider to change)',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: Colors.black45, fontSize: 12),
+                ),
               ),
             ],
           ),
