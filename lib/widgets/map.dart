@@ -23,20 +23,23 @@ class Map extends StatefulWidget {
     zoom: 12,
   );
 
-  const Map({
+  Map({
     super.key,
     required this.client,
     required this.tileCache,
     this.stations = const {},
     this.selectedStation,
+    double Function(StationType type)? stationPriority,
     this.onStationSelected,
-  });
+  }) : stationPriority =
+            stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
 
   final http.Client client;
   final BlobCache tileCache;
   final core.Map<StationId, Station> stations;
   final Station? selectedStation;
 
+  final double Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
 
   @override
@@ -78,6 +81,10 @@ String formatPosition(Position position) {
       ' ${polar >= 0 ? positiveSuffix : negativeSuffix}';
   return '${formatPolar(position.latitude, 'N', 'S')}, '
       '${formatPolar(position.longitude, 'E', 'W')}';
+}
+
+class MarkerClass {
+  static const double selection = 1, station = 3, currentLocation = 10;
 }
 
 class MapState extends State<Map> {
@@ -237,7 +244,7 @@ class MapState extends State<Map> {
                         onTap: () => _gmap!.hideMarkerInfoWindow(markerId),
                       ),
                       // Take precedence over other markers.
-                      zIndex: 10,
+                      zIndex: MarkerClass.currentLocation,
                     ),
                   );
                 }
@@ -258,7 +265,8 @@ class MapState extends State<Map> {
                           station.isSubordinate
                         ].indexOf(true) %
                         3;
-                    final visualMajor = station.type.isTideCurrent ? 1 : 0;
+                    final visualMajor = widget.stationPriority(station.type);
+
                     markers.add(
                       Marker(
                         markerId: markerId,
@@ -275,7 +283,8 @@ class MapState extends State<Map> {
                         // everything else. However, on smaller screens we
                         // should try to keep touch response consistent with
                         // alpha.
-                        zIndex: (3 + 3 * visualMajor + visualMinor).toDouble(),
+                        zIndex:
+                            MarkerClass.station + 3 * visualMajor + visualMinor,
                         onTap: () => widget.onStationSelected?.call(station),
                       ),
                     );
@@ -296,7 +305,7 @@ class MapState extends State<Map> {
                         // tp.js: move_sel_marker
                         position: location ?? const LatLng(0, 0),
                         visible: location != null,
-                        zIndex: 1,
+                        zIndex: MarkerClass.selection,
                       ),
                     );
 

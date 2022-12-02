@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:developer' as debug;
@@ -5,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
@@ -100,6 +102,8 @@ class TripPlannerState extends State<TripPlanner> {
   Instant t = Instant.now();
   late Stream<core.Map<StationId, Station>> stations;
 
+  double Function(StationType)? stationPriority;
+
   @override
   void initState() {
     super.initState;
@@ -158,58 +162,28 @@ class TripPlannerState extends State<TripPlanner> {
             unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
-        home: LayoutBuilder(
-          builder: (context, boxConstraints) {
-            return StreamBuilder(
-              stream: stations,
-              builder: (context, stationsSnapshot) {
-                final stations = stationsSnapshot.data;
-                selectedStation ??= stations?.values.first;
+        home: StreamBuilder(
+          stream: stations,
+          builder: (context, stationsSnapshot) {
+            final stations = stationsSnapshot.data;
+            selectedStation ??= stations?.values.first;
 
-                return _Scaffold(
-                  wmsClient: widget.wmsClient,
-                  tripPlannerClient: widget.tripPlannerClient,
-                  tileCache: widget.tileCache,
-                  constraints: boxConstraints,
-                  stations: stations,
-                  selectedStation: selectedStation,
-                  onStationSelected: (station) =>
-                      setState(() => selectedStation = station),
-                  t: t,
-                  onTimeChanged: (t) => setState(() => this.t = t),
-                );
-              },
+            return LayoutBuilder(
+              builder: (context, constraints) => _buildScaffold(
+                context,
+                constraints,
+                stations,
+              ),
             );
           },
         ),
       );
-}
 
-class _Scaffold extends StatelessWidget {
-  const _Scaffold({
-    required this.wmsClient,
-    required this.tripPlannerClient,
-    required this.tileCache,
-    required this.constraints,
-    this.stations,
-    this.selectedStation,
-    this.onStationSelected,
-    required this.t,
-    this.onTimeChanged,
-  });
-
-  final http.Client wmsClient;
-  final TripPlannerClient tripPlannerClient;
-  final BlobCache tileCache;
-  final BoxConstraints constraints;
-  final core.Map<StationId, Station>? stations;
-  final Station? selectedStation;
-  final void Function(Station)? onStationSelected;
-  final Instant t;
-  final void Function(Instant)? onTimeChanged;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildScaffold(
+    BuildContext context,
+    BoxConstraints constraints,
+    core.Map<StationId, Station>? stations,
+  ) {
     const double selectedStationBarMinWidth = 480,
         titleAreaPadding = 164,
         selectedStationBarMinPadding = 16;
@@ -272,11 +246,13 @@ class _Scaffold extends StatelessWidget {
               children: [
                 Expanded(
                   child: Map(
-                    client: wmsClient,
-                    tileCache: tileCache,
+                    client: widget.wmsClient,
+                    tileCache: widget.tileCache,
                     stations: stations ?? {},
                     selectedStation: selectedStation,
-                    onStationSelected: onStationSelected,
+                    stationPriority: stationPriority,
+                    onStationSelected: (station) =>
+                        setState(() => selectedStation = station),
                   ),
                 ),
                 if (selectedStation != null)
@@ -288,12 +264,23 @@ class _Scaffold extends StatelessWidget {
                           )
                         : constraints.maxWidth,
                     child: _Panel(
-                      tripPlannerClient: tripPlannerClient,
+                      tripPlannerClient: widget.tripPlannerClient,
                       horizontal: horizontal,
                       selectedStation: selectedStation!,
                       tideCurrentStation: tideCurrentStation,
                       t: t,
-                      onTimeChanged: onTimeChanged,
+                      onTimeChanged: (t) => setState(() => this.t = t),
+                      onPanelChanged: (panel) =>
+                          // Flipping
+                          SchedulerBinding.instance.scheduleTask(
+                        () => setState(
+                          () => stationPriority = (type) =>
+                              panel == DetailsPanel
+                                  ? (type.isTideCurrent ? 0 : 1)
+                                  : (type.isTideCurrent ? 1 : 0),
+                        ),
+                        Priority.animation - 1,
+                      ),
                     ),
                   ),
               ],
@@ -367,13 +354,14 @@ class _SelectedStationBar extends StatelessWidget {
 }
 
 class _Panel extends StatefulWidget {
-  const _Panel({
+  _Panel({
     required this.tripPlannerClient,
     required this.horizontal,
     required this.selectedStation,
     this.tideCurrentStation,
     required this.t,
     this.onTimeChanged,
+    this.onPanelChanged,
   });
 
   final TripPlannerClient tripPlannerClient;
@@ -382,8 +370,12 @@ class _Panel extends StatefulWidget {
   final Station? tideCurrentStation;
   final Instant t;
   final void Function(Instant)? onTimeChanged;
+  final void Function(Type panel)? onPanelChanged;
 
-  int get tabCount => tideCurrentStation == null ? 1 : 2;
+  late final List<Type> tabs = [
+    if (tideCurrentStation != null) TidePanel,
+    DetailsPanel
+  ];
 
   @override
   _PanelState createState() => _PanelState();
@@ -392,25 +384,44 @@ class _Panel extends StatefulWidget {
 class _PanelState extends State<_Panel> with TickerProviderStateMixin {
   late TabController tabController;
 
+  void _firePanelChanged() {
+    widget.onPanelChanged!(widget.tabs[tabController.index]);
+  }
+
   @override
   void initState() {
     super.initState();
+
     tabController = TabController(
-      length: widget.tabCount,
+      length: widget.tabs.length,
       vsync: this,
     );
+
+    if (widget.onPanelChanged != null) {
+      tabController.addListener(_firePanelChanged);
+      scheduleMicrotask(_firePanelChanged);
+    }
   }
 
   @override
   void didUpdateWidget(covariant _Panel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.tabCount != oldWidget.tabCount) {
-      int delta = widget.tabCount - oldWidget.tabCount;
+    if (widget.tabs.length != oldWidget.tabs.length) {
+      int delta = widget.tabs.length - oldWidget.tabs.length;
+      final oldTab = oldWidget.tabs[tabController.index];
+
       tabController = TabController(
-        length: widget.tabCount,
+        length: widget.tabs.length,
         initialIndex: max(tabController.index + delta, 0),
         vsync: this,
       );
+
+      if (widget.onPanelChanged != null) {
+        tabController.addListener(_firePanelChanged);
+        if (widget.tabs[tabController.index] != oldTab) {
+          scheduleMicrotask(_firePanelChanged);
+        }
+      }
     }
   }
 
