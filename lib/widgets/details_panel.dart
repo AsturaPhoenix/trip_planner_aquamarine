@@ -98,18 +98,35 @@ class PoiDetails extends StatelessWidget {
                 // actually only be about 400px wide.
                 final width = Optional(context.tree.attributes['width'])
                     .map(double.parse);
-                final height = width != null
-                    ? null
-                    : Optional(context.tree.attributes['height'])
-                        .map(double.parse);
+                final height = Optional(context.tree.attributes['height'])
+                    .map(double.parse);
 
-                final image = Image(
-                  image: client.getImage(
-                    Uri.parse(context.tree.attributes['src']!),
-                  ),
+                final image = SizedBox(
                   width: width,
                   height: height,
-                  gaplessPlayback: true,
+                  child: UnconstrainedBox(
+                    clipBehavior: Clip.hardEdge,
+                    child: Image(
+                      image: client.getImage(
+                        Uri.parse(context.tree.attributes['src']!),
+                      ),
+                      width: width,
+                      height: width == null ? height : null,
+                      gaplessPlayback: true,
+                      loadingBuilder: (context, child, loadingProgress) =>
+                          loadingProgress == null
+                              ? child
+                              : CircularProgressIndicator(
+                                  value: Optional(
+                                    loadingProgress.expectedTotalBytes,
+                                  ).map(
+                                    (total) =>
+                                        loadingProgress.cumulativeBytesLoaded /
+                                        total,
+                                  ),
+                                ),
+                    ),
+                  ),
                 );
 
                 return detailsImg
