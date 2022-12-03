@@ -2,12 +2,14 @@ import 'dart:core';
 import 'dart:core' as core;
 import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 
 import '../providers/trip_planner_client.dart';
+import '../util/optional.dart';
 
 class GridSwatch {
   const GridSwatch({
@@ -58,6 +60,7 @@ class TidePanel extends StatefulWidget {
     this.graphHeight = defaultGraphHeight,
     OverlaySwatch? overlaySwatch,
     this.onTimeChanged,
+    this.onModal,
   }) : overlaySwatch =
             overlaySwatch ?? OverlaySwatch.fromSeed(const Color(0xff999900));
 
@@ -67,6 +70,7 @@ class TidePanel extends StatefulWidget {
   final double graphWidth, graphHeight;
   final OverlaySwatch overlaySwatch;
   final void Function(Instant t)? onTimeChanged;
+  final void Function(bool modal)? onModal;
 
   @override
   State<StatefulWidget> createState() => TidePanelState();
@@ -328,6 +332,7 @@ class TidePanelState extends State<TidePanel> {
                       setState(() => this.timeWindow = timeWindow);
                       widget.onTimeChanged?.call(timeWindow.t);
                     },
+                    onModal: widget.onModal,
                   ),
                 ),
               ],
@@ -388,14 +393,6 @@ class TideGraph extends StatefulWidget {
         imageHeight,
         timeWindow.t0,
       );
-
-  bool isGraphDirty(TideGraph oldWidget) =>
-      client != oldWidget.client ||
-      station != oldWidget.station ||
-      timeWindow.days != oldWidget.timeWindow.days ||
-      imageWidth != oldWidget.imageWidth ||
-      imageHeight != oldWidget.imageHeight ||
-      timeWindow.t0 != oldWidget.timeWindow.t0;
 }
 
 class RectangularSliderThumbShape extends SliderComponentShape {
@@ -501,7 +498,16 @@ class TideGraphState extends State<TideGraph> {
   void didUpdateWidget(covariant TideGraph oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.isGraphDirty(oldWidget)) {
+    List<Object?> graphDependencies(TideGraph widget) => [
+          widget.client,
+          widget.station,
+          widget.timeWindow.t0,
+          widget.timeWindow.days,
+          widget.imageWidth,
+          widget.imageHeight,
+        ];
+
+    if (!graphDependencies(widget).equals(graphDependencies(oldWidget))) {
       getTideGraph();
     }
   }
@@ -673,29 +679,31 @@ class TimeDisplay extends StatelessWidget {
 }
 
 class TimeControls extends StatelessWidget {
-  const TimeControls({
+  TimeControls({
     super.key,
     required this.timeZone,
     required this.timeWindow,
     this.onWindowChanged,
+    this.onModal,
   });
 
   final TimeZone timeZone;
   final GraphTimeWindow timeWindow;
   final void Function(GraphTimeWindow window)? onWindowChanged;
+  final void Function(bool modal)? onModal;
 
-  void Function()? _changeTime(int days) => onWindowChanged == null
-      ? null
-      : () => onWindowChanged!(timeWindow + Period(days: days));
+  void Function()? _changeTime(int days) => Optional(onWindowChanged)
+      .map((f) => () => f(timeWindow + Period(days: days)));
 
-  void Function()? _changeDays(int days) => onWindowChanged == null
-      ? null
-      : () => onWindowChanged!(
-            timeWindow.copyWith(
-              days: days,
-              correctionPolicy: TimeWindowCorrectionPolicy.preserveDays,
-            ),
-          );
+  late final void Function(int days)? _changeDays =
+      Optional(onWindowChanged).map(
+    (f) => (days) => f(
+          timeWindow.copyWith(
+            days: days,
+            correctionPolicy: TimeWindowCorrectionPolicy.preserveDays,
+          ),
+        ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -703,8 +711,12 @@ class TimeControls extends StatelessWidget {
 
     return Theme(
       data: theme.copyWith(
-        dividerTheme:
-            theme.dividerTheme.copyWith(indent: 8, endIndent: 8, space: 8),
+        dividerTheme: const DividerThemeData(
+          color: Color(0x40000000),
+          indent: 8,
+          endIndent: 8,
+          space: 8,
+        ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(minimumSize: Size.zero),
         ),
@@ -733,56 +745,222 @@ class TimeControls extends StatelessWidget {
             ),
             const VerticalDivider(),
             TextButton(
-              onPressed: onWindowChanged == null
-                  ? null
-                  : () {
-                      onWindowChanged!(
-                        GraphTimeWindow.leftAligned(
-                          DateTime.now(timeZone),
-                          1,
-                          true,
-                        ),
-                      );
-                    },
+              onPressed: Optional(onWindowChanged).map(
+                (f) => () => f(
+                      GraphTimeWindow.leftAligned(
+                        DateTime.now(timeZone),
+                        1,
+                        true,
+                      ),
+                    ),
+              ),
               child: const Text('Today'),
             ),
             const VerticalDivider(),
             TextButton(
-              onPressed: onWindowChanged == null
-                  ? null
-                  : () {
-                      onWindowChanged!(
-                        GraphTimeWindow.leftAligned(
-                          DateTime.resolve(
-                            DateTime.now(timeZone)
-                                    .date
-                                    .nextWeekday(core.DateTime.saturday) &
-                                // This construct does get simpler if we don't
-                                // try to preserve the selected time.
-                                DateTime(timeWindow.t, timeZone).time,
-                            timeZone,
-                          ),
-                          2,
-                          true,
-                        ),
-                      );
-                      // Even if it's Sunday, go to next Saturday.
-                    },
+              onPressed: Optional(onWindowChanged).map(
+                (f) => () => f(
+                      GraphTimeWindow.leftAligned(
+                        DateTime.now(timeZone)
+                                // Even if it's Sunday, go to next Saturday.
+                                .nextWeekday(core.DateTime.saturday) &
+                            DateTime(timeWindow.t, timeZone),
+                        2,
+                        true,
+                      ),
+                    ),
+              ),
               child: const Text('Weekend'),
             ),
             const VerticalDivider(),
-            for (final days in const [1, 2, 4, 7])
-              TextButton(
-                onPressed: _changeDays(days),
-                child: Text(days.toString()),
+            TextButton(
+              onPressed: Optional(onWindowChanged).map(
+                (f) => () async {
+                  final today = DateTime(timeWindow.t, timeZone).date;
+
+                  onModal?.call(true);
+                  final core.DateTime? date;
+                  try {
+                    date = await showDatePicker(
+                      context: context,
+                      initialDate: today.toCoreFields(),
+                      firstDate: Date(today.year - 8, 1, 1).toCoreFields(),
+                      lastDate: Date(today.year + 10, 1, 0).toCoreFields(),
+                    );
+                  } finally {
+                    onModal?.call(false);
+                  }
+
+                  if (date != null) {
+                    f(
+                      timeWindow.copyWith(
+                        t: DateTime(timeWindow.t, timeZone)
+                            .withDate(Date.fromCore(date)),
+                        correctionPolicy:
+                            TimeWindowCorrectionPolicy.preserveDays,
+                      ),
+                    );
+                  }
+                },
               ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('days'),
+              child: const Text('Calendar'),
+            ),
+            const VerticalDivider(),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 12),
+              child: DaysMenuButton(
+                buttonColor: const Color(0xff90a0ff),
+                menuColor: const Color(0xfff8f8ff),
+                menuSelectionColor: const Color(0xff6080ff),
+                menuTextColor: const Color(0xff404040),
+                daysSelection: timeWindow.days,
+                daysChoices: const [1, 2, 4, 7],
+                onSelected: _changeDays,
+                onModal: onModal,
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class DaysMenuButton extends StatelessWidget {
+  const DaysMenuButton({
+    super.key,
+    this.buttonColor,
+    this.menuColor,
+    this.menuSelectionColor,
+    this.menuTextColor,
+    required this.daysSelection,
+    required this.daysChoices,
+    this.onSelected,
+    this.onModal,
+  });
+  final Color? buttonColor, menuColor, menuSelectionColor, menuTextColor;
+  final int daysSelection;
+  final List<int> daysChoices;
+  final void Function(int days)? onSelected;
+  final void Function(bool)? onModal;
+
+  @override
+  Widget build(BuildContext context) => MaterialButton(
+        color: buttonColor,
+        highlightColor: Colors.transparent,
+        elevation: 1.5,
+        hoverElevation: 2,
+        highlightElevation: 3,
+        padding: EdgeInsets.zero,
+        minWidth: 64,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onPressed: Optional(onSelected).map(
+          (f) => () async {
+            onModal?.call(true);
+            try {
+              Optional(await showMenu(context)).map(f);
+            } finally {
+              onModal?.call(false);
+            }
+          },
+        ),
+        child: Text(
+          '$daysSelection ${daysSelection == 1 ? 'day' : 'days'}',
+          textAlign: TextAlign.center,
+        ),
+      );
+
+  Future<int?> showMenu(BuildContext context) {
+    final button = context.findRenderObject() as RenderBox;
+    final navigator = Navigator.of(context);
+    final overlay = navigator.overlay!.context.findRenderObject() as RenderBox;
+    return navigator.push(
+      DaysMenuRoute(
+        color: menuColor,
+        selectionColor: menuSelectionColor,
+        textColor: menuTextColor,
+        daysSelection: daysSelection,
+        daysChoices: daysChoices,
+        lowerRight: overlay.size.bottomRight(
+          -button.localToGlobal(
+            button.size.topRight(Offset.zero),
+            ancestor: overlay,
+          ),
+        ),
+        barrierLabel:
+            MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      ),
+    );
+  }
+}
+
+class DaysMenuRoute extends PopupRoute<int> {
+  DaysMenuRoute({
+    this.daysSelection,
+    this.color,
+    this.selectionColor,
+    this.textColor,
+    required this.daysChoices,
+    required this.lowerRight,
+    required this.barrierLabel,
+  });
+
+  final Color? color, selectionColor, textColor;
+  final int? daysSelection;
+  final List<int> daysChoices;
+  final Offset lowerRight;
+
+  @override
+  final String barrierLabel;
+  @override
+  Color? get barrierColor => null;
+  @override
+  bool get barrierDismissible => true;
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 300);
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) =>
+      Container(
+        alignment: Alignment.bottomRight,
+        margin: EdgeInsets.only(right: lowerRight.dx, bottom: lowerRight.dy),
+        child: Card(
+          color: color,
+          elevation: 4,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          clipBehavior: Clip.hardEdge,
+          child: AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) => Align(
+              alignment: Alignment.centerRight,
+              widthFactor: animation.value,
+              heightFactor: 1,
+              child: child,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final days in daysChoices)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: textColor,
+                      minimumSize: const Size(40, 28),
+                      backgroundColor:
+                          days == daysSelection ? selectionColor : null,
+                      elevation: days == daysSelection ? 1 : 0,
+                      shape: const RoundedRectangleBorder(),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(days),
+                    child: Text(days.toString()),
+                  )
+              ],
+            ),
+          ),
+        ),
+      );
 }

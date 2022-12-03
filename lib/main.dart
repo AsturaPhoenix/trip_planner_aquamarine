@@ -11,6 +11,7 @@ import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:timezone/data/latest.dart';
 
 import 'persistence/blob_cache.dart';
@@ -103,6 +104,8 @@ class TripPlannerState extends State<TripPlanner> {
   late Stream<core.Map<StationId, Station>> stations;
 
   double Function(StationType)? stationPriority;
+
+  bool hasModal = false;
 
   @override
   void initState() {
@@ -245,14 +248,26 @@ class TripPlannerState extends State<TripPlanner> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: Map(
-                    client: widget.wmsClient,
-                    tileCache: widget.tileCache,
-                    stations: stations ?? {},
-                    selectedStation: selectedStation,
-                    stationPriority: stationPriority,
-                    onStationSelected: (station) =>
-                        setState(() => selectedStation = station),
+                  child: Stack(
+                    children: [
+                      Map(
+                        client: widget.wmsClient,
+                        tileCache: widget.tileCache,
+                        stations: stations ?? {},
+                        selectedStation: selectedStation,
+                        stationPriority: stationPriority,
+                        onStationSelected: (station) =>
+                            setState(() => selectedStation = station),
+                      ),
+                      if (hasModal)
+                        // ignore: prefer_const_constructors
+                        PointerInterceptor(
+                          child: const SizedBox(
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                        )
+                    ],
                   ),
                 ),
                 if (selectedStation != null)
@@ -281,6 +296,7 @@ class TripPlannerState extends State<TripPlanner> {
                         ),
                         Priority.animation - 1,
                       ),
+                      onModal: (modal) => setState(() => hasModal = modal),
                     ),
                   ),
               ],
@@ -362,6 +378,7 @@ class _Panel extends StatefulWidget {
     required this.t,
     this.onTimeChanged,
     this.onPanelChanged,
+    this.onModal,
   });
 
   final TripPlannerClient tripPlannerClient;
@@ -371,6 +388,7 @@ class _Panel extends StatefulWidget {
   final Instant t;
   final void Function(Instant)? onTimeChanged;
   final void Function(Type panel)? onPanelChanged;
+  final void Function(bool modal)? onModal;
 
   late final List<Type> tabs = [
     if (tideCurrentStation != null) TidePanel,
@@ -438,6 +456,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
             station: widget.tideCurrentStation!,
             t: widget.t,
             onTimeChanged: widget.onTimeChanged,
+            onModal: widget.onModal,
           ),
         DetailsPanel(
           client: widget.tripPlannerClient,
