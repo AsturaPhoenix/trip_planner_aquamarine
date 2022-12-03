@@ -109,6 +109,7 @@ class PoiDetails extends StatelessWidget {
                   ),
                   width: width,
                   height: height,
+                  gaplessPlayback: true,
                 );
 
                 return detailsImg

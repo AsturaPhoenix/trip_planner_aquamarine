@@ -97,8 +97,11 @@ class TripPlannerClient {
   /// Coast.
   final TimeZone timeZone;
 
-  void close() =>
-      httpClientFactory?.call().then((client) => client.close()).ignore;
+  void close() {
+    stationCache.close().ignore();
+    tideGraphCache.close();
+    httpClientFactory?.call().then((client) => client.close()).ignore();
+  }
 
   Stream<Map<StationId, Station>> getDatapoints() {
     final results = StreamController<Map<StationId, Station>>();
@@ -438,15 +441,71 @@ class TripPlannerImageKey extends Equatable {
   get props => [uri];
 }
 
+class _DelegatingImageStreamCompleterHandle
+    implements ImageStreamCompleterHandle {
+  _DelegatingImageStreamCompleterHandle(this.completer, this.superHandle);
+
+  final DelegatingImageStreamCompleter completer;
+  final ImageStreamCompleterHandle superHandle;
+
+  @override
+  void dispose() {
+    if (--completer._keepAliveHandles == 0) {
+      completer._delegateHandle?.dispose();
+    }
+    superHandle.dispose();
+  }
+}
+
 class DelegatingImageStreamCompleter extends ImageStreamCompleter {
+  late final delegateListener = ImageStreamListener(
+    (image, _) => setImage(image),
+    onChunk: reportImageChunkEvent,
+    onError: (e, s) => reportError(exception: e, stack: s),
+  );
+
   set delegate(ImageStreamCompleter value) {
-    final listener = ImageStreamListener(
-      (image, _) => setImage(image),
-      onChunk: reportImageChunkEvent,
-      onError: (e, s) => reportError(exception: e, stack: s),
-    );
-    value.addListener(listener);
-    addOnLastListenerRemovedCallback(() => value.removeListener(listener));
+    if (value != _delegate) {
+      _delegate?.removeListener(delegateListener);
+      _delegateHandle?.dispose();
+
+      _delegate = value;
+
+      if (_keepAliveHandles > 0) {
+        _delegateHandle = value.keepAlive();
+      }
+      if (hasListeners) {
+        value.addListener(delegateListener);
+      }
+    }
+  }
+
+  ImageStreamCompleter? _delegate;
+  ImageStreamCompleterHandle? _delegateHandle;
+  int _keepAliveHandles = 0;
+
+  @override
+  void addListener(ImageStreamListener listener) {
+    if (!hasListeners) {
+      _delegate?.addListener(delegateListener);
+    }
+    super.addListener(listener);
+  }
+
+  @override
+  void removeListener(ImageStreamListener listener) {
+    super.removeListener(listener);
+    if (!hasListeners) {
+      _delegate?.removeListener(delegateListener);
+    }
+  }
+
+  @override
+  keepAlive() {
+    if (_keepAliveHandles++ == 0) {
+      _delegateHandle = _delegate?.keepAlive();
+    }
+    return _DelegatingImageStreamCompleterHandle(this, super.keepAlive());
   }
 }
 
@@ -457,7 +516,9 @@ class TripPlannerImage extends ImageProvider<TripPlannerImageKey> {
 
   @override
   Future<TripPlannerImageKey> obtainKey(ImageConfiguration configuration) =>
-      Future.value(TripPlannerImageKey(relative));
+      // It's important that this is a [SynchronousFuture] rather than a
+      // [Future.sync] or similar or else the images may flicker on rebuild.
+      SynchronousFuture(TripPlannerImageKey(relative));
 
   @override
   ImageStreamCompleter loadBuffer(
