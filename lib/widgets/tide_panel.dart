@@ -48,7 +48,7 @@ class TidePanel extends StatefulWidget {
   }) {
     double scale(double nominalWidth, double nominalHeight) =>
         nominalHeight * min(1, maxWidth / nominalWidth);
-    return scale(graphWidth, graphHeight + 31 + 24) + scale(529, 40);
+    return scale(graphWidth, graphHeight + 31 + 24) + scale(503, 40);
   }
 
   TidePanel({
@@ -726,21 +726,25 @@ class TimeControls extends StatelessWidget {
           children: [
             IconButton(
               onPressed: _changeTime(-1),
+              tooltip: 'Previous day',
               icon: const Icon(Icons.keyboard_arrow_left),
             ),
             const Text('Day'),
             IconButton(
               onPressed: _changeTime(1),
+              tooltip: 'Next day',
               icon: const Icon(Icons.keyboard_arrow_right),
             ),
             const VerticalDivider(),
             IconButton(
               onPressed: _changeTime(-7),
+              tooltip: 'Previous week',
               icon: const Icon(Icons.keyboard_double_arrow_left),
             ),
             const Text('Week'),
             IconButton(
               onPressed: _changeTime(7),
+              tooltip: 'Next week',
               icon: const Icon(Icons.keyboard_double_arrow_right),
             ),
             const VerticalDivider(),
@@ -773,7 +777,7 @@ class TimeControls extends StatelessWidget {
               child: const Text('Weekend'),
             ),
             const VerticalDivider(),
-            TextButton(
+            IconButton(
               onPressed: Optional(onWindowChanged).map(
                 (f) => () async {
                   final today = DateTime(timeWindow.t, timeZone).date;
@@ -803,7 +807,8 @@ class TimeControls extends StatelessWidget {
                   }
                 },
               ),
-              child: const Text('Calendar'),
+              tooltip: 'Calendar',
+              icon: const Icon(Icons.calendar_month_outlined),
             ),
             const VerticalDivider(),
             Padding(
