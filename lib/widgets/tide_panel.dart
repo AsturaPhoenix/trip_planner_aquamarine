@@ -201,9 +201,9 @@ class GraphTimeWindow extends Equatable {
   /// this creates a continuous mapping.
   GraphTimeWindow operator +(Period period) {
     return copyWith(
-      t0: t0.add(period, fallBack: Resolvers.fallBackLater),
-      t: t.add(period, fallBack: Resolvers.fallBackLater),
-      correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
+      t0: t0.add(period),
+      t: t.add(period, fallBack: days == 1 ? Resolvers.fallBackLater : null),
+      correctionPolicy: TimeWindowCorrectionPolicy.preserveDays,
     );
   }
 }
@@ -798,13 +798,9 @@ class TimeControls extends StatelessWidget {
                   }
 
                   if (date != null) {
-                    f(
-                      timeWindow.copyWith(
-                        t: t.withDate(Date.fromCore(date)),
-                        correctionPolicy:
-                            TimeWindowCorrectionPolicy.preserveDays,
-                      ),
-                    );
+                    final delta =
+                        Period.difference(Date.fromCore(date), t.date);
+                    f(timeWindow + delta);
                   }
                 },
               ),
