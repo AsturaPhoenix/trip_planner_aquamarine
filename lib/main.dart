@@ -486,7 +486,10 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
               ? Expanded(child: viewport)
               : LayoutBuilder(
                   builder: (context, boxConstraints) => SizedBox(
-                    height: TidePanel.estimateHeight(boxConstraints.maxWidth),
+                    height: TidePanel.estimateHeight(
+                      context,
+                      boxConstraints.maxWidth,
+                    ),
                     child: viewport,
                   ),
                 ),

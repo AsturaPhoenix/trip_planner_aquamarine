@@ -42,13 +42,20 @@ class TidePanel extends StatefulWidget {
   // TODO: It might be nice to use a layout dryrun, but right now it looks like
   // we'd have to override a lot to make that happen.
   static double estimateHeight(
+    BuildContext context,
     double maxWidth, {
     double graphWidth = defaultGraphWidth,
     double graphHeight = defaultGraphHeight,
   }) {
+    final double timeControlsHeight =
+        Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded
+            ? 48
+            : 40;
+
     double scale(double nominalWidth, double nominalHeight) =>
         nominalHeight * min(1, maxWidth / nominalWidth);
-    return scale(graphWidth, graphHeight + 31 + 24) + scale(503, 40);
+    return scale(graphWidth, graphHeight + 31 + 24) +
+        scale(503, timeControlsHeight);
   }
 
   TidePanel({
@@ -270,6 +277,7 @@ class TidePanelState extends State<TidePanel> {
         // little, so do a couple layout estimations.
         for (int i = 0; i < 2; ++i) {
           final preferredHeight = TidePanel.estimateHeight(
+            context,
             effectiveMaxWidth,
             graphWidth: widget.graphWidth,
             graphHeight: widget.graphHeight,
@@ -832,6 +840,11 @@ class TimeControls extends StatelessWidget {
 }
 
 class DaysMenuButton extends StatelessWidget {
+  static final ShapeBorder shape =
+      // Create a capsule shape. A "large" radius does it, but if it evaluates
+      // as infinite, it becomes a rectangle again.
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(1e16));
+
   const DaysMenuButton({
     super.key,
     this.buttonColor,
@@ -858,7 +871,8 @@ class DaysMenuButton extends StatelessWidget {
         highlightElevation: 3,
         padding: EdgeInsets.zero,
         minWidth: 64,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: shape,
         onPressed: Optional(onSelected).map(
           (f) => () async {
             onModal?.call(true);
@@ -936,8 +950,7 @@ class DaysMenuRoute extends PopupRoute<int> {
         child: Card(
           color: color,
           elevation: 4,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: DaysMenuButton.shape,
           clipBehavior: Clip.hardEdge,
           child: AnimatedBuilder(
             animation: animation,
@@ -955,6 +968,7 @@ class DaysMenuRoute extends PopupRoute<int> {
                     style: TextButton.styleFrom(
                       foregroundColor: textColor,
                       minimumSize: const Size(40, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       backgroundColor:
                           days == daysSelection ? selectionColor : null,
                       elevation: days == daysSelection ? 1 : 0,
