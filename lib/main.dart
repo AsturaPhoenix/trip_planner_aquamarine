@@ -100,7 +100,11 @@ class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
   Station? selectedStation;
-  Instant t = Instant.now();
+  late GraphTimeWindow timeWindow = GraphTimeWindow.leftAligned(
+    DateTime.now(widget.tripPlannerClient.timeZone),
+    1,
+    true,
+  );
   late Stream<core.Map<StationId, Station>> stations;
 
   double Function(StationType)? stationPriority;
@@ -283,8 +287,9 @@ class TripPlannerState extends State<TripPlanner> {
                       horizontal: horizontal,
                       selectedStation: selectedStation!,
                       tideCurrentStation: tideCurrentStation,
-                      t: t,
-                      onTimeChanged: (t) => setState(() => this.t = t),
+                      timeWindow: timeWindow,
+                      onTimeWindowChanged: (timeWindow) =>
+                          setState(() => this.timeWindow = timeWindow),
                       onPanelChanged: (panel) =>
                           // Flipping
                           SchedulerBinding.instance.scheduleTask(
@@ -375,8 +380,8 @@ class _Panel extends StatefulWidget {
     required this.horizontal,
     required this.selectedStation,
     this.tideCurrentStation,
-    required this.t,
-    this.onTimeChanged,
+    required this.timeWindow,
+    this.onTimeWindowChanged,
     this.onPanelChanged,
     this.onModal,
   });
@@ -385,8 +390,8 @@ class _Panel extends StatefulWidget {
   final bool horizontal;
   final Station selectedStation;
   final Station? tideCurrentStation;
-  final Instant t;
-  final void Function(Instant)? onTimeChanged;
+  final GraphTimeWindow timeWindow;
+  final void Function(GraphTimeWindow timeWindow)? onTimeWindowChanged;
   final void Function(Type panel)? onPanelChanged;
   final void Function(bool modal)? onModal;
 
@@ -454,8 +459,8 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
           TidePanel(
             client: widget.tripPlannerClient,
             station: widget.tideCurrentStation!,
-            t: widget.t,
-            onTimeChanged: widget.onTimeChanged,
+            timeWindow: widget.timeWindow,
+            onTimeWindowChanged: widget.onTimeWindowChanged,
             onModal: widget.onModal,
           ),
         DetailsPanel(

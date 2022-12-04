@@ -3,6 +3,7 @@ import 'dart:core' as core;
 import 'dart:math';
 
 import 'package:collection/collection.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
@@ -36,53 +37,6 @@ class OverlaySwatch {
   final GridSwatch grid;
 }
 
-class TidePanel extends StatefulWidget {
-  static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
-
-  // TODO: It might be nice to use a layout dryrun, but right now it looks like
-  // we'd have to override a lot to make that happen.
-  static double estimateHeight(
-    BuildContext context,
-    double maxWidth, {
-    double graphWidth = defaultGraphWidth,
-    double graphHeight = defaultGraphHeight,
-  }) {
-    final double timeControlsHeight =
-        Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded
-            ? 48
-            : 40;
-
-    double scale(double nominalWidth, double nominalHeight) =>
-        nominalHeight * min(1, maxWidth / nominalWidth);
-    return scale(graphWidth, graphHeight + 31 + 24) +
-        scale(503, timeControlsHeight);
-  }
-
-  TidePanel({
-    super.key,
-    required this.client,
-    required this.station,
-    required this.t,
-    this.graphWidth = defaultGraphWidth,
-    this.graphHeight = defaultGraphHeight,
-    OverlaySwatch? overlaySwatch,
-    this.onTimeChanged,
-    this.onModal,
-  }) : overlaySwatch =
-            overlaySwatch ?? OverlaySwatch.fromSeed(const Color(0xff999900));
-
-  final TripPlannerClient client;
-  final Station station;
-  final Instant t;
-  final double graphWidth, graphHeight;
-  final OverlaySwatch overlaySwatch;
-  final void Function(Instant t)? onTimeChanged;
-  final void Function(bool modal)? onModal;
-
-  @override
-  State<StatefulWidget> createState() => TidePanelState();
-}
-
 /// Determines how to correct [GraphTimeWindow]s where [GraphTimeWindow.t] falls
 /// outside the window bounds.
 enum TimeWindowCorrectionPolicy {
@@ -102,7 +56,7 @@ enum TimeWindowCorrectionPolicy {
 
 /// Represents a consistent time window configuration that is valid for the
 /// graph.
-class GraphTimeWindow {
+class GraphTimeWindow extends Equatable {
   static DateTime _quantizeT0(DateTime t0, int days) {
     t0 = t0.withTimeAtStartOfDay();
 
@@ -116,6 +70,7 @@ class GraphTimeWindow {
   }
 
   GraphTimeWindow._(this.t0, this.t, this.days) {
+    assert(t0.timeZone == t.timeZone);
     assert(t0 <= t && t <= t0 + timespan);
   }
 
@@ -180,13 +135,16 @@ class GraphTimeWindow {
     TimeWindowCorrectionPolicy correctionPolicy,
   ) {
     t0 = _quantizeT0(t0, days);
+    if (t is! DateTime) {
+      t = DateTime(t, t0.timeZone);
+    }
 
     if (t < t0) {
       if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
         return GraphTimeWindow._(t0, t0, days);
       } else {
         return GraphTimeWindow.rightAligned(
-          DateTime(t, t0.timeZone),
+          t,
           days,
           correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
         );
@@ -198,7 +156,7 @@ class GraphTimeWindow {
           return GraphTimeWindow._(t0, tf, days);
         } else {
           return GraphTimeWindow.leftAligned(
-            DateTime(t, t0.timeZone),
+            t,
             days,
             correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
           );
@@ -210,8 +168,13 @@ class GraphTimeWindow {
   }
 
   final DateTime t0;
-  final Instant t;
+  final DateTime t;
   final int days;
+
+  @override
+  List<Object?> get props => [t0.value, t0.timeZone, t, days];
+
+  TimeZone get timeZone => t0.timeZone;
   Duration get timespan => Duration(days: days);
   Instant get tf => t0 + timespan;
   DateTime lerp(double f) => t0 + timespan * f;
@@ -239,31 +202,60 @@ class GraphTimeWindow {
   GraphTimeWindow operator +(Period period) {
     return copyWith(
       t0: t0.add(period, fallBack: Resolvers.fallBackLater),
-      t: DateTime(t, t0.timeZone)
-          .add(period, fallBack: Resolvers.fallBackLater),
+      t: t.add(period, fallBack: Resolvers.fallBackLater),
       correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
     );
   }
 }
 
-class TidePanelState extends State<TidePanel> {
-  late GraphTimeWindow timeWindow = GraphTimeWindow.leftAligned(
-    DateTime(widget.t, widget.client.timeZone),
-    1,
-    false,
-  );
+class TidePanel extends StatefulWidget {
+  static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
 
-  @override
-  void didUpdateWidget(TidePanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.t != oldWidget.t) {
-      timeWindow = timeWindow.copyWith(
-        t: widget.t,
-        correctionPolicy: TimeWindowCorrectionPolicy.preserveTime,
-      );
-    }
+  // TODO: It might be nice to use a layout dryrun, but right now it looks like
+  // we'd have to override a lot to make that happen.
+  static double estimateHeight(
+    BuildContext context,
+    double maxWidth, {
+    double graphWidth = defaultGraphWidth,
+    double graphHeight = defaultGraphHeight,
+  }) {
+    final double timeControlsHeight =
+        Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded
+            ? 48
+            : 40;
+
+    double scale(double nominalWidth, double nominalHeight) =>
+        nominalHeight * min(1, maxWidth / nominalWidth);
+    return scale(graphWidth, graphHeight + 31 + 24) +
+        scale(503, timeControlsHeight);
   }
 
+  TidePanel({
+    super.key,
+    required this.client,
+    required this.station,
+    required this.timeWindow,
+    this.graphWidth = defaultGraphWidth,
+    this.graphHeight = defaultGraphHeight,
+    OverlaySwatch? overlaySwatch,
+    this.onTimeWindowChanged,
+    this.onModal,
+  }) : overlaySwatch =
+            overlaySwatch ?? OverlaySwatch.fromSeed(const Color(0xff999900));
+
+  final TripPlannerClient client;
+  final Station station;
+  final GraphTimeWindow timeWindow;
+  final double graphWidth, graphHeight;
+  final OverlaySwatch overlaySwatch;
+  final void Function(GraphTimeWindow timeWindow)? onTimeWindowChanged;
+  final void Function(bool modal)? onModal;
+
+  @override
+  State<StatefulWidget> createState() => TidePanelState();
+}
+
+class TidePanelState extends State<TidePanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -320,26 +312,30 @@ class TidePanelState extends State<TidePanel> {
                   child: TideGraph(
                     client: widget.client,
                     station: widget.station,
-                    timeWindow: timeWindow,
+                    timeWindow: widget.timeWindow,
                     width: widget.graphWidth,
                     height: widget.graphHeight,
                     overlaySwatch: widget.overlaySwatch,
-                    onTimeChanged: widget.onTimeChanged,
+                    onTimeChanged: Optional(widget.onTimeWindowChanged).map(
+                      (f) => (t) => f(
+                            widget.timeWindow.copyWith(
+                              t: t,
+                              correctionPolicy:
+                                  TimeWindowCorrectionPolicy.preserveBounds,
+                            ),
+                          ),
+                    ),
                   ),
                 ),
                 TimeDisplay(
-                  t: DateTime(timeWindow.t, widget.client.timeZone),
+                  t: widget.timeWindow.t,
                   contentWidth: widget.graphWidth,
                 ),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: TimeControls(
-                    timeZone: widget.client.timeZone,
-                    timeWindow: timeWindow,
-                    onWindowChanged: (timeWindow) {
-                      setState(() => this.timeWindow = timeWindow);
-                      widget.onTimeChanged?.call(timeWindow.t);
-                    },
+                    timeWindow: widget.timeWindow,
+                    onWindowChanged: widget.onTimeWindowChanged,
                     onModal: widget.onModal,
                   ),
                 ),
@@ -689,13 +685,11 @@ class TimeDisplay extends StatelessWidget {
 class TimeControls extends StatelessWidget {
   TimeControls({
     super.key,
-    required this.timeZone,
     required this.timeWindow,
     this.onWindowChanged,
     this.onModal,
   });
 
-  final TimeZone timeZone;
   final GraphTimeWindow timeWindow;
   final void Function(GraphTimeWindow window)? onWindowChanged;
   final void Function(bool modal)? onModal;
@@ -760,7 +754,7 @@ class TimeControls extends StatelessWidget {
               onPressed: Optional(onWindowChanged).map(
                 (f) => () => f(
                       GraphTimeWindow.leftAligned(
-                        DateTime.now(timeZone),
+                        DateTime.now(timeWindow.timeZone),
                         1,
                         true,
                       ),
@@ -773,10 +767,10 @@ class TimeControls extends StatelessWidget {
               onPressed: Optional(onWindowChanged).map(
                 (f) => () => f(
                       GraphTimeWindow.leftAligned(
-                        DateTime.now(timeZone)
+                        DateTime.now(timeWindow.timeZone)
                                 // Even if it's Sunday, go to next Saturday.
                                 .nextWeekday(core.DateTime.saturday) &
-                            DateTime(timeWindow.t, timeZone),
+                            timeWindow.t,
                         2,
                         true,
                       ),
@@ -788,16 +782,16 @@ class TimeControls extends StatelessWidget {
             IconButton(
               onPressed: Optional(onWindowChanged).map(
                 (f) => () async {
-                  final today = DateTime(timeWindow.t, timeZone).date;
+                  final t = timeWindow.t;
 
                   onModal?.call(true);
                   final core.DateTime? date;
                   try {
                     date = await showDatePicker(
                       context: context,
-                      initialDate: today.toCoreFields(),
-                      firstDate: Date(today.year - 8, 1, 1).toCoreFields(),
-                      lastDate: Date(today.year + 10, 1, 0).toCoreFields(),
+                      initialDate: t.toCoreFields(),
+                      firstDate: Date(t.year - 8, 1, 1).toCoreFields(),
+                      lastDate: Date(t.year + 10, 1, 0).toCoreFields(),
                     );
                   } finally {
                     onModal?.call(false);
@@ -806,8 +800,7 @@ class TimeControls extends StatelessWidget {
                   if (date != null) {
                     f(
                       timeWindow.copyWith(
-                        t: DateTime(timeWindow.t, timeZone)
-                            .withDate(Date.fromCore(date)),
+                        t: t.withDate(Date.fromCore(date)),
                         correctionPolicy:
                             TimeWindowCorrectionPolicy.preserveDays,
                       ),

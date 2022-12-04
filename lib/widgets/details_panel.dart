@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/trip_planner_client.dart';
 import '../util/optional.dart';
 
-class DetailsPanel extends StatelessWidget {
+class DetailsPanel extends StatefulWidget {
   const DetailsPanel({
     super.key,
     required this.client,
@@ -20,12 +20,23 @@ class DetailsPanel extends StatelessWidget {
   final Station station;
   final double preferredHeight;
 
+  @override
+  State<DetailsPanel> createState() => DetailsPanelState();
+}
+
+class DetailsPanelState extends State<DetailsPanel>
+    with AutomaticKeepAliveClientMixin<DetailsPanel> {
   void onLinkTap(String? url, _, __, ____) =>
       // TODO: error indicator and/or change rendering if we can't launch
       Optional(url).map((url) => launchUrl(Uri.parse(url)));
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     final hasScrollbar = const {
       TargetPlatform.linux,
       TargetPlatform.macOS,
@@ -36,15 +47,15 @@ class DetailsPanel extends StatelessWidget {
       builder: (context, boxConstraints) => SingleChildScrollView(
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight: min(boxConstraints.minHeight, preferredHeight),
+            minHeight: min(boxConstraints.minHeight, widget.preferredHeight),
           ),
           child: Padding(
             padding: EdgeInsets.fromLTRB(4, 4, hasScrollbar ? 8 : 4, 4),
-            child: (station.type.isTideCurrent
+            child: (widget.station.type.isTideCurrent
                 ? TideCurrentDetails.new
                 : PoiDetails.new)(
-              client: client,
-              station: station,
+              client: widget.client,
+              station: widget.station,
               onLinkTap: onLinkTap,
             ),
           ),
