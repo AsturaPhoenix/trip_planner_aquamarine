@@ -816,7 +816,7 @@ class TimeControls extends StatelessWidget {
                 },
               ),
               tooltip: 'Calendar',
-              icon: const Icon(Icons.calendar_month_outlined),
+              icon: const Icon(Icons.calendar_month),
             ),
             const VerticalDivider(),
             Padding(
