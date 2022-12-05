@@ -8,7 +8,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -39,6 +38,7 @@ class Map extends StatefulWidget {
     this.selectedStation,
     double Function(StationType type)? stationPriority,
     this.onStationSelected,
+    this.locationEnabled = false,
   }) : stationPriority =
             stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
 
@@ -49,6 +49,8 @@ class Map extends StatefulWidget {
 
   final double Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
+
+  final bool locationEnabled;
 
   @override
   MapState createState() => MapState();
@@ -132,23 +134,14 @@ class MapState extends State<Map> {
       });
 
   Future<_MarkerIcons>? _markerIcons;
-  late final Future<bool> locationEnabled;
-  Stream<Position>? _positionStream;
+  Stream<Position>? positionStream;
 
   @override
   void initState() {
     super.initState();
-    locationEnabled = Permission.locationWhenInUse
-        .request()
-        .isGranted
-        .catchError((_) => false)
-      ..then((locationEnabled) {
-        // This probably isn't the most efficient way to do this. If battery use
-        // is a problem, try querying on tap instead.
-        if (locationEnabled) {
-          setState(() => _positionStream = Geolocator.getPositionStream());
-        }
-      });
+    if (widget.locationEnabled) {
+      positionStream = Geolocator.getPositionStream();
+    }
   }
 
   @override
@@ -199,6 +192,12 @@ class MapState extends State<Map> {
       overlay.tileProvider.client = widget.client;
       overlay.tileProvider.cache = widget.tileCache;
     }
+
+    if (widget.locationEnabled && !oldWidget.locationEnabled) {
+      positionStream = Geolocator.getPositionStream();
+    } else if (oldWidget.locationEnabled && !widget.locationEnabled) {
+      positionStream = null;
+    }
   }
 
   @override
@@ -216,7 +215,7 @@ class MapState extends State<Map> {
         FutureBuilder(
           future: _markerIcons,
           builder: (context, iconsSnapshot) => StreamBuilder(
-            stream: _positionStream,
+            stream: positionStream,
             builder: (context, positionSnapshot) {
               final markers = <Marker>{};
 
@@ -323,30 +322,27 @@ class MapState extends State<Map> {
                 );
               }
 
-              return FutureBuilder(
-                future: locationEnabled,
-                builder: (context, locationEnabledSnapshot) => GoogleMap(
-                  mapType: MapType.normal,
-                  initialCameraPosition: Map.initialCameraPosition,
-                  markers: markers,
-                  myLocationEnabled: locationEnabledSnapshot.data ?? false,
-                  tileOverlays: {
-                    TileOverlay(
-                      tileOverlayId: chartOverlay.id,
-                      tileProvider: chartOverlay.tileProvider,
-                      tileSize: tileSize,
-                    ),
-                  },
-                  onCameraMove: (position) =>
-                      setState(() => zoom = position.zoom.toInt()),
-                  onMapCreated: (controller) async {
-                    setState(() => _gmap = controller);
-                    controller.setMapStyle(
-                      await DefaultAssetBundle.of(context)
-                          .loadString('assets/nautical-style.json'),
-                    );
-                  },
-                ),
+              return GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition: Map.initialCameraPosition,
+                markers: markers,
+                myLocationEnabled: widget.locationEnabled,
+                tileOverlays: {
+                  TileOverlay(
+                    tileOverlayId: chartOverlay.id,
+                    tileProvider: chartOverlay.tileProvider,
+                    tileSize: tileSize,
+                  ),
+                },
+                onCameraMove: (position) =>
+                    setState(() => zoom = position.zoom.toInt()),
+                onMapCreated: (controller) async {
+                  setState(() => _gmap = controller);
+                  controller.setMapStyle(
+                    await DefaultAssetBundle.of(context)
+                        .loadString('assets/nautical-style.json'),
+                  );
+                },
               );
             },
           ),

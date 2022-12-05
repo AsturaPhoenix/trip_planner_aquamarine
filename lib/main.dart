@@ -122,29 +122,37 @@ class TripPlannerState extends State<TripPlanner> {
   late GraphTimeWindow timeWindow =
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
   late Stream<core.Map<StationId, Station>> stations;
+
+  bool locationEnabled = false;
   late Future<Position?> initialPosition;
 
   double Function(StationType)? stationPriority;
 
   bool hasModal = false;
 
+  Future<bool> requestLocationPermission() async {
+    // Use Permission rather than Geolocator for permission request to take
+    // advantage of it failing on web so we don't default to making an annoying
+    //permission request.
+    //
+    // If this negatively affects the experience on mobile web, we can consider
+    // gating on kWeb + defaultTargetPlatform instead.
+    bool enabled = await Permission.locationWhenInUse.request().isGranted;
+    setState(() => locationEnabled = enabled);
+    return enabled;
+  }
+
   @override
   void initState() {
     super.initState;
     updateClient();
 
-    // Use Permission rather than Geolocator for permission request to take
-    // advantage of it failing on web so we don't default to making an annoying
-    // permission request.
-    //
-    // If this negatively affects the experience on mobile web, we can consider
-    // gating on kWeb + defaultTargetPlatform instead.
-    initialPosition = Permission.locationWhenInUse.request().then(
-          (_) => Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
-            timeLimit: const Duration(seconds: 5),
-          ),
-        );
+    initialPosition = requestLocationPermission().then(
+      (_) => Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 5),
+      ),
+    );
   }
 
   @override
@@ -309,6 +317,7 @@ class TripPlannerState extends State<TripPlanner> {
                         stationPriority: stationPriority,
                         onStationSelected: (station) =>
                             setState(() => selectedStation = station),
+                        locationEnabled: locationEnabled,
                       ),
                       if (hasModal)
                         // ignore: prefer_const_constructors
