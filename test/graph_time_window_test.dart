@@ -41,7 +41,7 @@ void main() {
         DateTime.resolve(const Date(2022, 11, 4) & Time.zero, tz),
         DateTime.resolve(const Date(2022, 11, 6) & Time.zero, tz),
         2,
-        TimeWindowCorrectionPolicy.preserveBounds,
+        TimeWindowCorrectionPolicy.strict,
       );
       expect(
         (w + const Period(days: 1)).t0.date,

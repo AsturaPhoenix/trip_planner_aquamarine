@@ -1,6 +1,5 @@
 import 'dart:core';
 import 'dart:core' as core;
-import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
@@ -40,12 +39,17 @@ class OverlaySwatch {
 /// Determines how to correct [GraphTimeWindow]s where [GraphTimeWindow.t] falls
 /// outside the window bounds.
 enum TimeWindowCorrectionPolicy {
+  // In debug, fail an assertion. Otherwise, fall back to [preserveBounds].
+  strict,
+
   /// The bounds are adjusted. The adjustment is chosen to minimize the number
   /// of changes while "scrolling", so `t < t0` will adjust to a right-aligned
   /// window and `t > t0 + timespan` will adjust to a left-aligned window.
   preserveTime,
 
-  /// [GraphTimeWindow.t] is clamped to the bounds.
+  /// [GraphTimeWindow.t] is soft-clamped to the bounds. If it was within an
+  /// hour of the bounds, it is shifted in by an hour as in [preserveDays], for
+  /// visual continuity in the [GraphTimeWindow.+] case.
   preserveBounds,
 
   /// The bounds are adjusted as in [preserveTime], but if an adjustment to
@@ -71,8 +75,11 @@ class GraphTimeWindow extends Equatable {
 
   GraphTimeWindow._(this.t0, this.t, this.days) {
     assert(t0.timeZone == t.timeZone);
-    assert(t0 <= t && t <= t0 + timespan);
+    assert(t0 <= t && t <= tf);
   }
+
+  factory GraphTimeWindow.now(TimeZone tz) =>
+      GraphTimeWindow.leftAligned(DateTime.now(tz), 1, true);
 
   /// A graph time window where [t] falls on the leading day. [mayMove]
   /// determines whether we will adjust [t] if it falls outside the normal
@@ -138,10 +145,20 @@ class GraphTimeWindow extends Equatable {
     if (t is! DateTime) {
       t = DateTime(t, t0.timeZone);
     }
+    final tf = t0 + Duration(days: days);
+
+    if (correctionPolicy == TimeWindowCorrectionPolicy.strict) {
+      assert(t0 <= t && t <= tf);
+      correctionPolicy = TimeWindowCorrectionPolicy.preserveBounds;
+    }
 
     if (t < t0) {
       if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
-        return GraphTimeWindow._(t0, t0, days);
+        return GraphTimeWindow._(
+          t0,
+          max(t0, t + const Duration(hours: 1)),
+          days,
+        );
       } else {
         return GraphTimeWindow.rightAligned(
           t,
@@ -149,21 +166,22 @@ class GraphTimeWindow extends Equatable {
           correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
         );
       }
-    } else {
-      final tf = t0 + Duration(days: days);
-      if (tf < t) {
-        if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
-          return GraphTimeWindow._(t0, tf, days);
-        } else {
-          return GraphTimeWindow.leftAligned(
-            t,
-            days,
-            correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
-          );
-        }
+    } else if (tf < t) {
+      if (correctionPolicy == TimeWindowCorrectionPolicy.preserveBounds) {
+        return GraphTimeWindow._(
+          t0,
+          min(tf, t - const Duration(hours: 1)),
+          days,
+        );
       } else {
-        return GraphTimeWindow._(t0, t, days);
+        return GraphTimeWindow.leftAligned(
+          t,
+          days,
+          correctionPolicy == TimeWindowCorrectionPolicy.preserveDays,
+        );
       }
+    } else {
+      return GraphTimeWindow._(t0, t, days);
     }
   }
 
@@ -203,7 +221,7 @@ class GraphTimeWindow extends Equatable {
     return copyWith(
       t0: t0.add(period),
       t: t.add(period, fallBack: days == 1 ? Resolvers.fallBackLater : null),
-      correctionPolicy: TimeWindowCorrectionPolicy.preserveDays,
+      correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
     );
   }
 }
@@ -320,8 +338,11 @@ class TidePanelState extends State<TidePanel> {
                       (f) => (t) => f(
                             widget.timeWindow.copyWith(
                               t: t,
+                              // Since we're setting the time via the graph, it
+                              // should never be outside the graph bounds, and
+                              // in debug we'd want to know if it ever was.
                               correctionPolicy:
-                                  TimeWindowCorrectionPolicy.preserveBounds,
+                                  TimeWindowCorrectionPolicy.strict,
                             ),
                           ),
                     ),
@@ -752,13 +773,7 @@ class TimeControls extends StatelessWidget {
             const VerticalDivider(),
             TextButton(
               onPressed: Optional(onWindowChanged).map(
-                (f) => () => f(
-                      GraphTimeWindow.leftAligned(
-                        DateTime.now(timeWindow.timeZone),
-                        1,
-                        true,
-                      ),
-                    ),
+                (f) => () => f(GraphTimeWindow.now(timeWindow.timeZone)),
               ),
               child: const Text('Today'),
             ),

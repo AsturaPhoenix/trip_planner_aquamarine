@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:developer' as debug;
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -100,11 +99,8 @@ class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
   Station? selectedStation;
-  late GraphTimeWindow timeWindow = GraphTimeWindow.leftAligned(
-    DateTime.now(widget.tripPlannerClient.timeZone),
-    1,
-    true,
-  );
+  late GraphTimeWindow timeWindow =
+      GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
   late Stream<core.Map<StationId, Station>> stations;
 
   double Function(StationType)? stationPriority;

@@ -162,6 +162,16 @@ class MockTripPlannerHttpClient extends _i1.Mock
         returnValueForMissingStub:
             _i4.Future<_i5.Uint8List>.value(_i5.Uint8List(0)),
       ) as _i4.Future<_i5.Uint8List>);
+  @override
+  _i4.Future<String> getTideCurrentStationDetails(_i3.Station? station) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTideCurrentStationDetails,
+          [station],
+        ),
+        returnValue: _i4.Future<String>.value(''),
+        returnValueForMissingStub: _i4.Future<String>.value(''),
+      ) as _i4.Future<String>);
 }
 
 /// A class which mocks [Client].
