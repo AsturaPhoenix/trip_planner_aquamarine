@@ -23,6 +23,14 @@ class Map extends StatefulWidget {
     zoom: 12,
   );
 
+  // TODO: make this configurable
+  static const showMarkerTypes = {
+    StationType.tide,
+    StationType.current,
+    StationType.launch,
+    StationType.destination,
+  };
+
   Map({
     super.key,
     required this.client,
@@ -89,14 +97,6 @@ class MarkerClass {
 
 class MapState extends State<Map> {
   static final log = Logger('MapState');
-
-  // TODO: make this configurable
-  static const showMarkerTypes = {
-    StationType.tide,
-    StationType.current,
-    StationType.launch,
-    StationType.destination,
-  };
 
   late final chartOverlays = [
     TileOverlayConfiguration(
@@ -167,7 +167,7 @@ class MapState extends State<Map> {
 
     final defaultConfiguration = createLocalImageConfiguration(context);
     final stations = [
-      for (final stationType in showMarkerTypes)
+      for (final stationType in Map.showMarkerTypes)
         loadAsset(stationType.name, defaultConfiguration)
     ];
 
@@ -178,7 +178,7 @@ class MapState extends State<Map> {
 
     _markerIcons = (() async => _MarkerIcons(
           stations: core.Map.fromIterables(
-            showMarkerTypes,
+            Map.showMarkerTypes,
             await Future.wait(stations),
           ),
           selected: await selected,
@@ -251,7 +251,7 @@ class MapState extends State<Map> {
 
                 // tp.js: show_hide_marker
                 bool stationFilter(Station station) =>
-                    showMarkerTypes.contains(station.type) &&
+                    Map.showMarkerTypes.contains(station.type) &&
                     !(station.type.isTideCurrent && station.isLegacy);
 
                 for (final station

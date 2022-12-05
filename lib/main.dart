@@ -6,10 +6,12 @@ import 'dart:developer' as debug;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:timezone/data/latest.dart';
 
@@ -98,10 +100,29 @@ class TripPlanner extends StatefulWidget {
 class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
+  static Station nearestStation(Iterable<Station> stations, Position position) {
+    double nearestDistance = double.infinity;
+    late Station nearestStation;
+    for (final station in stations) {
+      final distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        station.marker.latitude,
+        station.marker.longitude,
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestStation = station;
+      }
+    }
+    return nearestStation;
+  }
+
   Station? selectedStation;
   late GraphTimeWindow timeWindow =
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
   late Stream<core.Map<StationId, Station>> stations;
+  late Future<Position?> initialPosition;
 
   double Function(StationType)? stationPriority;
 
@@ -111,6 +132,19 @@ class TripPlannerState extends State<TripPlanner> {
   void initState() {
     super.initState;
     updateClient();
+
+    // Use Permission rather than Geolocator for permission request to take
+    // advantage of it failing on web so we don't default to making an annoying
+    // permission request.
+    //
+    // If this negatively affects the experience on mobile web, we can consider
+    // gating on kWeb + defaultTargetPlatform instead.
+    initialPosition = Permission.locationWhenInUse.request().then(
+          (_) => Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 5),
+          ),
+        );
   }
 
   @override
@@ -165,27 +199,44 @@ class TripPlannerState extends State<TripPlanner> {
             unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
-        home: StreamBuilder(
-          stream: stations,
-          builder: (context, stationsSnapshot) {
-            final stations = stationsSnapshot.data;
-            selectedStation ??= stations?.values.first;
+        home: FutureBuilder(
+          future: initialPosition,
+          builder: (context, initialPositionSnapshot) => StreamBuilder(
+            stream: stations,
+            builder: (context, stationsSnapshot) {
+              final stations = stationsSnapshot.data ?? {};
+              final selectableStations = stations.values.where(
+                (station) => Map.showMarkerTypes.contains(station.type),
+              );
 
-            return LayoutBuilder(
-              builder: (context, constraints) => _buildScaffold(
-                context,
-                constraints,
-                stations,
-              ),
-            );
-          },
+              if (selectedStation == null &&
+                  selectableStations.isNotEmpty &&
+                  initialPositionSnapshot.connectionState ==
+                      ConnectionState.done) {
+                selectedStation = initialPositionSnapshot.hasData
+                    ? nearestStation(
+                        selectableStations,
+                        initialPositionSnapshot.data!,
+                      )
+                    : selectableStations.first;
+              }
+
+              return LayoutBuilder(
+                builder: (context, constraints) => _buildScaffold(
+                  context,
+                  constraints,
+                  stations,
+                ),
+              );
+            },
+          ),
         ),
       );
 
   Widget _buildScaffold(
     BuildContext context,
     BoxConstraints constraints,
-    core.Map<StationId, Station>? stations,
+    core.Map<StationId, Station> stations,
   ) {
     const double selectedStationBarMinWidth = 480,
         titleAreaPadding = 164,
@@ -207,7 +258,7 @@ class TripPlannerState extends State<TripPlanner> {
     final tideCurrentStation = Optional(selectedStation).map(
       (station) => station.type.isTideCurrent
           ? station
-          : stations![station.tideCurrentStationId],
+          : stations[station.tideCurrentStationId],
     );
 
     const title = Text('BASK Trip Planner');
@@ -253,7 +304,7 @@ class TripPlannerState extends State<TripPlanner> {
                       Map(
                         client: widget.wmsClient,
                         tileCache: widget.tileCache,
-                        stations: stations ?? {},
+                        stations: stations,
                         selectedStation: selectedStation,
                         stationPriority: stationPriority,
                         onStationSelected: (station) =>
