@@ -136,6 +136,11 @@ class MapState extends State<Map> {
   Future<_MarkerIcons>? _markerIcons;
   Stream<Position>? positionStream;
 
+  void animateToSelectedStation() {
+    _gmap!
+        .animateCamera(CameraUpdate.newLatLng(widget.selectedStation!.marker));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -197,6 +202,12 @@ class MapState extends State<Map> {
       positionStream = Geolocator.getPositionStream();
     } else if (oldWidget.locationEnabled && !widget.locationEnabled) {
       positionStream = null;
+    }
+
+    if (widget.selectedStation != null &&
+        oldWidget.selectedStation == null &&
+        _gmap != null) {
+      animateToSelectedStation();
     }
   }
 
@@ -342,6 +353,9 @@ class MapState extends State<Map> {
                     await DefaultAssetBundle.of(context)
                         .loadString('assets/nautical-style.json'),
                   );
+                  if (widget.selectedStation != null) {
+                    animateToSelectedStation();
+                  }
                 },
               );
             },
