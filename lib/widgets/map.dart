@@ -407,77 +407,92 @@ class _LodControls extends StatelessWidget {
   final void Function(int) setLod;
 
   @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: ThemeData(
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.grey.shade800,
-            fixedSize: const Size.square(40),
-            minimumSize: const Size.square(40),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: EdgeInsets.zero,
+  Widget build(BuildContext context) => Theme(
+        data: ThemeData(
+          textButtonTheme: TextButtonThemeData(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade800,
+              fixedSize: const Size.square(40),
+              minimumSize: const Size.square(40),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+          tooltipTheme:
+              const TooltipThemeData(waitDuration: Duration(milliseconds: 600)),
+          dividerTheme: const DividerThemeData(
+            color: Color(0xffe6e6e6),
+            space: 1,
+            thickness: 1,
+            indent: 5,
+            endIndent: 5,
           ),
         ),
-        dividerTheme: const DividerThemeData(
-          color: Color(0xffe6e6e6),
-          space: 1,
-          thickness: 1,
-          indent: 5,
-          endIndent: 5,
-        ),
-      ),
-      child: Card(
-        elevation: 2,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-        child: SizedBox(
-          width: 40,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextButton(
-                onPressed: lod < zoom + maxOversample
-                    ? () => setLod(max(lod, zoom) + 1)
-                    : null,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Image.asset('assets/lodinc.png'),
-                    const Icon(Icons.add)
-                  ],
+        child: Card(
+          elevation: 2,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+          child: SizedBox(
+            width: 40,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: 'Increase detail',
+                  child: TextButton(
+                    onPressed: lod < zoom + maxOversample
+                        ? () => setLod(max(lod, zoom) + 1)
+                        : null,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/lodinc.png',
+                          excludeFromSemantics: true,
+                        ),
+                        const Icon(Icons.add)
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              const Divider(),
-              _HoverButton(
-                onPressed: () => setLod(lod == 0 ? zoom : 0),
-                childBuilder: (_, hover) => Icon(
-                  lod == 0
-                      ? hover
-                          ? Icons.lock_outlined
-                          : Icons.lock_open
-                      : Icons.sync,
+                const Divider(),
+                Tooltip(
+                  message: lod == 0 ? 'Lock detail' : 'Reset detail',
+                  child: _HoverButton(
+                    onPressed: () => setLod(lod == 0 ? zoom : 0),
+                    childBuilder: (_, hover) => Icon(
+                      lod == 0
+                          ? hover
+                              ? Icons.lock_outlined
+                              : Icons.lock_open
+                          : Icons.sync,
+                    ),
+                  ),
                 ),
-              ),
-              const Divider(),
-              TextButton(
-                onPressed: lod > zoom
-                    ? () => setLod(min(lod, zoom + maxOversample) - 1)
-                    : null,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Image.asset('assets/loddec.png'),
-                    const Icon(Icons.remove)
-                  ],
+                const Divider(),
+                Tooltip(
+                  message: 'Decrease detail',
+                  child: TextButton(
+                    onPressed: lod > zoom
+                        ? () => setLod(min(lod, zoom + maxOversample) - 1)
+                        : null,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/loddec.png',
+                          excludeFromSemantics: true,
+                        ),
+                        const Icon(Icons.remove)
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
+      );
 }
 
 class _HoverButton extends StatefulWidget {
