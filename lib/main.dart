@@ -137,7 +137,8 @@ class TripPlannerState extends State<TripPlanner> {
     //
     // If this negatively affects the experience on mobile web, we can consider
     // gating on kWeb + defaultTargetPlatform instead.
-    bool enabled = await Permission.locationWhenInUse.request().isGranted;
+    bool enabled =
+        kIsWeb ? true : await Permission.locationWhenInUse.request().isGranted;
     setState(() => locationEnabled = enabled);
     return enabled;
   }
@@ -147,12 +148,14 @@ class TripPlannerState extends State<TripPlanner> {
     super.initState;
     updateClient();
 
-    initialPosition = requestLocationPermission().then(
-      (_) => Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 5),
-      ),
-    );
+    initialPosition = kIsWeb
+        ? Future.value(null)
+        : requestLocationPermission().then(
+            (_) => Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.medium,
+              timeLimit: const Duration(seconds: 10),
+            ),
+          );
   }
 
   @override
@@ -318,6 +321,7 @@ class TripPlannerState extends State<TripPlanner> {
                         onStationSelected: (station) =>
                             setState(() => selectedStation = station),
                         locationEnabled: locationEnabled,
+                        onLocationRequest: requestLocationPermission,
                       ),
                       if (hasModal)
                         // ignore: prefer_const_constructors

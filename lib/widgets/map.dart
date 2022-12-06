@@ -16,6 +16,7 @@ import 'package:trip_planner_aquamarine/util/optional.dart';
 import '../providers/wms_tile_provider.dart';
 
 class Map extends StatefulWidget {
+  static const minZoom = 0, maxZoom = 22;
   static const initialCameraPosition = CameraPosition(
     // Center map on Alcatraz, to show the interesting points around the Bay.
     target: LatLng(37.8331, -122.4165),
@@ -39,6 +40,7 @@ class Map extends StatefulWidget {
     double Function(StationType type)? stationPriority,
     this.onStationSelected,
     this.locationEnabled = false,
+    this.onLocationRequest,
   }) : stationPriority =
             stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
 
@@ -51,6 +53,7 @@ class Map extends StatefulWidget {
   final void Function(Station station)? onStationSelected;
 
   final bool locationEnabled;
+  final Future<bool> Function()? onLocationRequest;
 
   @override
   MapState createState() => MapState();
@@ -68,6 +71,7 @@ class _MarkerIcons {
     required this.stations,
     required this.selected,
     required this.tcSelected,
+    required this.location,
   });
   final core.Map<StationType, BitmapDescriptor> stations;
 
@@ -76,7 +80,8 @@ class _MarkerIcons {
 
       /// Halo for a nearby tide/current station, when the selected location is
       /// not tide/current.
-      tcSelected;
+      tcSelected,
+      location;
 }
 
 /// I'm not sure there's an official source, but this seems to be a consensus
@@ -174,6 +179,11 @@ class MapState extends State<Map> {
     final selected = loadAsset('sel', selConfiguration);
     final tcSelected = loadAsset('tc_sel', selConfiguration);
 
+    final location = BitmapDescriptor.fromAssetImage(
+      defaultConfiguration,
+      'assets/markers/location.png',
+    );
+
     _markerIcons = (() async => _MarkerIcons(
           stations: core.Map.fromIterables(
             Map.showMarkerTypes,
@@ -181,6 +191,7 @@ class MapState extends State<Map> {
           ),
           selected: await selected,
           tcSelected: await tcSelected,
+          location: await location,
         ))();
 
     final maxOversample =
@@ -221,13 +232,14 @@ class MapState extends State<Map> {
       overlay.tileProvider.preferredTileSize = tileSize;
     }
 
-    return Stack(
-      children: [
-        FutureBuilder(
-          future: _markerIcons,
-          builder: (context, iconsSnapshot) => StreamBuilder(
-            stream: positionStream,
-            builder: (context, positionSnapshot) {
+    return StreamBuilder(
+      stream: positionStream,
+      builder: (context, positionSnapshot) => Stack(
+        fit: StackFit.expand,
+        children: [
+          FutureBuilder(
+            future: _markerIcons,
+            builder: (context, iconsSnapshot) {
               final markers = <Marker>{};
 
               if (iconsSnapshot.hasData) {
@@ -241,11 +253,7 @@ class MapState extends State<Map> {
                       markerId: markerId,
                       anchor: const Offset(.5, .5),
                       position: LatLng(position.latitude, position.longitude),
-                      // This icon will be transparent, but we want something of
-                      //roughly this size and anchored at the center.
-                      icon: markerIcons.selected,
-                      alpha: 0,
-                      // TODO: This text does not update while the info window
+                      icon: markerIcons.location,
                       // is shown.
                       infoWindow: InfoWindow(
                         title: formatPosition(position),
@@ -337,7 +345,6 @@ class MapState extends State<Map> {
                 mapType: MapType.normal,
                 initialCameraPosition: Map.initialCameraPosition,
                 markers: markers,
-                myLocationEnabled: widget.locationEnabled,
                 tileOverlays: {
                   TileOverlay(
                     tileOverlayId: chartOverlay.id,
@@ -345,6 +352,8 @@ class MapState extends State<Map> {
                     tileSize: tileSize,
                   ),
                 },
+                compassEnabled: false,
+                zoomControlsEnabled: false,
                 onCameraMove: (position) =>
                     setState(() => zoom = position.zoom.toInt()),
                 onMapCreated: (controller) async {
@@ -360,26 +369,67 @@ class MapState extends State<Map> {
               );
             },
           ),
-        ),
-        if (_gmap != null)
-          Positioned(
-            top: 64,
-            bottom: 115,
-            right: 10,
-            child: FittedBox(
-              alignment: Alignment.bottomLeft,
-              fit: BoxFit.scaleDown,
-              child: PointerInterceptor(
-                child: _LodControls(
+          if (_gmap != null)
+            Theme(
+              data: ThemeData(
+                textButtonTheme: TextButtonThemeData(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey.shade800,
+                    fixedSize: const Size.square(40),
+                    minimumSize: const Size.square(40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                tooltipTheme: const TooltipThemeData(
+                  waitDuration: Duration(milliseconds: 600),
+                ),
+                dividerTheme: const DividerThemeData(
+                  color: Color(0xffe6e6e6),
+                  space: 1,
+                  thickness: 1,
+                  indent: 5,
+                  endIndent: 5,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: MapControls(
                   zoom: zoom,
                   lod: chartOverlay.tileProvider.levelOfDetail,
                   maxOversample: chartOverlay.tileProvider.maxOversample,
+                  centerLocation: Optional(positionSnapshot.data).map(
+                        (position) => () => _gmap!.animateCamera(
+                              CameraUpdate.newLatLng(
+                                LatLng(
+                                  position.latitude,
+                                  position.longitude,
+                                ),
+                              ),
+                            ),
+                      ) ??
+                      Optional(widget.onLocationRequest).map(
+                        (f) => () async {
+                          await f();
+                          final position = await Geolocator.getCurrentPosition(
+                            desiredAccuracy: LocationAccuracy.medium,
+                            timeLimit: const Duration(seconds: 10),
+                          );
+                          _gmap!.animateCamera(
+                            CameraUpdate.newLatLng(
+                              LatLng(position.latitude, position.longitude),
+                            ),
+                          );
+                        },
+                      ),
+                  zoomIn: () => _gmap!.animateCamera(CameraUpdate.zoomIn()),
+                  zoomOut: () => _gmap!.animateCamera(CameraUpdate.zoomOut()),
                   setLod: _setLod,
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -393,11 +443,144 @@ class MapState extends State<Map> {
   }
 }
 
+extension on List<Widget> {
+  List<Widget> delimit(Widget delimiter) => [
+        ...[
+          for (final e in this) ...[delimiter, e]
+        ].skip(1)
+      ];
+}
+
+class MapControls extends StatelessWidget {
+  const MapControls({
+    super.key,
+    this.zoom = 12,
+    this.lod = 14,
+    this.maxOversample = 0,
+    this.centerLocation,
+    this.zoomIn,
+    this.zoomOut,
+    required this.setLod,
+  });
+  final int zoom, lod, maxOversample;
+  final void Function()? centerLocation;
+  final void Function()? zoomIn, zoomOut;
+  final void Function(int lod) setLod;
+
+  @override
+  Widget build(BuildContext context) {
+    final locationControls = LocationControls(centerLocation: centerLocation);
+    final zoomControls = MapButtonPanel(
+      children: [
+        Tooltip(
+          message: 'Zoom in',
+          child: TextButton(
+            onPressed: zoom < Map.maxZoom ? zoomIn : null,
+            child: const Icon(Icons.add),
+          ),
+        ),
+        Tooltip(
+          message: 'Zoom out',
+          child: TextButton(
+            onPressed: zoom > Map.minZoom ? zoomOut : null,
+            child: const Icon(Icons.remove),
+          ),
+        ),
+      ],
+    );
+    final lodControls = LodControls(
+      zoom: zoom,
+      lod: lod,
+      maxOversample: maxOversample,
+      setLod: setLod,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double buttonHeight = 40,
+            spacing = 10,
+            divider = 1,
+            logo = 26,
+            notices = kIsWeb ? 14 : 0;
+        final wrap = constraints.maxHeight <
+            6 * buttonHeight + 2 * spacing + logo + 3 * divider;
+
+        return Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: logo),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    locationControls,
+                    zoomControls,
+                    if (!wrap) lodControls
+                  ].delimit(const SizedBox(height: spacing)),
+                ),
+              ),
+            ),
+            if (wrap)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: notices),
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: lodControls,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class MapButtonPanel extends StatelessWidget {
+  const MapButtonPanel({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => PointerInterceptor(
+        child: Card(
+          elevation: 3,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+          child: SizedBox(
+            width: 40,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: children.delimit(const Divider()),
+            ),
+          ),
+        ),
+      );
+}
+
+class LocationControls extends StatelessWidget {
+  const LocationControls({super.key, this.centerLocation});
+  final void Function()? centerLocation;
+
+  @override
+  Widget build(BuildContext context) => MapButtonPanel(
+        children: [
+          Tooltip(
+            message: 'My location',
+            child: TextButton(
+              onPressed: centerLocation,
+              child: const Icon(Icons.my_location),
+            ),
+          )
+        ],
+      );
+}
+
 // TODO: tooltip text
 // TODO: consistent weight with Maps zoom buttons (Material font doesn't support weight for these symbols)
 // TODO: consistent size with Maps zoom buttons? may need to replace them with our own
-class _LodControls extends StatelessWidget {
-  const _LodControls({
+class LodControls extends StatelessWidget {
+  const LodControls({
+    super.key,
     required this.lod,
     required this.zoom,
     required this.maxOversample,
@@ -407,91 +590,60 @@ class _LodControls extends StatelessWidget {
   final void Function(int) setLod;
 
   @override
-  Widget build(BuildContext context) => Theme(
-        data: ThemeData(
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade800,
-              fixedSize: const Size.square(40),
-              minimumSize: const Size.square(40),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: EdgeInsets.zero,
+  Widget build(BuildContext context) => MapButtonPanel(
+        children: [
+          Tooltip(
+            message: 'Increase detail',
+            child: TextButton(
+              onPressed: lod < zoom + maxOversample
+                  ? () => setLod(max(lod, zoom) + 1)
+                  : null,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Image.asset(
+                    'assets/lodinc.png',
+                    opacity: const AlwaysStoppedAnimation(.625),
+                    excludeFromSemantics: true,
+                  ),
+                  const Icon(Icons.add)
+                ],
+              ),
             ),
           ),
-          tooltipTheme:
-              const TooltipThemeData(waitDuration: Duration(milliseconds: 600)),
-          dividerTheme: const DividerThemeData(
-            color: Color(0xffe6e6e6),
-            space: 1,
-            thickness: 1,
-            indent: 5,
-            endIndent: 5,
-          ),
-        ),
-        child: Card(
-          elevation: 2,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-          child: SizedBox(
-            width: 40,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Tooltip(
-                  message: 'Increase detail',
-                  child: TextButton(
-                    onPressed: lod < zoom + maxOversample
-                        ? () => setLod(max(lod, zoom) + 1)
-                        : null,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/lodinc.png',
-                          excludeFromSemantics: true,
-                        ),
-                        const Icon(Icons.add)
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(),
-                Tooltip(
-                  message: lod == 0 ? 'Lock detail' : 'Reset detail',
-                  child: _HoverButton(
-                    onPressed: () => setLod(lod == 0 ? zoom : 0),
-                    childBuilder: (_, hover) => Icon(
-                      lod == 0
-                          ? hover
-                              ? Icons.lock_outlined
-                              : Icons.lock_open
-                          : Icons.sync,
-                    ),
-                  ),
-                ),
-                const Divider(),
-                Tooltip(
-                  message: 'Decrease detail',
-                  child: TextButton(
-                    onPressed: lod > zoom
-                        ? () => setLod(min(lod, zoom + maxOversample) - 1)
-                        : null,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/loddec.png',
-                          excludeFromSemantics: true,
-                        ),
-                        const Icon(Icons.remove)
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+          Tooltip(
+            message: lod == 0 ? 'Lock detail' : 'Reset detail',
+            child: _HoverButton(
+              onPressed: () => setLod(lod == 0 ? zoom : 0),
+              childBuilder: (_, hover) => Icon(
+                lod == 0
+                    ? hover
+                        ? Icons.lock_outlined
+                        : Icons.lock_open
+                    : Icons.sync,
+              ),
             ),
           ),
-        ),
+          Tooltip(
+            message: 'Decrease detail',
+            child: TextButton(
+              onPressed: lod > zoom
+                  ? () => setLod(min(lod, zoom + maxOversample) - 1)
+                  : null,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Image.asset(
+                    'assets/loddec.png',
+                    opacity: const AlwaysStoppedAnimation(.625),
+                    excludeFromSemantics: true,
+                  ),
+                  const Icon(Icons.remove)
+                ],
+              ),
+            ),
+          ),
+        ],
       );
 }
 
