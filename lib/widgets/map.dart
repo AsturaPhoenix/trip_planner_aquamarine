@@ -102,6 +102,28 @@ class MarkerClass {
   static const double selection = 1, station = 3, currentLocation = 10;
 }
 
+enum PrecachedAsset {
+  compass(AssetImage('assets/compass.png'));
+
+  const PrecachedAsset(this.image);
+  final ImageProvider image;
+}
+
+extension on CameraPosition {
+  CameraPosition copyWith({
+    double? bearing,
+    LatLng? target,
+    double? tilt,
+    double? zoom,
+  }) =>
+      CameraPosition(
+        bearing: bearing ?? this.bearing,
+        target: target ?? this.target,
+        tilt: tilt ?? this.tilt,
+        zoom: zoom ?? this.zoom,
+      );
+}
+
 class MapState extends State<Map> {
   static final log = Logger('MapState');
 
@@ -123,9 +145,9 @@ class MapState extends State<Map> {
       ),
     )
   ];
-  GoogleMapController? _gmap;
+  GoogleMapController? gmap;
+  CameraPosition cameraPosition = Map.initialCameraPosition;
 
-  int zoom = Map.initialCameraPosition.zoom.toInt();
   int chartOverlayIndex = 0;
   TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
       chartOverlays[chartOverlayIndex];
@@ -134,7 +156,7 @@ class MapState extends State<Map> {
         for (final overlay in chartOverlays) {
           overlay.tileProvider.levelOfDetail = lod;
           // TODO: This does not cancel inflight requests, which can leave stale tiles.
-          _gmap!.clearTileCache(overlay.id);
+          gmap!.clearTileCache(overlay.id);
         }
       });
 
@@ -142,8 +164,7 @@ class MapState extends State<Map> {
   Stream<Position>? positionStream;
 
   void animateToSelectedStation() {
-    _gmap!
-        .animateCamera(CameraUpdate.newLatLng(widget.selectedStation!.marker));
+    gmap!.animateCamera(CameraUpdate.newLatLng(widget.selectedStation!.marker));
   }
 
   @override
@@ -157,6 +178,10 @@ class MapState extends State<Map> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    for (final asset in PrecachedAsset.values) {
+      precacheImage(asset.image, context);
+    }
 
     Future<BitmapDescriptor> loadAsset(
       String type,
@@ -217,7 +242,7 @@ class MapState extends State<Map> {
 
     if (widget.selectedStation != null &&
         oldWidget.selectedStation == null &&
-        _gmap != null) {
+        gmap != null) {
       animateToSelectedStation();
     }
   }
@@ -259,7 +284,7 @@ class MapState extends State<Map> {
                         title: formatPosition(position),
                         // No need for kIsWeb since we haven't implemented a
                         // location widget for web yet.
-                        onTap: () => _gmap!.hideMarkerInfoWindow(markerId),
+                        onTap: () => gmap!.hideMarkerInfoWindow(markerId),
                       ),
                       // Take precedence over other markers.
                       zIndex: MarkerClass.currentLocation,
@@ -295,7 +320,7 @@ class MapState extends State<Map> {
                           title: station.typedShortTitle,
                           onTap: kIsWeb
                               ? null
-                              : () => _gmap!.hideMarkerInfoWindow(markerId),
+                              : () => gmap!.hideMarkerInfoWindow(markerId),
                         ),
                         // In tp.js, this is 4 for current stations and 3 for
                         // everything else. However, on smaller screens we
@@ -355,9 +380,9 @@ class MapState extends State<Map> {
                 compassEnabled: false,
                 zoomControlsEnabled: false,
                 onCameraMove: (position) =>
-                    setState(() => zoom = position.zoom.toInt()),
+                    setState(() => cameraPosition = position),
                 onMapCreated: (controller) async {
-                  setState(() => _gmap = controller);
+                  setState(() => gmap = controller);
                   controller.setMapStyle(
                     await DefaultAssetBundle.of(context)
                         .loadString('assets/nautical-style.json'),
@@ -369,7 +394,7 @@ class MapState extends State<Map> {
               );
             },
           ),
-          if (_gmap != null)
+          if (gmap != null)
             Theme(
               data: ThemeData(
                 textButtonTheme: TextButtonThemeData(
@@ -395,11 +420,11 @@ class MapState extends State<Map> {
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: MapControls(
-                  zoom: zoom,
+                  cameraPosition: cameraPosition,
                   lod: chartOverlay.tileProvider.levelOfDetail,
                   maxOversample: chartOverlay.tileProvider.maxOversample,
                   centerLocation: Optional(positionSnapshot.data).map(
-                        (position) => () => _gmap!.animateCamera(
+                        (position) => () => gmap!.animateCamera(
                               CameraUpdate.newLatLng(
                                 LatLng(
                                   position.latitude,
@@ -415,15 +440,20 @@ class MapState extends State<Map> {
                             desiredAccuracy: LocationAccuracy.medium,
                             timeLimit: const Duration(seconds: 10),
                           );
-                          _gmap!.animateCamera(
+                          gmap!.animateCamera(
                             CameraUpdate.newLatLng(
                               LatLng(position.latitude, position.longitude),
                             ),
                           );
                         },
                       ),
-                  zoomIn: () => _gmap!.animateCamera(CameraUpdate.zoomIn()),
-                  zoomOut: () => _gmap!.animateCamera(CameraUpdate.zoomOut()),
+                  resetBearing: () => gmap!.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      cameraPosition.copyWith(bearing: 0),
+                    ),
+                  ),
+                  zoomIn: () => gmap!.animateCamera(CameraUpdate.zoomIn()),
+                  zoomOut: () => gmap!.animateCamera(CameraUpdate.zoomOut()),
                   setLod: _setLod,
                 ),
               ),
@@ -436,7 +466,7 @@ class MapState extends State<Map> {
   @override
   void dispose() {
     super.dispose();
-    _gmap?.dispose();
+    gmap?.dispose();
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
     }
@@ -454,42 +484,47 @@ extension on List<Widget> {
 class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
-    this.zoom = 12,
+    required this.cameraPosition,
     this.lod = 14,
     this.maxOversample = 0,
     this.centerLocation,
+    this.resetBearing,
     this.zoomIn,
     this.zoomOut,
     required this.setLod,
   });
-  final int zoom, lod, maxOversample;
-  final void Function()? centerLocation;
-  final void Function()? zoomIn, zoomOut;
+  final CameraPosition cameraPosition;
+  final int lod, maxOversample;
+  final void Function()? centerLocation, resetBearing, zoomIn, zoomOut;
   final void Function(int lod) setLod;
 
   @override
   Widget build(BuildContext context) {
-    final locationControls = LocationControls(centerLocation: centerLocation);
+    final locationControls = LocationControls(
+      cameraPosition: cameraPosition,
+      centerLocation: centerLocation,
+      resetBearing: resetBearing,
+    );
     final zoomControls = MapButtonPanel(
       children: [
         Tooltip(
           message: 'Zoom in',
           child: TextButton(
-            onPressed: zoom < Map.maxZoom ? zoomIn : null,
+            onPressed: cameraPosition.zoom < Map.maxZoom ? zoomIn : null,
             child: const Icon(Icons.add),
           ),
         ),
         Tooltip(
           message: 'Zoom out',
           child: TextButton(
-            onPressed: zoom > Map.minZoom ? zoomOut : null,
+            onPressed: cameraPosition.zoom > Map.minZoom ? zoomOut : null,
             child: const Icon(Icons.remove),
           ),
         ),
       ],
     );
     final lodControls = LodControls(
-      zoom: zoom,
+      zoom: cameraPosition.zoom.toInt(),
       lod: lod,
       maxOversample: maxOversample,
       setLod: setLod,
@@ -558,21 +593,42 @@ class MapButtonPanel extends StatelessWidget {
 }
 
 class LocationControls extends StatelessWidget {
-  const LocationControls({super.key, this.centerLocation});
-  final void Function()? centerLocation;
+  const LocationControls({
+    super.key,
+    required this.cameraPosition,
+    this.centerLocation,
+    this.resetBearing,
+  });
+  final CameraPosition cameraPosition;
+  final void Function()? centerLocation, resetBearing;
 
   @override
-  Widget build(BuildContext context) => MapButtonPanel(
-        children: [
-          Tooltip(
-            message: 'My location',
-            child: TextButton(
-              onPressed: centerLocation,
-              child: const Icon(Icons.my_location),
-            ),
-          )
-        ],
+  Widget build(BuildContext context) {
+    final Widget button;
+
+    if (cameraPosition.bearing == 0) {
+      button = Tooltip(
+        message: 'My location',
+        child: TextButton(
+          onPressed: centerLocation,
+          child: const Icon(Icons.my_location),
+        ),
       );
+    } else {
+      button = Tooltip(
+        message: 'Reset north',
+        child: TextButton(
+          onPressed: resetBearing,
+          child: Transform.rotate(
+            angle: -cameraPosition.bearing * pi / 180,
+            child: Image(image: PrecachedAsset.compass.image),
+          ),
+        ),
+      );
+    }
+
+    return MapButtonPanel(children: [button]);
+  }
 }
 
 // TODO: tooltip text
