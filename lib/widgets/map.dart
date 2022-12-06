@@ -9,11 +9,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
-import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
-import 'package:trip_planner_aquamarine/util/optional.dart';
 
+import '../main.dart' show canRequestLocation;
+import '../persistence/blob_cache.dart';
+import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
+import '../util/optional.dart';
 
 class Map extends StatefulWidget {
   static const minZoom = 0, maxZoom = 22;
@@ -608,7 +609,12 @@ class LocationControls extends StatelessWidget {
 
     if (cameraPosition.bearing == 0) {
       button = Tooltip(
-        message: 'My location',
+        message:
+            // We anticipate canRequestLocation to be true in most real cases,
+            // so let's not make too much of an effort to tailor the UI to this
+            // case (simply disable and show a tooltip for now). We might have
+            // to revisit this later though.
+            canRequestLocation ? 'My location' : 'My location (requires HTTPS)',
         child: TextButton(
           onPressed: centerLocation,
           child: const Icon(Icons.my_location),

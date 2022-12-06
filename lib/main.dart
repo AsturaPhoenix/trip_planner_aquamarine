@@ -97,6 +97,11 @@ class TripPlanner extends StatefulWidget {
   TripPlannerState createState() => TripPlannerState();
 }
 
+/// Most browsers won't surface a location permission request unless we're using
+/// https.
+final bool canRequestLocation =
+    !kIsWeb || Uri.base.scheme == 'https' || Uri.base.host == 'localhost';
+
 class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
@@ -321,7 +326,9 @@ class TripPlannerState extends State<TripPlanner> {
                         onStationSelected: (station) =>
                             setState(() => selectedStation = station),
                         locationEnabled: locationEnabled,
-                        onLocationRequest: requestLocationPermission,
+                        onLocationRequest: canRequestLocation
+                            ? requestLocationPermission
+                            : null,
                       ),
                       if (hasModal)
                         // ignore: prefer_const_constructors
