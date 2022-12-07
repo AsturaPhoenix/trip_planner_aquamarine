@@ -204,11 +204,14 @@ class WmsTileProvider implements TileProvider {
       cache[TileKey.forLocator(locator, tileType).toString()] ??=
           await fetchImageData(locator);
 
-  Future<CompositorImage> getImage(TileLocator locator) async {
-    final image = await (_memoryCache[locator] ??=
-        getImageData(locator).then(CompositorImage.decode));
-    return image.clone();
-  }
+  Future<CompositorImage> getImage(TileLocator locator) async =>
+      (await (_memoryCache[locator] ??= getImageData(locator)
+              .then(CompositorImage.decode)
+              .catchError((Object e) {
+        _memoryCache.remove(locator);
+        throw e;
+      })))
+          .clone();
 
   /// Windows a tile from a larger tile at a higher LOD.
   Future<void> _tileFromLarger(
