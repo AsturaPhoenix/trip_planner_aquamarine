@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:core';
 import 'dart:core' as core;
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -85,6 +86,15 @@ class _MarkerIcons {
       location;
 }
 
+enum PrecachedAsset {
+  compass(AssetImage('assets/compass.png')),
+  locationReticle(AssetImage('assets/location_reticle.png')),
+  locationNorth(AssetImage('assets/location_north.png'));
+
+  const PrecachedAsset(this.image);
+  final ImageProvider image;
+}
+
 /// I'm not sure there's an official source, but this seems to be a consensus
 /// format for reporting to the Coast Guard.
 String formatPosition(Position position) {
@@ -103,13 +113,6 @@ class MarkerClass {
   static const double selection = 1, station = 3, currentLocation = 10;
 }
 
-enum PrecachedAsset {
-  compass(AssetImage('assets/compass.png'));
-
-  const PrecachedAsset(this.image);
-  final ImageProvider image;
-}
-
 extension on CameraPosition {
   CameraPosition copyWith({
     double? bearing,
@@ -123,6 +126,10 @@ extension on CameraPosition {
         tilt: tilt ?? this.tilt,
         zoom: zoom ?? this.zoom,
       );
+}
+
+extension on Position {
+  LatLng toLatLng() => LatLng(latitude, longitude);
 }
 
 class MapState extends State<Map> {
@@ -147,7 +154,6 @@ class MapState extends State<Map> {
     )
   ];
   GoogleMapController? gmap;
-  CameraPosition cameraPosition = Map.initialCameraPosition;
 
   int chartOverlayIndex = 0;
   TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
@@ -162,7 +168,126 @@ class MapState extends State<Map> {
       });
 
   Future<_MarkerIcons>? _markerIcons;
-  Stream<Position>? positionStream;
+
+  CameraPosition cameraPosition = Map.initialCameraPosition;
+  Position? devicePosition;
+  // TODO: suspend on screen off
+  StreamSubscription? positionSubscription;
+  bool tracking = true;
+
+  void subscribeToPosition() {
+    positionSubscription = Geolocator.getPositionStream().listen(
+      updateDevicePosition,
+      onError: (_) => setState(() => devicePosition = null),
+    );
+  }
+
+  void updateDevicePosition(Position position) {
+    setState(() => devicePosition = position);
+    if (tracking) {
+      gmap?.animateCamera(CameraUpdate.newLatLng(position.toLatLng()));
+    }
+  }
+
+  // It may take a few frames for the tracking animation to start; don't cancel
+  // before we start.
+  bool trackingAnimationStarted = false;
+
+  void startTracking() {
+    setState(() => tracking = true);
+    trackingAnimationStarted = false;
+  }
+
+  // This is all pretty complicated in order to differentiate between user and
+  // programmatic camera movement. Android and iOS surface this information in
+  // onCameraMoveStarted, but web and Flutter do not.
+  //
+  // An alternate solution could be to cherry-pick PRs 3027 and 3033 and
+  // polyfill web.
+  void updateCameraPosition(CameraPosition newPosition) {
+    // A full screen-space mapping uses the message channel and can interleave
+    // with animation frames and produce an invalid result, so take advantage of
+    // the Mercator projection and compute it here.
+    Offset toRelativeScreenSpace(
+      double latitude,
+      double longitude,
+      double zoom,
+    ) =>
+        Offset(
+          longitude,
+          -math.log(math.tan((90 + latitude) * math.pi / 360)),
+        ) *
+        (WmsTileProvider.logicalTileSize * math.pow(2, zoom) / 360);
+
+    const pixelSquaredTolerance = 1;
+
+    // Cease tracking if the camera is moved away from the tracking target. This
+    // needs to be approximate and in screen-space because animateCamera does
+    // not move the camera all the way to the target position, so we get jitter
+    // in the pixel domain.
+    bool isDeviationIncreasing() {
+      final target = toRelativeScreenSpace(
+        devicePosition!.latitude,
+        devicePosition!.longitude,
+        newPosition.zoom,
+      );
+
+      return (target -
+                  toRelativeScreenSpace(
+                    newPosition.target.latitude,
+                    newPosition.target.longitude,
+                    newPosition.zoom,
+                  ))
+              .distanceSquared >
+          (target -
+                      toRelativeScreenSpace(
+                        cameraPosition.target.latitude,
+                        cameraPosition.target.longitude,
+                        newPosition.zoom,
+                      ))
+                  .distanceSquared +
+              pixelSquaredTolerance;
+    }
+
+    bool isDeviationNear() {
+      // Base the tolerance on the farthest-out zoom to maximize tolerance.
+      final zoom = math.min(newPosition.zoom, cameraPosition.zoom);
+      return (toRelativeScreenSpace(
+                    devicePosition!.latitude,
+                    devicePosition!.longitude,
+                    zoom,
+                  ) -
+                  toRelativeScreenSpace(
+                    newPosition.target.latitude,
+                    newPosition.target.longitude,
+                    zoom,
+                  ))
+              .distanceSquared <=
+          pixelSquaredTolerance;
+    }
+
+    setState(() {
+      // If we want to be tracking but we haven't gotten a position fix yet,
+      // allow us to continue waiting.
+      if (devicePosition != null && tracking) {
+        if (newPosition.zoom != cameraPosition.zoom && !isDeviationNear()) {
+          // Animation stops while zoom changes, so cancel tracking for a smooth
+          // user experience, unless we're simply zooming about the tracked
+          // location.
+          tracking = false;
+        } else {
+          if (isDeviationIncreasing()) {
+            if (trackingAnimationStarted) {
+              tracking = false;
+            }
+          } else {
+            trackingAnimationStarted = true;
+          }
+        }
+      }
+      cameraPosition = newPosition;
+    });
+  }
 
   void animateToSelectedStation() {
     gmap!.animateCamera(CameraUpdate.newLatLng(widget.selectedStation!.marker));
@@ -172,7 +297,7 @@ class MapState extends State<Map> {
   void initState() {
     super.initState();
     if (widget.locationEnabled) {
-      positionStream = Geolocator.getPositionStream();
+      subscribeToPosition();
     }
   }
 
@@ -236,15 +361,28 @@ class MapState extends State<Map> {
     }
 
     if (widget.locationEnabled && !oldWidget.locationEnabled) {
-      positionStream = Geolocator.getPositionStream();
+      subscribeToPosition();
     } else if (oldWidget.locationEnabled && !widget.locationEnabled) {
-      positionStream = null;
+      positionSubscription?.cancel();
+      positionSubscription = null;
+      devicePosition = null;
     }
 
     if (widget.selectedStation != null &&
         oldWidget.selectedStation == null &&
-        gmap != null) {
+        gmap != null &&
+        !(tracking && widget.locationEnabled)) {
       animateToSelectedStation();
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    positionSubscription?.cancel();
+    gmap?.dispose();
+    for (final overlay in chartOverlays) {
+      overlay.tileProvider.dispose();
     }
   }
 
@@ -258,219 +396,195 @@ class MapState extends State<Map> {
       overlay.tileProvider.preferredTileSize = tileSize;
     }
 
-    return StreamBuilder(
-      stream: positionStream,
-      builder: (context, positionSnapshot) => Stack(
-        fit: StackFit.expand,
-        children: [
-          FutureBuilder(
-            future: _markerIcons,
-            builder: (context, iconsSnapshot) {
-              final markers = <Marker>{};
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FutureBuilder(
+          future: _markerIcons,
+          builder: (context, iconsSnapshot) {
+            final markers = <Marker>{};
 
-              if (iconsSnapshot.hasData) {
-                final markerIcons = iconsSnapshot.data!;
+            if (iconsSnapshot.hasData) {
+              final markerIcons = iconsSnapshot.data!;
 
-                if (positionSnapshot.hasData) {
-                  const markerId = MarkerId('current location');
-                  final position = positionSnapshot.data!;
-                  markers.add(
-                    Marker(
-                      markerId: markerId,
-                      anchor: const Offset(.5, .5),
-                      position: LatLng(position.latitude, position.longitude),
-                      icon: markerIcons.location,
-                      // is shown.
-                      infoWindow: InfoWindow(
-                        title: formatPosition(position),
-                        // No need for kIsWeb since we haven't implemented a
-                        // location widget for web yet.
-                        onTap: () => gmap!.hideMarkerInfoWindow(markerId),
-                      ),
-                      // Take precedence over other markers.
-                      zIndex: MarkerClass.currentLocation,
+              if (devicePosition != null) {
+                const markerId = MarkerId('current location');
+                markers.add(
+                  Marker(
+                    markerId: markerId,
+                    anchor: const Offset(.5, .5),
+                    position: devicePosition!.toLatLng(),
+                    icon: markerIcons.location,
+                    // is shown.
+                    infoWindow: InfoWindow(
+                      title: formatPosition(devicePosition!),
+                      // No need for kIsWeb since we haven't implemented a
+                      // location widget for web yet.
+                      onTap: () => gmap!.hideMarkerInfoWindow(markerId),
                     ),
-                  );
-                }
-
-                // tp.js: show_hide_marker
-                bool stationFilter(Station station) =>
-                    Map.showMarkerTypes.contains(station.type) &&
-                    !(station.type.isTideCurrent && station.isLegacy);
-
-                for (final station
-                    in widget.stations.values.where(stationFilter)) {
-                  final icon = markerIcons.stations[station.type];
-                  if (icon != null) {
-                    // tp.js: create_station
-                    final markerId = MarkerId(station.id.toString());
-                    final visualMinor = [
-                          station.isLegacy,
-                          station.isSubordinate
-                        ].indexOf(true) %
-                        3;
-                    final visualMajor = widget.stationPriority(station.type);
-
-                    markers.add(
-                      Marker(
-                        markerId: markerId,
-                        position: station.marker,
-                        alpha: (1 + visualMinor) / 3,
-                        icon: icon,
-                        infoWindow: InfoWindow(
-                          title: station.typedShortTitle,
-                          onTap: kIsWeb
-                              ? null
-                              : () => gmap!.hideMarkerInfoWindow(markerId),
-                        ),
-                        // In tp.js, this is 4 for current stations and 3 for
-                        // everything else. However, on smaller screens we
-                        // should try to keep touch response consistent with
-                        // alpha.
-                        zIndex:
-                            MarkerClass.station + 3 * visualMajor + visualMinor,
-                        onTap: () => widget.onStationSelected?.call(station),
-                      ),
-                    );
-                  }
-                }
-
-                // tp.js: create_sel_marker
-                void createSelectionMarker(
-                  MarkerId id,
-                  BitmapDescriptor icon,
-                  LatLng? location,
-                ) =>
-                    markers.add(
-                      Marker(
-                        markerId: id,
-                        anchor: const Offset(.5, .65),
-                        icon: icon,
-                        // tp.js: move_sel_marker
-                        position: location ?? const LatLng(0, 0),
-                        visible: location != null,
-                        zIndex: MarkerClass.selection,
-                      ),
-                    );
-
-                createSelectionMarker(
-                  const MarkerId('sel'),
-                  markerIcons.selected,
-                  widget.selectedStation?.marker,
-                );
-
-                createSelectionMarker(
-                  const MarkerId('tc_sel'),
-                  markerIcons.tcSelected,
-                  Optional(widget.selectedStation?.tideCurrentStationId)
-                      .map((tcid) => widget.stations[tcid]?.marker),
+                    // Take precedence over other markers.
+                    zIndex: MarkerClass.currentLocation,
+                  ),
                 );
               }
 
-              return GoogleMap(
-                mapType: MapType.normal,
-                initialCameraPosition: Map.initialCameraPosition,
-                markers: markers,
-                tileOverlays: {
-                  TileOverlay(
-                    tileOverlayId: chartOverlay.id,
-                    tileProvider: chartOverlay.tileProvider,
-                    tileSize: tileSize,
-                  ),
-                },
-                compassEnabled: false,
-                zoomControlsEnabled: false,
-                onCameraMove: (position) =>
-                    setState(() => cameraPosition = position),
-                onMapCreated: (controller) async {
-                  setState(() => gmap = controller);
-                  controller.setMapStyle(
-                    await DefaultAssetBundle.of(context)
-                        .loadString('assets/nautical-style.json'),
+              // tp.js: show_hide_marker
+              bool stationFilter(Station station) =>
+                  Map.showMarkerTypes.contains(station.type) &&
+                  !(station.type.isTideCurrent && station.isLegacy);
+
+              for (final station
+                  in widget.stations.values.where(stationFilter)) {
+                final icon = markerIcons.stations[station.type];
+                if (icon != null) {
+                  // tp.js: create_station
+                  final markerId = MarkerId(station.id.toString());
+                  final visualMinor =
+                      [station.isLegacy, station.isSubordinate].indexOf(true) %
+                          3;
+                  final visualMajor = widget.stationPriority(station.type);
+
+                  markers.add(
+                    Marker(
+                      markerId: markerId,
+                      position: station.marker,
+                      alpha: (1 + visualMinor) / 3,
+                      icon: icon,
+                      infoWindow: InfoWindow(
+                        title: station.typedShortTitle,
+                        onTap: kIsWeb
+                            ? null
+                            : () => gmap!.hideMarkerInfoWindow(markerId),
+                      ),
+                      // In tp.js, this is 4 for current stations and 3 for
+                      // everything else. However, on smaller screens we
+                      // should try to keep touch response consistent with
+                      // alpha.
+                      zIndex:
+                          MarkerClass.station + 3 * visualMajor + visualMinor,
+                      onTap: () => widget.onStationSelected?.call(station),
+                    ),
                   );
-                  if (widget.selectedStation != null) {
-                    animateToSelectedStation();
-                  }
-                },
+                }
+              }
+
+              // tp.js: create_sel_marker
+              void createSelectionMarker(
+                MarkerId id,
+                BitmapDescriptor icon,
+                LatLng? location,
+              ) =>
+                  markers.add(
+                    Marker(
+                      markerId: id,
+                      anchor: const Offset(.5, .65),
+                      icon: icon,
+                      // tp.js: move_sel_marker
+                      position: location ?? const LatLng(0, 0),
+                      visible: location != null,
+                      zIndex: MarkerClass.selection,
+                    ),
+                  );
+
+              createSelectionMarker(
+                const MarkerId('sel'),
+                markerIcons.selected,
+                widget.selectedStation?.marker,
               );
-            },
-          ),
-          if (gmap != null)
-            Theme(
-              data: ThemeData(
-                textButtonTheme: TextButtonThemeData(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey.shade800,
-                    fixedSize: const Size.square(40),
-                    minimumSize: const Size.square(40),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                  ),
+
+              createSelectionMarker(
+                const MarkerId('tc_sel'),
+                markerIcons.tcSelected,
+                Optional(widget.selectedStation?.tideCurrentStationId)
+                    .map((tcid) => widget.stations[tcid]?.marker),
+              );
+            }
+
+            return GoogleMap(
+              mapType: MapType.normal,
+              initialCameraPosition: Map.initialCameraPosition,
+              markers: markers,
+              tileOverlays: {
+                TileOverlay(
+                  tileOverlayId: chartOverlay.id,
+                  tileProvider: chartOverlay.tileProvider,
+                  tileSize: tileSize,
                 ),
-                tooltipTheme: const TooltipThemeData(
-                  waitDuration: Duration(milliseconds: 600),
-                ),
-                dividerTheme: const DividerThemeData(
-                  color: Color(0xffe6e6e6),
-                  space: 1,
-                  thickness: 1,
-                  indent: 5,
-                  endIndent: 5,
+              },
+              compassEnabled: false,
+              zoomControlsEnabled: false,
+              onCameraMove: updateCameraPosition,
+              onMapCreated: (controller) async {
+                setState(() => gmap = controller);
+                controller.setMapStyle(
+                  await DefaultAssetBundle.of(context)
+                      .loadString('assets/nautical-style.json'),
+                );
+                if (widget.selectedStation != null) {
+                  animateToSelectedStation();
+                }
+              },
+            );
+          },
+        ),
+        if (gmap != null)
+          Theme(
+            data: ThemeData(
+              textButtonTheme: TextButtonThemeData(
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.grey.shade800,
+                  fixedSize: const Size.square(40),
+                  minimumSize: const Size.square(40),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.zero,
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: MapControls(
-                  cameraPosition: cameraPosition,
-                  lod: chartOverlay.tileProvider.levelOfDetail,
-                  maxOversample: chartOverlay.tileProvider.maxOversample,
-                  centerLocation: Optional(positionSnapshot.data).map(
-                        (position) => () => gmap!.animateCamera(
-                              CameraUpdate.newLatLng(
-                                LatLng(
-                                  position.latitude,
-                                  position.longitude,
-                                ),
-                              ),
-                            ),
-                      ) ??
-                      Optional(widget.onLocationRequest).map(
-                        (f) => () async {
-                          await f();
-                          final position = await Geolocator.getCurrentPosition(
-                            desiredAccuracy: LocationAccuracy.medium,
-                            timeLimit: const Duration(seconds: 10),
-                          );
-                          gmap!.animateCamera(
-                            CameraUpdate.newLatLng(
-                              LatLng(position.latitude, position.longitude),
-                            ),
-                          );
-                        },
-                      ),
-                  resetBearing: () => gmap!.animateCamera(
-                    CameraUpdate.newCameraPosition(
-                      cameraPosition.copyWith(bearing: 0),
-                    ),
-                  ),
-                  zoomIn: () => gmap!.animateCamera(CameraUpdate.zoomIn()),
-                  zoomOut: () => gmap!.animateCamera(CameraUpdate.zoomOut()),
-                  setLod: _setLod,
-                ),
+              tooltipTheme: const TooltipThemeData(
+                waitDuration: Duration(milliseconds: 600),
+              ),
+              dividerTheme: const DividerThemeData(
+                color: Color(0xffe6e6e6),
+                space: 1,
+                thickness: 1,
+                indent: 5,
+                endIndent: 5,
               ),
             ),
-        ],
-      ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: MapControls(
+                cameraPosition: cameraPosition,
+                lod: chartOverlay.tileProvider.levelOfDetail,
+                maxOversample: chartOverlay.tileProvider.maxOversample,
+                tracking: tracking && devicePosition != null,
+                startTracking: Optional(devicePosition).map(
+                      (position) => () {
+                        startTracking();
+                        gmap!.animateCamera(
+                          CameraUpdate.newLatLng(position.toLatLng()),
+                        );
+                      },
+                    ) ??
+                    Optional(widget.onLocationRequest).map(
+                      (f) => () {
+                        startTracking();
+                        f();
+                        // Tracking will begin once location is enabled.
+                      },
+                    ),
+                resetBearing: () => gmap!.animateCamera(
+                  CameraUpdate.newCameraPosition(
+                    cameraPosition.copyWith(bearing: 0),
+                  ),
+                ),
+                zoomIn: () => gmap!.animateCamera(CameraUpdate.zoomIn()),
+                zoomOut: () => gmap!.animateCamera(CameraUpdate.zoomOut()),
+                setLod: _setLod,
+              ),
+            ),
+          ),
+      ],
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-    gmap?.dispose();
-    for (final overlay in chartOverlays) {
-      overlay.tileProvider.dispose();
-    }
   }
 }
 
@@ -488,7 +602,8 @@ class MapControls extends StatelessWidget {
     required this.cameraPosition,
     this.lod = 14,
     this.maxOversample = 0,
-    this.centerLocation,
+    this.tracking = false,
+    this.startTracking,
     this.resetBearing,
     this.zoomIn,
     this.zoomOut,
@@ -496,14 +611,16 @@ class MapControls extends StatelessWidget {
   });
   final CameraPosition cameraPosition;
   final int lod, maxOversample;
-  final void Function()? centerLocation, resetBearing, zoomIn, zoomOut;
+  final bool tracking;
+  final void Function()? startTracking, resetBearing, zoomIn, zoomOut;
   final void Function(int lod) setLod;
 
   @override
   Widget build(BuildContext context) {
     final locationControls = LocationControls(
       cameraPosition: cameraPosition,
-      centerLocation: centerLocation,
+      tracking: tracking,
+      centerLocation: startTracking,
       resetBearing: resetBearing,
     );
     final zoomControls = MapButtonPanel(
@@ -597,10 +714,12 @@ class LocationControls extends StatelessWidget {
   const LocationControls({
     super.key,
     required this.cameraPosition,
+    this.tracking = false,
     this.centerLocation,
     this.resetBearing,
   });
   final CameraPosition cameraPosition;
+  final bool tracking;
   final void Function()? centerLocation, resetBearing;
 
   @override
@@ -617,7 +736,12 @@ class LocationControls extends StatelessWidget {
             canRequestLocation ? 'My location' : 'My location (requires HTTPS)',
         child: TextButton(
           onPressed: centerLocation,
-          child: const Icon(Icons.my_location),
+          child: Image(
+            image: (tracking
+                    ? PrecachedAsset.locationNorth
+                    : PrecachedAsset.locationReticle)
+                .image,
+          ),
         ),
       );
     } else {
@@ -626,7 +750,7 @@ class LocationControls extends StatelessWidget {
         child: TextButton(
           onPressed: resetBearing,
           child: Transform.rotate(
-            angle: -cameraPosition.bearing * pi / 180,
+            angle: -cameraPosition.bearing * math.pi / 180,
             child: Image(image: PrecachedAsset.compass.image),
           ),
         ),
@@ -658,7 +782,7 @@ class LodControls extends StatelessWidget {
             message: 'Increase detail',
             child: TextButton(
               onPressed: lod < zoom + maxOversample
-                  ? () => setLod(max(lod, zoom) + 1)
+                  ? () => setLod(math.max(lod, zoom) + 1)
                   : null,
               child: Stack(
                 alignment: Alignment.center,
@@ -690,7 +814,7 @@ class LodControls extends StatelessWidget {
             message: 'Decrease detail',
             child: TextButton(
               onPressed: lod > zoom
-                  ? () => setLod(min(lod, zoom + maxOversample) - 1)
+                  ? () => setLod(math.min(lod, zoom + maxOversample) - 1)
                   : null,
               child: Stack(
                 alignment: Alignment.center,
