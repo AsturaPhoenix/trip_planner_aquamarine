@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -89,7 +90,9 @@ class _MarkerIcons {
 enum PrecachedAsset {
   compass(AssetImage('assets/compass.png')),
   locationReticle(AssetImage('assets/location_reticle.png')),
-  locationNorth(AssetImage('assets/location_north.png'));
+  locationNorth(AssetImage('assets/location_north.png')),
+  compassDirections(AssetImage('assets/compass_directions.png')),
+  compassIndicator(AssetImage('assets/compass_indicator.png'));
 
   const PrecachedAsset(this.image);
   final ImageProvider image;
@@ -172,8 +175,34 @@ class MapState extends State<Map> {
   CameraPosition cameraPosition = Map.initialCameraPosition;
   Position? devicePosition;
   // TODO: suspend on screen off
-  StreamSubscription? positionSubscription;
-  bool tracking = true;
+  StreamSubscription? positionSubscription, bearingSubscription;
+  TrackingMode _trackingMode = TrackingMode.location;
+  TrackingMode get trackingMode => _trackingMode;
+  set trackingMode(TrackingMode value) {
+    if (value != _trackingMode) {
+      if (_trackingMode == TrackingMode.bearing) {
+        bearingSubscription!.cancel();
+        bearingSubscription = null;
+      }
+      _trackingMode = value;
+
+      if (value == TrackingMode.location) {
+        trackingAnimationStarted = false;
+      } else if (value == TrackingMode.bearing) {
+        bearingSubscription = FlutterCompass.events!.listen(
+          (event) => gmap?.animateCamera(
+            CameraUpdate.newCameraPosition(
+              cameraPosition.copyWith(bearing: event.heading),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // It may take a few frames for the tracking animation to start; don't cancel
+  // before we start.
+  bool trackingAnimationStarted = false;
 
   void subscribeToPosition() {
     positionSubscription = Geolocator.getPositionStream().listen(
@@ -184,18 +213,20 @@ class MapState extends State<Map> {
 
   void updateDevicePosition(Position position) {
     setState(() => devicePosition = position);
-    if (tracking) {
-      gmap?.animateCamera(CameraUpdate.newLatLng(position.toLatLng()));
+    if (trackingMode != TrackingMode.free) {
+      animateTrackingCamera();
     }
   }
 
-  // It may take a few frames for the tracking animation to start; don't cancel
-  // before we start.
-  bool trackingAnimationStarted = false;
-
-  void startTracking() {
-    setState(() => tracking = true);
-    trackingAnimationStarted = false;
+  void animateTrackingCamera() {
+    final target = devicePosition!.toLatLng();
+    gmap?.animateCamera(
+      trackingMode == TrackingMode.location && cameraPosition.bearing != 0
+          ? CameraUpdate.newCameraPosition(
+              cameraPosition.copyWith(target: target, bearing: 0),
+            )
+          : CameraUpdate.newLatLng(target),
+    );
   }
 
   // This is all pretty complicated in order to differentiate between user and
@@ -269,16 +300,16 @@ class MapState extends State<Map> {
     setState(() {
       // If we want to be tracking but we haven't gotten a position fix yet,
       // allow us to continue waiting.
-      if (devicePosition != null && tracking) {
+      if (devicePosition != null && trackingMode != TrackingMode.free) {
         if (newPosition.zoom != cameraPosition.zoom && !isDeviationNear()) {
           // Animation stops while zoom changes, so cancel tracking for a smooth
           // user experience, unless we're simply zooming about the tracked
           // location.
-          tracking = false;
+          trackingMode = TrackingMode.free;
         } else {
           if (isDeviationIncreasing()) {
             if (trackingAnimationStarted) {
-              tracking = false;
+              trackingMode = TrackingMode.free;
             }
           } else {
             trackingAnimationStarted = true;
@@ -371,7 +402,7 @@ class MapState extends State<Map> {
     if (widget.selectedStation != null &&
         oldWidget.selectedStation == null &&
         gmap != null &&
-        !(tracking && widget.locationEnabled)) {
+        (trackingMode == TrackingMode.free || !widget.locationEnabled)) {
       animateToSelectedStation();
     }
   }
@@ -380,6 +411,7 @@ class MapState extends State<Map> {
   void dispose() {
     super.dispose();
     positionSubscription?.cancel();
+    bearingSubscription?.cancel();
     gmap?.dispose();
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
@@ -556,22 +588,26 @@ class MapState extends State<Map> {
                 cameraPosition: cameraPosition,
                 lod: chartOverlay.tileProvider.levelOfDetail,
                 maxOversample: chartOverlay.tileProvider.maxOversample,
-                tracking: tracking && devicePosition != null,
-                startTracking: Optional(devicePosition).map(
-                      (position) => () {
-                        startTracking();
-                        gmap!.animateCamera(
-                          CameraUpdate.newLatLng(position.toLatLng()),
-                        );
+                trackingMode: trackingMode == TrackingMode.location
+                    ? devicePosition == null
+                        ? TrackingMode.free
+                        : TrackingMode.location
+                    : trackingMode,
+                trackLocation: Optional(devicePosition).map(
+                      (_) => () {
+                        setState(() => trackingMode = TrackingMode.location);
+                        animateTrackingCamera();
                       },
                     ) ??
                     Optional(widget.onLocationRequest).map(
                       (f) => () {
-                        startTracking();
+                        setState(() => trackingMode = TrackingMode.location);
                         f();
                         // Tracking will begin once location is enabled.
                       },
                     ),
+                trackBearing: () =>
+                    setState(() => trackingMode = TrackingMode.bearing),
                 resetBearing: () => gmap!.animateCamera(
                   CameraUpdate.newCameraPosition(
                     cameraPosition.copyWith(bearing: 0),
@@ -596,14 +632,17 @@ extension on List<Widget> {
       ];
 }
 
+enum TrackingMode { free, location, bearing }
+
 class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
     required this.cameraPosition,
     this.lod = 14,
     this.maxOversample = 0,
-    this.tracking = false,
-    this.startTracking,
+    this.trackingMode = TrackingMode.free,
+    this.trackLocation,
+    this.trackBearing,
     this.resetBearing,
     this.zoomIn,
     this.zoomOut,
@@ -611,16 +650,21 @@ class MapControls extends StatelessWidget {
   });
   final CameraPosition cameraPosition;
   final int lod, maxOversample;
-  final bool tracking;
-  final void Function()? startTracking, resetBearing, zoomIn, zoomOut;
+  final TrackingMode trackingMode;
+  final void Function()? trackLocation,
+      trackBearing,
+      resetBearing,
+      zoomIn,
+      zoomOut;
   final void Function(int lod) setLod;
 
   @override
   Widget build(BuildContext context) {
     final locationControls = LocationControls(
       cameraPosition: cameraPosition,
-      tracking: tracking,
-      centerLocation: startTracking,
+      trackingMode: trackingMode,
+      trackLocation: trackLocation,
+      trackBearing: trackBearing,
       resetBearing: resetBearing,
     );
     final zoomControls = MapButtonPanel(
@@ -714,53 +758,89 @@ class LocationControls extends StatelessWidget {
   const LocationControls({
     super.key,
     required this.cameraPosition,
-    this.tracking = false,
-    this.centerLocation,
+    this.trackingMode = TrackingMode.free,
+    this.trackLocation,
+    this.trackBearing,
     this.resetBearing,
   });
   final CameraPosition cameraPosition;
-  final bool tracking;
-  final void Function()? centerLocation, resetBearing;
+  final TrackingMode trackingMode;
+  final void Function()? trackLocation, trackBearing, resetBearing;
 
   @override
   Widget build(BuildContext context) {
     final Widget button;
 
-    if (cameraPosition.bearing == 0) {
-      // On web, we neither have the sensor impl nor the ability to rotate the
-      // map.
-      const orientationEnabled = !kIsWeb;
+    // On web, we neither have the sensor impl nor the ability to rotate the
+    // map.
+    const orientationEnabled = !kIsWeb;
 
-      button = Tooltip(
-        message:
-            // We anticipate canRequestLocation to be true in most real cases,
-            // so let's not make too much of an effort to tailor the UI to this
-            // case (simply disable and show a tooltip for now). We might have
-            // to revisit this later though.
-            canRequestLocation ? 'My location' : 'My location (requires HTTPS)',
-        child: TextButton(
-          onPressed: centerLocation,
-          child: orientationEnabled
-              ? Image(
-                  image: (tracking
-                          ? PrecachedAsset.locationNorth
-                          : PrecachedAsset.locationReticle)
-                      .image,
-                )
-              : Icon(tracking ? Icons.my_location : Icons.location_searching),
-        ),
-      );
-    } else {
-      button = Tooltip(
-        message: 'Reset north',
-        child: TextButton(
-          onPressed: resetBearing,
-          child: Transform.rotate(
-            angle: -cameraPosition.bearing * math.pi / 180,
-            child: Image(image: PrecachedAsset.compass.image),
+    switch (trackingMode) {
+      case TrackingMode.free:
+        if (cameraPosition.bearing == 0) {
+          button = Tooltip(
+            message:
+                // We anticipate canRequestLocation to be true in most real
+                // cases, so let's not make too much of an effort to tailor the
+                // UI to this case (simply disable and show a tooltip for now).
+                // We might have to revisit this later though.
+                canRequestLocation
+                    ? 'My location'
+                    : 'My location (requires HTTPS)',
+            child: TextButton(
+              onPressed: trackLocation,
+              child: orientationEnabled
+                  ? Image(image: PrecachedAsset.locationReticle.image)
+                  : const Icon(Icons.location_searching),
+            ),
+          );
+        } else {
+          button = Tooltip(
+            message: 'Reset north',
+            child: TextButton(
+              onPressed: resetBearing,
+              child: Transform.rotate(
+                angle: -cameraPosition.bearing * math.pi / 180,
+                child: Image(image: PrecachedAsset.compass.image),
+              ),
+            ),
+          );
+        }
+        break;
+      case TrackingMode.location:
+        button = Tooltip(
+          message: orientationEnabled ? 'Toggle heading' : 'My location',
+          child: TextButton(
+            onPressed: orientationEnabled ? trackBearing : trackLocation,
+            child: orientationEnabled
+                ? Image(image: PrecachedAsset.locationNorth.image)
+                : const Icon(Icons.my_location),
           ),
-        ),
-      );
+        );
+        break;
+      case TrackingMode.bearing:
+        button = Tooltip(
+          message: 'Toggle heading',
+          child: TextButton(
+            onPressed: trackLocation,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                UnconstrainedBox(
+                  clipBehavior: Clip.hardEdge,
+                  child: Transform(
+                    transform: Matrix4.translationValues(40.0, 60.0, 0.0)
+                      ..rotateZ(-cameraPosition.bearing * math.pi / 180)
+                      ..translate(-40.0, -40.0, 0.0),
+                    child: Image(image: PrecachedAsset.compassDirections.image),
+                  ),
+                ),
+                Image(image: PrecachedAsset.compassIndicator.image),
+              ],
+            ),
+          ),
+        );
+        break;
     }
 
     return MapButtonPanel(children: [button]);

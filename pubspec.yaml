@@ -39,6 +39,7 @@ dependencies:
   async: ^2.10.0
   collection: ^1.17.0
   equatable: ^2.0.5
+  flutter_compass: ^0.7.0
   flutter_html: ^3.0.0-alpha.6
   flutter_html_table: ^3.0.0-alpha.4
   geolocator: ^9.0.2
