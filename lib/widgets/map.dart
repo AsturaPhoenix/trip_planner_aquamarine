@@ -727,6 +727,10 @@ class LocationControls extends StatelessWidget {
     final Widget button;
 
     if (cameraPosition.bearing == 0) {
+      // On web, we neither have the sensor impl nor the ability to rotate the
+      // map.
+      const orientationEnabled = !kIsWeb;
+
       button = Tooltip(
         message:
             // We anticipate canRequestLocation to be true in most real cases,
@@ -736,12 +740,14 @@ class LocationControls extends StatelessWidget {
             canRequestLocation ? 'My location' : 'My location (requires HTTPS)',
         child: TextButton(
           onPressed: centerLocation,
-          child: Image(
-            image: (tracking
-                    ? PrecachedAsset.locationNorth
-                    : PrecachedAsset.locationReticle)
-                .image,
-          ),
+          child: orientationEnabled
+              ? Image(
+                  image: (tracking
+                          ? PrecachedAsset.locationNorth
+                          : PrecachedAsset.locationReticle)
+                      .image,
+                )
+              : Icon(tracking ? Icons.my_location : Icons.location_searching),
         ),
       );
     } else {
