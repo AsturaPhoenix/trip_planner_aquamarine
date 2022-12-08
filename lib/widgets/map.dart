@@ -250,7 +250,7 @@ class MapState extends State<Map> {
         ) *
         (WmsTileProvider.logicalTileSize * math.pow(2, zoom) / 360);
 
-    const pixelSquaredTolerance = 1;
+    const pixelSquaredTolerance = 4;
 
     // Cease tracking if the camera is moved away from the tracking target. This
     // needs to be approximate and in screen-space because animateCamera does
@@ -797,11 +797,18 @@ class LocationControls extends StatelessWidget {
         } else {
           button = Tooltip(
             message: 'Reset north',
-            child: TextButton(
-              onPressed: resetBearing,
-              child: Transform.rotate(
-                angle: -cameraPosition.bearing * math.pi / 180,
-                child: Image(image: PrecachedAsset.compass.image),
+            child: GestureDetector(
+              // If we double-tap, jump straight to the My Location state. We
+              // might also intuitively handle this by doing this while the
+              // animation to north is in progress, but the API does not surface
+              // that without more work than it's worth.
+              onDoubleTap: trackLocation,
+              child: TextButton(
+                onPressed: resetBearing,
+                child: Transform.rotate(
+                  angle: -cameraPosition.bearing * math.pi / 180,
+                  child: Image(image: PrecachedAsset.compass.image),
+                ),
               ),
             ),
           );
