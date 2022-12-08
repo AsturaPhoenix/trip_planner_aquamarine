@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geomag/geomag.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -172,8 +173,37 @@ class MapState extends State<Map> {
 
   Future<_MarkerIcons>? _markerIcons;
 
+  GeoMag geomag = GeoMag();
+  GeoMagResult? _geomagneticCorrection;
+  LatLng? geomagneticReference;
+  double? get geomagneticCorrection {
+    // These tolerances are semi arbitrary.
+    const latitudeTolerance = 1.0,
+        longitudeTolerance = 1.0,
+        feetPerMeter = 3.28084;
+
+    if (devicePosition != null &&
+        (geomagneticReference == null ||
+            (devicePosition!.latitude - geomagneticReference!.latitude).abs() >
+                latitudeTolerance ||
+            (devicePosition!.longitude - geomagneticReference!.longitude)
+                    .abs() >
+                longitudeTolerance)) {
+      geomagneticReference = devicePosition!.toLatLng();
+      _geomagneticCorrection = geomag.calculate(
+        devicePosition!.latitude,
+        devicePosition!.longitude,
+        devicePosition!.altitude * feetPerMeter,
+        DateTime.now(),
+      );
+    }
+
+    return _geomagneticCorrection?.dec;
+  }
+
   CameraPosition cameraPosition = Map.initialCameraPosition;
   Position? devicePosition;
+  double? deviceBearing;
   // TODO: suspend on screen off
   StreamSubscription? positionSubscription, bearingSubscription;
   TrackingMode _trackingMode = TrackingMode.location;
@@ -183,6 +213,7 @@ class MapState extends State<Map> {
       if (_trackingMode == TrackingMode.bearing) {
         bearingSubscription!.cancel();
         bearingSubscription = null;
+        deviceBearing = null;
       }
       _trackingMode = value;
 
@@ -190,11 +221,16 @@ class MapState extends State<Map> {
         trackingAnimationStarted = false;
       } else if (value == TrackingMode.bearing) {
         bearingSubscription = FlutterCompass.events!.listen(
-          (event) => gmap?.animateCamera(
-            CameraUpdate.newCameraPosition(
-              cameraPosition.copyWith(bearing: event.heading),
-            ),
-          ),
+          (event) {
+            if (event.heading != null && geomagneticCorrection != null) {
+              deviceBearing = event.heading! + geomagneticCorrection!;
+              const animationThreshold = .2;
+              if ((deviceBearing! - cameraPosition.bearing).abs() >
+                  animationThreshold) {
+                animateTrackingCamera();
+              }
+            }
+          },
         );
       }
     }
@@ -225,7 +261,16 @@ class MapState extends State<Map> {
           ? CameraUpdate.newCameraPosition(
               cameraPosition.copyWith(target: target, bearing: 0),
             )
-          : CameraUpdate.newLatLng(target),
+          : trackingMode == TrackingMode.bearing &&
+                  deviceBearing != null &&
+                  cameraPosition.bearing != deviceBearing!
+              ? CameraUpdate.newCameraPosition(
+                  cameraPosition.copyWith(
+                    target: target,
+                    bearing: deviceBearing!,
+                  ),
+                )
+              : CameraUpdate.newLatLng(target),
     );
   }
 
