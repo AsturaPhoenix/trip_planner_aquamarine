@@ -4,8 +4,8 @@ import 'dart:core' as core;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_compass/flutter_compass.dart';
+import 'package:flutter/material.dart' hide Orientation;
+import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geomag/geomag.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -15,6 +15,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../main.dart' show canRequestLocation;
 import '../persistence/blob_cache.dart';
+import '../platform/orientation.dart';
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 import '../util/optional.dart';
@@ -136,7 +137,7 @@ extension on Position {
   LatLng toLatLng() => LatLng(latitude, longitude);
 }
 
-class MapState extends State<Map> {
+class MapState extends State<Map> with SingleTickerProviderStateMixin {
   static final log = Logger('MapState');
 
   late final chartOverlays = [
@@ -201,44 +202,44 @@ class MapState extends State<Map> {
     return _geomagneticCorrection?.dec;
   }
 
-  CameraPosition cameraPosition = Map.initialCameraPosition;
   Position? devicePosition;
-  double? deviceBearing;
   // TODO: suspend on screen off
   StreamSubscription? positionSubscription, bearingSubscription;
   TrackingMode _trackingMode = TrackingMode.location;
   TrackingMode get trackingMode => _trackingMode;
+  CameraPosition cameraPosition = Map.initialCameraPosition;
+  late MapAnimationController mapAnimation = MapAnimationController(
+    tickerProvider: this,
+    cameraPosition: Map.initialCameraPosition,
+    moveCamera: (cameraPosition) async {
+      await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
+      setState(() => this.cameraPosition = cameraPosition);
+    },
+  );
   set trackingMode(TrackingMode value) {
     if (value != _trackingMode) {
       if (_trackingMode == TrackingMode.bearing) {
         bearingSubscription!.cancel();
         bearingSubscription = null;
-        deviceBearing = null;
       }
+
       _trackingMode = value;
 
-      if (value == TrackingMode.location) {
-        trackingAnimationStarted = false;
-      } else if (value == TrackingMode.bearing) {
-        bearingSubscription = FlutterCompass.events!.listen(
+      if (value == TrackingMode.bearing) {
+        bearingSubscription = Orientation()
+            .compassUpdates(const Duration(milliseconds: 15))
+            .listen(
           (event) {
-            if (event.heading != null && geomagneticCorrection != null) {
-              deviceBearing = event.heading! + geomagneticCorrection!;
-              const animationThreshold = .2;
-              if ((deviceBearing! - cameraPosition.bearing).abs() >
-                  animationThreshold) {
-                animateTrackingCamera();
-              }
+            if (geomagneticCorrection != null) {
+              mapAnimation.add(
+                PartialCameraPosition(bearing: event + geomagneticCorrection!),
+              );
             }
           },
         );
       }
     }
   }
-
-  // It may take a few frames for the tracking animation to start; don't cancel
-  // before we start.
-  bool trackingAnimationStarted = false;
 
   void subscribeToPosition() {
     positionSubscription = Geolocator.getPositionStream().listen(
@@ -254,119 +255,44 @@ class MapState extends State<Map> {
     }
   }
 
-  void animateTrackingCamera() {
-    final target = devicePosition!.toLatLng();
-    gmap?.animateCamera(
-      trackingMode == TrackingMode.location && cameraPosition.bearing != 0
-          ? CameraUpdate.newCameraPosition(
-              cameraPosition.copyWith(target: target, bearing: 0),
-            )
-          : trackingMode == TrackingMode.bearing &&
-                  deviceBearing != null &&
-                  cameraPosition.bearing != deviceBearing!
-              ? CameraUpdate.newCameraPosition(
-                  cameraPosition.copyWith(
-                    target: target,
-                    bearing: deviceBearing!,
-                  ),
-                )
-              : CameraUpdate.newLatLng(target),
-    );
-  }
+  void animateTrackingCamera() => mapAnimation.add(
+        PartialCameraPosition(
+          target: devicePosition!.toLatLng(),
+          bearing: trackingMode == TrackingMode.bearing ? null : 0,
+        ),
+      );
 
-  // This is all pretty complicated in order to differentiate between user and
-  // programmatic camera movement. Android and iOS surface this information in
-  // onCameraMoveStarted, but web and Flutter do not.
-  //
-  // An alternate solution could be to cherry-pick PRs 3027 and 3033 and
-  // polyfill web.
+  // For the most part this isn't called for moveCamera, but there are cases
+  // where it is.
   void updateCameraPosition(CameraPosition newPosition) {
     // A full screen-space mapping uses the message channel and can interleave
     // with animation frames and produce an invalid result, so take advantage of
     // the Mercator projection and compute it here.
-    Offset toRelativeScreenSpace(
-      double latitude,
-      double longitude,
-      double zoom,
-    ) =>
+    Offset toRelativeScreenSpace(LatLng latlng, double zoom) =>
         Offset(
-          longitude,
-          -math.log(math.tan((90 + latitude) * math.pi / 360)),
+          latlng.longitude,
+          -math.log(math.tan((90 + latlng.latitude) * math.pi / 360)),
         ) *
         (WmsTileProvider.logicalTileSize * math.pow(2, zoom) / 360);
 
-    const pixelSquaredTolerance = 4;
+    const pixelSquaredTolerance = .25;
 
-    // Cease tracking if the camera is moved away from the tracking target. This
-    // needs to be approximate and in screen-space because animateCamera does
-    // not move the camera all the way to the target position, so we get jitter
-    // in the pixel domain.
-    bool isDeviationIncreasing() {
-      final target = toRelativeScreenSpace(
-        devicePosition!.latitude,
-        devicePosition!.longitude,
-        newPosition.zoom,
-      );
-
-      return (target -
-                  toRelativeScreenSpace(
-                    newPosition.target.latitude,
-                    newPosition.target.longitude,
-                    newPosition.zoom,
-                  ))
-              .distanceSquared >
-          (target -
-                      toRelativeScreenSpace(
-                        cameraPosition.target.latitude,
-                        cameraPosition.target.longitude,
-                        newPosition.zoom,
-                      ))
-                  .distanceSquared +
-              pixelSquaredTolerance;
+    final cmpZoom = math.min(newPosition.zoom, cameraPosition.zoom);
+    if ((toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
+                toRelativeScreenSpace(newPosition.target, cmpZoom))
+            .distanceSquared >
+        pixelSquaredTolerance) {
+      setState(() {
+        trackingMode = TrackingMode.free;
+        cameraPosition = newPosition;
+        mapAnimation.override(newPosition);
+      });
     }
-
-    bool isDeviationNear() {
-      // Base the tolerance on the farthest-out zoom to maximize tolerance.
-      final zoom = math.min(newPosition.zoom, cameraPosition.zoom);
-      return (toRelativeScreenSpace(
-                    devicePosition!.latitude,
-                    devicePosition!.longitude,
-                    zoom,
-                  ) -
-                  toRelativeScreenSpace(
-                    newPosition.target.latitude,
-                    newPosition.target.longitude,
-                    zoom,
-                  ))
-              .distanceSquared <=
-          pixelSquaredTolerance;
-    }
-
-    setState(() {
-      // If we want to be tracking but we haven't gotten a position fix yet,
-      // allow us to continue waiting.
-      if (devicePosition != null && trackingMode != TrackingMode.free) {
-        if (newPosition.zoom != cameraPosition.zoom && !isDeviationNear()) {
-          // Animation stops while zoom changes, so cancel tracking for a smooth
-          // user experience, unless we're simply zooming about the tracked
-          // location.
-          trackingMode = TrackingMode.free;
-        } else {
-          if (isDeviationIncreasing()) {
-            if (trackingAnimationStarted) {
-              trackingMode = TrackingMode.free;
-            }
-          } else {
-            trackingAnimationStarted = true;
-          }
-        }
-      }
-      cameraPosition = newPosition;
-    });
   }
 
   void animateToSelectedStation() {
-    gmap!.animateCamera(CameraUpdate.newLatLng(widget.selectedStation!.marker));
+    mapAnimation
+        .set(PartialCameraPosition(target: widget.selectedStation!.marker));
   }
 
   @override
@@ -597,7 +523,9 @@ class MapState extends State<Map> {
                   await DefaultAssetBundle.of(context)
                       .loadString('assets/nautical-style.json'),
                 );
-                if (widget.selectedStation != null) {
+                if (widget.selectedStation != null &&
+                    (trackingMode == TrackingMode.free ||
+                        !widget.locationEnabled)) {
                   animateToSelectedStation();
                 }
               },
@@ -653,19 +581,205 @@ class MapState extends State<Map> {
                     ),
                 trackBearing: () =>
                     setState(() => trackingMode = TrackingMode.bearing),
-                resetBearing: () => gmap!.animateCamera(
-                  CameraUpdate.newCameraPosition(
-                    cameraPosition.copyWith(bearing: 0),
-                  ),
-                ),
-                zoomIn: () => gmap!.animateCamera(CameraUpdate.zoomIn()),
-                zoomOut: () => gmap!.animateCamera(CameraUpdate.zoomOut()),
+                resetBearing: () =>
+                    mapAnimation.set(PartialCameraPosition(bearing: 0)),
+                zoomIn: () => mapAnimation.addDelta(CameraDelta(zoom: 1)),
+                zoomOut: () => mapAnimation.addDelta(CameraDelta(zoom: -1)),
                 setLod: _setLod,
               ),
             ),
           ),
       ],
     );
+  }
+}
+
+class PartialCameraPosition {
+  PartialCameraPosition({this.bearing, this.target, this.zoom});
+  final double? bearing;
+  final LatLng? target;
+  final double? zoom;
+
+  CameraDelta operator -(CameraPosition basis) => CameraDelta(
+        bearing:
+            bearing == null ? 0 : (bearing! - basis.bearing + 180) % 360 - 180,
+        target: target == null
+            ? const LatLng(0, 0)
+            : LatLng(
+                target!.latitude - basis.target.latitude,
+                target!.longitude - basis.target.longitude,
+              ),
+        zoom: zoom == null ? 0 : zoom! - basis.zoom,
+      );
+
+  CameraPosition apply(CameraPosition original) =>
+      original.copyWith(bearing: bearing, target: target, zoom: zoom);
+}
+
+class CameraDelta {
+  CameraDelta({
+    this.bearing = 0,
+    this.target = const LatLng(0, 0),
+    this.zoom = 0,
+  });
+  final double bearing;
+  final LatLng target;
+  final double zoom;
+
+  CameraDelta operator +(CameraDelta other) => CameraDelta(
+        bearing: bearing + other.bearing,
+        target: LatLng(
+          target.latitude + other.target.latitude,
+          target.longitude + other.target.longitude,
+        ),
+        zoom: zoom + other.zoom,
+      );
+
+  CameraDelta operator *(double factor) => CameraDelta(
+        bearing: bearing * factor,
+        target: LatLng(target.latitude * factor, target.longitude * factor),
+        zoom: zoom * factor,
+      );
+}
+
+extension on CameraPosition {
+  CameraPosition operator +(CameraDelta delta) => CameraPosition(
+        bearing: (bearing + delta.bearing) % 360,
+        target: LatLng(
+          target.latitude + delta.target.latitude,
+          target.longitude + delta.target.longitude,
+        ),
+        zoom: zoom + delta.zoom,
+      );
+}
+
+class CameraAnimation {
+  CameraAnimation({
+    required this.delta,
+    required this.start,
+    required this.length,
+    required this.curve,
+  });
+  final CameraDelta delta;
+  final Duration start, length;
+  Duration get end => start + length;
+  final Curve curve;
+
+  double normalize(Duration t) => t < start
+      ? 0
+      : t > end
+          ? 1
+          : (t - start).inMicroseconds / length.inMicroseconds;
+
+  CameraDelta evaluate(Duration t) => delta * curve.transform(normalize(t));
+}
+
+class MapAnimationController {
+  MapAnimationController({
+    required TickerProvider tickerProvider,
+    required CameraPosition cameraPosition,
+    this.moveCamera,
+  })  : _basis = cameraPosition,
+        _target = cameraPosition {
+    ticker = tickerProvider.createTicker(_onTick);
+  }
+  late final Ticker ticker;
+  void Function(CameraPosition)? moveCamera;
+
+  CameraPosition _basis, _target;
+  late Duration t;
+
+  bool get isActive => ticker.isActive;
+
+  final activeAnimations = <CameraAnimation>{};
+
+  void addDelta(
+    CameraDelta delta, [
+    Duration length = const Duration(milliseconds: 300),
+    Curve curve = Curves.easeInOut,
+  ]) {
+    if (activeAnimations.isEmpty) {
+      ticker.start();
+      t = Duration.zero;
+    }
+
+    activeAnimations.add(
+      CameraAnimation(
+        delta: delta,
+        start: t,
+        length: length,
+        curve: curve,
+      ),
+    );
+
+    _target += delta;
+  }
+
+  void add(
+    PartialCameraPosition target, [
+    Duration length = const Duration(milliseconds: 600),
+    Curve curve = Curves.easeInOut,
+  ]) {
+    if (activeAnimations.isEmpty) {
+      ticker.start();
+      t = Duration.zero;
+    }
+
+    activeAnimations.add(
+      CameraAnimation(
+        delta: target - _target,
+        start: t,
+        length: length,
+        curve: curve,
+      ),
+    );
+
+    _target = target.apply(_target);
+  }
+
+  void set(
+    PartialCameraPosition target, [
+    Duration length = const Duration(milliseconds: 600),
+    Curve curve = Curves.easeInOut,
+  ]) {
+    if (activeAnimations.isEmpty) {
+      ticker.start();
+      t = Duration.zero;
+    }
+
+    activeAnimations
+      ..clear()
+      ..add(
+        CameraAnimation(
+          delta: target - _target,
+          start: t,
+          length: length,
+          curve: curve,
+        ),
+      );
+
+    _target = target.apply(_target);
+  }
+
+  void _onTick(Duration t) {
+    this.t = t;
+    final delta =
+        activeAnimations.map((a) => a.evaluate(t)).reduce((a, b) => a + b);
+    moveCamera?.call(_basis + delta);
+    final completed = [...activeAnimations.where((a) => t >= a.end)];
+    if (completed.isNotEmpty) {
+      _basis += completed.map((a) => a.delta).reduce((a, b) => a + b);
+      activeAnimations.removeAll(completed);
+      if (activeAnimations.isEmpty) {
+        ticker.stop();
+      }
+    }
+  }
+
+  void override(CameraPosition override) {
+    ticker.stop(canceled: true);
+    activeAnimations.clear();
+    _basis = _target = override;
   }
 }
 
