@@ -421,9 +421,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                     // is shown.
                     infoWindow: InfoWindow(
                       title: formatPosition(devicePosition!),
-                      // No need for kIsWeb since we haven't implemented a
-                      // location widget for web yet.
-                      onTap: () => gmap!.hideMarkerInfoWindow(markerId),
+                      onTap: kIsWeb
+                          ? null
+                          : () => gmap!.hideMarkerInfoWindow(markerId),
                     ),
                     // Take precedence over other markers.
                     zIndex: MarkerClass.currentLocation,
