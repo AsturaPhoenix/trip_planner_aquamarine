@@ -114,13 +114,13 @@ class CompassDisk extends StatelessWidget {
             children: [
               Transform.rotate(
                 angle: -geomagneticCorrection,
-                child: const CompassRose(),
+                child: const CompassRose(elevation: 1),
               ),
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: AspectRatio(
                   aspectRatio: 7 / 72,
-                  child: CustomPaint(painter: CompassArrow()),
+                  child: CustomPaint(painter: CompassArrow(elevation: 4)),
                 ),
               )
             ],
@@ -130,14 +130,14 @@ class CompassDisk extends StatelessWidget {
 }
 
 class CompassRose extends StatelessWidget {
-  const CompassRose({
-    super.key,
-  });
+  const CompassRose({super.key, this.elevation = 0});
+  final double elevation;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       shape: const CircleBorder(),
+      elevation: elevation,
       child: LayoutBuilder(
         builder: (context, constraints) {
           const referenceSize = 0x180;
@@ -186,17 +186,33 @@ class CompassRose extends StatelessWidget {
 }
 
 class CompassArrow extends CustomPainter {
-  const CompassArrow();
+  const CompassArrow({this.elevation = 0});
+  final double elevation;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final outline = [
+      Offset(0, center.dy),
+      Offset(center.dx, 0),
+      Offset(size.width, center.dy),
+      Offset(center.dx, size.height),
+    ];
+
+    canvas.drawShadow(
+      Path()..addPolygon(outline, true),
+      Colors.black,
+      elevation,
+      false,
+    );
+
     canvas.drawPath(
       Path()
         ..addPolygon(
           [
-            Offset(size.width / 2, 0),
-            Offset(0, size.height / 2),
-            Offset(size.width / 2, size.height / 2)
+            center,
+            outline[0],
+            outline[1],
           ],
           true,
         ),
@@ -206,9 +222,9 @@ class CompassArrow extends CustomPainter {
       Path()
         ..addPolygon(
           [
-            Offset(size.width / 2, 0),
-            Offset(size.width, size.height / 2),
-            Offset(size.width / 2, size.height / 2)
+            center,
+            outline[1],
+            outline[2],
           ],
           true,
         ),
@@ -218,28 +234,29 @@ class CompassArrow extends CustomPainter {
       Path()
         ..addPolygon(
           [
-            Offset(size.width / 2, size.height),
-            Offset(0, size.height / 2),
-            Offset(size.width / 2, size.height / 2)
-          ],
-          true,
-        ),
-      Paint()..color = const Color(0xffbdc0c5),
-    );
-    canvas.drawPath(
-      Path()
-        ..addPolygon(
-          [
-            Offset(size.width / 2, size.height),
-            Offset(size.width, size.height / 2),
-            Offset(size.width / 2, size.height / 2)
+            center,
+            outline[2],
+            outline[3],
           ],
           true,
         ),
       Paint()..color = const Color(0xffd1d3d7),
     );
+    canvas.drawPath(
+      Path()
+        ..addPolygon(
+          [
+            center,
+            outline[3],
+            outline[0],
+          ],
+          true,
+        ),
+      Paint()..color = const Color(0xffbdc0c5),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CompassArrow oldDelegate) =>
+      elevation != oldDelegate.elevation;
 }
