@@ -4,7 +4,7 @@ import 'dart:core' as core;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' hide Orientation;
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geomag/geomag.dart';
@@ -15,7 +15,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../main.dart' show canRequestLocation;
 import '../persistence/blob_cache.dart';
-import '../platform/orientation.dart';
+import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 import '../util/optional.dart';
@@ -226,13 +226,14 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       _trackingMode = value;
 
       if (value == TrackingMode.bearing) {
-        bearingSubscription = Orientation()
-            .compassUpdates(const Duration(milliseconds: 15))
-            .listen(
-          (event) {
+        orientation.updateInterval = const Duration(milliseconds: 15);
+        bearingSubscription = orientation.bearing.listen(
+          (bearing) {
             if (geomagneticCorrection != null) {
               mapAnimation.add(
-                PartialCameraPosition(bearing: event + geomagneticCorrection!),
+                PartialCameraPosition(
+                  bearing: bearing + geomagneticCorrection!,
+                ),
               );
             }
           },

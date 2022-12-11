@@ -16,6 +16,7 @@ Additionally, the following git repos should exist as siblings to `trip_planner_
 * `git@github.com:AsturaPhoenix/joda_time.git`
 * `git@github.com:AsturaPhoenix/flutter-plugins.git`, branch: `dev`
 * `git@github.com:AsturaPhoenix/flutter_html.git`, branch: `rosswang`
+* `git@github.com:AsturaPhoenix/motion_sensors.git`, branch: `rosswang`
 
 ### Configuration
 
