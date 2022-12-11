@@ -665,6 +665,7 @@ class CameraAnimation {
   final Duration start, length;
   Duration get end => start + length;
   final Curve curve;
+  final completer = Completer<bool>();
 
   double normalize(Duration t) => t < start
       ? 0
@@ -694,72 +695,74 @@ class MapAnimationController {
 
   final activeAnimations = <CameraAnimation>{};
 
-  void addDelta(
+  void _start() {
+    ticker.start();
+    t = Duration.zero;
+  }
+
+  Future<bool> addDelta(
     CameraDelta delta, [
     Duration length = const Duration(milliseconds: 300),
     Curve curve = Curves.easeInOut,
   ]) {
     if (activeAnimations.isEmpty) {
-      ticker.start();
-      t = Duration.zero;
+      _start();
     }
 
-    activeAnimations.add(
-      CameraAnimation(
-        delta: delta,
-        start: t,
-        length: length,
-        curve: curve,
-      ),
+    final animation = CameraAnimation(
+      delta: delta,
+      start: t,
+      length: length,
+      curve: curve,
     );
+    activeAnimations.add(animation);
 
     _target += delta;
+    return animation.completer.future;
   }
 
-  void add(
+  Future<bool> add(
     PartialCameraPosition target, [
     Duration length = const Duration(milliseconds: 600),
     Curve curve = Curves.easeInOut,
   ]) {
     if (activeAnimations.isEmpty) {
-      ticker.start();
-      t = Duration.zero;
+      _start();
     }
 
-    activeAnimations.add(
-      CameraAnimation(
-        delta: target - _target,
-        start: t,
-        length: length,
-        curve: curve,
-      ),
+    final animation = CameraAnimation(
+      delta: target - _target,
+      start: t,
+      length: length,
+      curve: curve,
     );
+    activeAnimations.add(animation);
 
     _target = target.apply(_target);
+    return animation.completer.future;
   }
 
-  void set(
+  Future<bool> set(
     PartialCameraPosition target, [
     Duration length = const Duration(milliseconds: 600),
     Curve curve = Curves.easeInOut,
   ]) {
     if (activeAnimations.isEmpty) {
-      ticker.start();
-      t = Duration.zero;
+      _start();
     }
 
+    final animation = CameraAnimation(
+      delta: target - _target,
+      start: t,
+      length: length,
+      curve: curve,
+    );
     activeAnimations
       ..clear()
-      ..add(
-        CameraAnimation(
-          delta: target - _target,
-          start: t,
-          length: length,
-          curve: curve,
-        ),
-      );
+      ..add(animation);
 
     _target = target.apply(_target);
+    return animation.completer.future;
   }
 
   void _onTick(Duration t) {
@@ -774,13 +777,19 @@ class MapAnimationController {
       if (activeAnimations.isEmpty) {
         ticker.stop();
       }
+      for (final animation in completed) {
+        animation.completer.complete(true);
+      }
     }
   }
 
   void override(CameraPosition override) {
     ticker.stop(canceled: true);
-    activeAnimations.clear();
     _basis = _target = override;
+    for (final animation in activeAnimations) {
+      animation.completer.complete(false);
+    }
+    activeAnimations.clear();
   }
 }
 
@@ -811,11 +820,8 @@ class MapControls extends StatelessWidget {
   final CameraPosition cameraPosition;
   final int lod, maxOversample;
   final TrackingMode trackingMode;
-  final void Function()? trackLocation,
-      trackBearing,
-      resetBearing,
-      zoomIn,
-      zoomOut;
+  final void Function()? trackLocation, trackBearing, zoomIn, zoomOut;
+  final FutureOr<void> Function()? resetBearing;
   final void Function(int lod) setLod;
 
   @override
@@ -914,7 +920,7 @@ class MapButtonPanel extends StatelessWidget {
       );
 }
 
-class LocationControls extends StatelessWidget {
+class LocationControls extends StatefulWidget {
   const LocationControls({
     super.key,
     required this.cameraPosition,
@@ -925,19 +931,25 @@ class LocationControls extends StatelessWidget {
   });
   final CameraPosition cameraPosition;
   final TrackingMode trackingMode;
-  final void Function()? trackLocation, trackBearing, resetBearing;
+  final void Function()? trackLocation, trackBearing;
+  final FutureOr<void> Function()? resetBearing;
+
+  @override
+  State<LocationControls> createState() => _LocationControlsState();
+}
+
+class _LocationControlsState extends State<LocationControls> {
+  bool bearingResetInProgress = false;
 
   @override
   Widget build(BuildContext context) {
     final Widget button;
 
-    // On web, we neither have the sensor impl nor the ability to rotate the
-    // map.
     const orientationEnabled = !kIsWeb;
 
-    switch (trackingMode) {
+    switch (widget.trackingMode) {
       case TrackingMode.free:
-        if (cameraPosition.bearing == 0) {
+        if (widget.cameraPosition.bearing == 0) {
           button = Tooltip(
             message:
                 // We anticipate canRequestLocation to be true in most real
@@ -948,7 +960,7 @@ class LocationControls extends StatelessWidget {
                     ? 'My location'
                     : 'My location (requires HTTPS)',
             child: TextButton(
-              onPressed: trackLocation,
+              onPressed: widget.trackLocation,
               child: orientationEnabled
                   ? Image(image: PrecachedAsset.locationReticle.image)
                   : const Icon(Icons.location_searching),
@@ -957,18 +969,19 @@ class LocationControls extends StatelessWidget {
         } else {
           button = Tooltip(
             message: 'Reset north',
-            child: GestureDetector(
-              // If we double-tap, jump straight to the My Location state. We
-              // might also intuitively handle this by doing this while the
-              // animation to north is in progress, but the API does not surface
-              // that without more work than it's worth.
-              onDoubleTap: trackLocation,
-              child: TextButton(
-                onPressed: resetBearing,
-                child: Transform.rotate(
-                  angle: -cameraPosition.bearing * math.pi / 180,
-                  child: Image(image: PrecachedAsset.compass.image),
-                ),
+            child: TextButton(
+              onPressed: bearingResetInProgress
+                  ? widget.trackLocation
+                  : Optional(widget.resetBearing).map(
+                      (f) => () async {
+                        setState(() => bearingResetInProgress = true);
+                        await f();
+                        setState(() => bearingResetInProgress = false);
+                      },
+                    ),
+              child: Transform.rotate(
+                angle: -widget.cameraPosition.bearing * math.pi / 180,
+                child: Image(image: PrecachedAsset.compass.image),
               ),
             ),
           );
@@ -978,7 +991,8 @@ class LocationControls extends StatelessWidget {
         button = Tooltip(
           message: orientationEnabled ? 'Toggle heading' : 'My location',
           child: TextButton(
-            onPressed: orientationEnabled ? trackBearing : trackLocation,
+            onPressed:
+                orientationEnabled ? widget.trackBearing : widget.trackLocation,
             child: orientationEnabled
                 ? Image(image: PrecachedAsset.locationNorth.image)
                 : const Icon(Icons.my_location),
@@ -989,7 +1003,7 @@ class LocationControls extends StatelessWidget {
         button = Tooltip(
           message: 'Toggle heading',
           child: TextButton(
-            onPressed: trackLocation,
+            onPressed: widget.trackLocation,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -997,7 +1011,7 @@ class LocationControls extends StatelessWidget {
                   clipBehavior: Clip.hardEdge,
                   child: Transform(
                     transform: Matrix4.translationValues(40.0, 60.0, 0.0)
-                      ..rotateZ(-cameraPosition.bearing * math.pi / 180)
+                      ..rotateZ(-widget.cameraPosition.bearing * math.pi / 180)
                       ..translate(-40.0, -40.0, 0.0),
                     child: Image(image: PrecachedAsset.compassDirections.image),
                   ),
