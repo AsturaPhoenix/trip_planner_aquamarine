@@ -419,7 +419,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                     anchor: const Offset(.5, .5),
                     position: devicePosition!.toLatLng(),
                     icon: markerIcons.location,
-                    // is shown.
+                    // TODO: This text does not update while the info window is
+                    // shown.
                     infoWindow: InfoWindow(
                       title: formatPosition(devicePosition!),
                       onTap: kIsWeb
@@ -428,6 +429,13 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                     ),
                     // Take precedence over other markers.
                     zIndex: MarkerClass.currentLocation,
+                    onTap: () {
+                      setState(() => trackingMode = TrackingMode.location);
+                      // Although the map will automatically animate, start an
+                      // explicit animation so we don't have to try to ignore
+                      // the onCameraMove events.
+                      animateTrackingCamera();
+                    },
                   ),
                 );
               }
