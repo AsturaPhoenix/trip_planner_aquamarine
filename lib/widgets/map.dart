@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geomag/geomag.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -174,34 +173,6 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
   Future<_MarkerIcons>? _markerIcons;
 
-  GeoMag geomag = GeoMag();
-  GeoMagResult? _geomagneticCorrection;
-  LatLng? geomagneticReference;
-  double? get geomagneticCorrection {
-    // These tolerances are semi arbitrary.
-    const latitudeTolerance = 1.0,
-        longitudeTolerance = 1.0,
-        feetPerMeter = 3.28084;
-
-    if (devicePosition != null &&
-        (geomagneticReference == null ||
-            (devicePosition!.latitude - geomagneticReference!.latitude).abs() >
-                latitudeTolerance ||
-            (devicePosition!.longitude - geomagneticReference!.longitude)
-                    .abs() >
-                longitudeTolerance)) {
-      geomagneticReference = devicePosition!.toLatLng();
-      _geomagneticCorrection = geomag.calculate(
-        devicePosition!.latitude,
-        devicePosition!.longitude,
-        devicePosition!.altitude * feetPerMeter,
-        DateTime.now(),
-      );
-    }
-
-    return _geomagneticCorrection?.dec;
-  }
-
   Position? devicePosition;
   // TODO: suspend on screen off
   StreamSubscription? positionSubscription, bearingSubscription;
@@ -226,13 +197,20 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       _trackingMode = value;
 
       if (value == TrackingMode.bearing) {
-        orientation.updateInterval = const Duration(milliseconds: 15);
-        bearingSubscription = orientation.bearing.listen(
+        orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
+        bearingSubscription = orientation
+            .withGeomagneticCorrection(
+          orientation.wrapWithPositionFunction(
+            orientation.bearing,
+            () => devicePosition,
+          ),
+        )
+            .listen(
           (bearing) {
-            if (geomagneticCorrection != null) {
+            if (bearing.geomagneticCorrection != null) {
               mapAnimation.add(
                 PartialCameraPosition(
-                  bearing: bearing + geomagneticCorrection!,
+                  bearing: bearing.value + bearing.geomagneticCorrection!.dec,
                 ),
               );
             }
@@ -953,8 +931,6 @@ class _LocationControlsState extends State<LocationControls> {
   Widget build(BuildContext context) {
     final Widget button;
 
-    const orientationEnabled = !kIsWeb;
-
     switch (widget.trackingMode) {
       case TrackingMode.free:
         if (widget.cameraPosition.bearing == 0) {
@@ -969,7 +945,7 @@ class _LocationControlsState extends State<LocationControls> {
                     : 'My location (requires HTTPS)',
             child: TextButton(
               onPressed: widget.trackLocation,
-              child: orientationEnabled
+              child: orientation.isOrientationAvailable
                   ? Image(image: PrecachedAsset.locationReticle.image)
                   : const Icon(Icons.location_searching),
             ),
@@ -997,11 +973,14 @@ class _LocationControlsState extends State<LocationControls> {
         break;
       case TrackingMode.location:
         button = Tooltip(
-          message: orientationEnabled ? 'Toggle heading' : 'My location',
+          message: orientation.isOrientationAvailable
+              ? 'Toggle heading'
+              : 'My location',
           child: TextButton(
-            onPressed:
-                orientationEnabled ? widget.trackBearing : widget.trackLocation,
-            child: orientationEnabled
+            onPressed: orientation.isOrientationAvailable
+                ? widget.trackBearing
+                : widget.trackLocation,
+            child: orientation.isOrientationAvailable
                 ? Image(image: PrecachedAsset.locationNorth.image)
                 : const Icon(Icons.my_location),
           ),

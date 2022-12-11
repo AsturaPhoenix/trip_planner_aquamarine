@@ -325,8 +325,7 @@ class TidePanelState extends State<TidePanel> {
                     ),
                   ),
                 ),
-                Align(
-                  alignment: Alignment.center,
+                Center(
                   child: TideGraph(
                     client: widget.client,
                     station: widget.station,
@@ -678,8 +677,7 @@ class TimeDisplay extends StatelessWidget {
         fontWeight: FontWeight.bold,
         color: colorScheme.tertiary,
       ),
-      child: Align(
-        alignment: Alignment.center,
+      child: Center(
         child: Container(
           padding: const EdgeInsets.all(4),
           width: contentWidth,

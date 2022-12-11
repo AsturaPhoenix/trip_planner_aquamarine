@@ -17,8 +17,10 @@ import 'package:timezone/data/latest.dart';
 
 import 'persistence/blob_cache.dart';
 import 'persistence/cache_box.dart';
+import 'platform/orientation.dart' as orientation;
 import 'providers/trip_planner_client.dart';
 import 'util/optional.dart';
+import 'widgets/compass.dart';
 import 'widgets/details_panel.dart';
 import 'widgets/map.dart';
 import 'widgets/tide_panel.dart';
@@ -32,6 +34,8 @@ void main() async {
       stackTrace: record.stackTrace,
     ),
   );
+
+  final prefetch = orientation.prefetchCapabilities();
 
   initializeTimeZones();
 
@@ -66,6 +70,8 @@ void main() async {
           blobs > 500 || blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
     ),
   );
+
+  await prefetch;
 
   runApp(
     TripPlanner(
@@ -136,12 +142,6 @@ class TripPlannerState extends State<TripPlanner> {
   bool hasModal = false;
 
   Future<bool> requestLocationPermission() async {
-    // Use Permission rather than Geolocator for permission request to take
-    // advantage of it failing on web so we don't default to making an annoying
-    //permission request.
-    //
-    // If this negatively affects the experience on mobile web, we can consider
-    // gating on kWeb + defaultTargetPlatform instead.
     bool enabled =
         kIsWeb ? true : await Permission.locationWhenInUse.request().isGranted;
     setState(() => locationEnabled = enabled);
@@ -190,8 +190,8 @@ class TripPlannerState extends State<TripPlanner> {
   Widget build(BuildContext context) => MaterialApp(
         title: 'BASK Trip Planner',
         theme: ThemeData(
-          colorScheme:
-              ColorScheme.fromSeed(seedColor: const Color(0xffbbccff)).copyWith(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xffbbccff),
             background: const Color(0xffbbccff),
             secondary: const Color(0xff8899cc),
             tertiary: const Color(0xffaa0000),
@@ -301,6 +301,17 @@ class TripPlannerState extends State<TripPlanner> {
               const Opacity(opacity: 0, child: title),
           ],
         ),
+        actions: [
+          if (orientation.isOrientationAvailable)
+            IconButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const Compass()),
+              ),
+              icon: const Icon(Icons.explore),
+              tooltip: 'Compass',
+            )
+        ],
       ),
       body: Column(
         children: [

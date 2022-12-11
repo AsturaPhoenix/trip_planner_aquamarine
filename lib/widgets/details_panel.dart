@@ -141,8 +141,7 @@ class PoiDetails extends StatelessWidget {
                 );
 
                 return detailsImg
-                    ? Align(
-                        alignment: Alignment.center,
+                    ? Center(
                         heightFactor: 1,
                         child: image,
                       )
@@ -218,9 +217,6 @@ class TideCurrentDetailsState extends State<TideCurrentDetails> {
               )
             : snapshot.hasError
                 ? Text(snapshot.error?.toString() ?? 'Error')
-                : const Align(
-                    alignment: Alignment.center,
-                    child: CircularProgressIndicator(),
-                  ),
+                : const Center(child: CircularProgressIndicator()),
       );
 }
