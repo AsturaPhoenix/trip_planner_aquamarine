@@ -223,17 +223,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   TrackingMode _trackingMode = TrackingMode.location;
   TrackingMode get trackingMode => _trackingMode;
   CameraPosition cameraPosition = Map.initialCameraPosition;
-  late final mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
-    tickerProvider: this,
-    initialState: Map.initialCameraPosition,
-    applyDelta: (state, delta) => state + delta,
-    calculateDelta: (after, before) => after - before,
-    lerp: (delta, t) => delta * t,
-    setState: (cameraPosition) async {
-      await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
-      setState(() => this.cameraPosition = cameraPosition);
-    },
-  );
+  late final AnimationCoordinator<CameraPosition, CameraDelta> mapAnimation;
   set trackingMode(TrackingMode value) {
     if (value != _trackingMode) {
       if (_trackingMode == TrackingMode.bearing) {
@@ -245,19 +235,15 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
       if (value == TrackingMode.bearing) {
         orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-        bearingSubscription = orientation
-            .withGeomagneticCorrection(
-          orientation.wrapWithPositionFunction(
-            orientation.bearing,
-            () => devicePosition,
-          ),
-        )
-            .listen(
+        final geomag = orientation.CachingGeoMag();
+        bearingSubscription = orientation.bearing.listen(
           (bearing) {
-            if (bearing.geomagneticCorrection != null) {
+            final geomagneticCorrection =
+                geomag.getFromPosition(devicePosition);
+            if (geomagneticCorrection != null) {
               mapAnimation.add(
                 mapAnimation.target.copyWith(
-                  bearing: bearing.value + bearing.geomagneticCorrection!.dec,
+                  bearing: bearing + geomagneticCorrection.dec,
                 ),
               );
             }
@@ -327,6 +313,18 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     if (widget.locationEnabled) {
       subscribeToPosition();
     }
+
+    mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
+      tickerProvider: this,
+      initialState: Map.initialCameraPosition,
+      applyDelta: (state, delta) => state + delta,
+      calculateDelta: (after, before) => after - before,
+      lerp: (delta, t) => delta * t,
+      setState: (cameraPosition) async {
+        await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
+        setState(() => this.cameraPosition = cameraPosition);
+      },
+    );
   }
 
   @override
@@ -407,6 +405,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     super.dispose();
+    mapAnimation.ticker.stop(canceled: true);
     positionSubscription?.cancel();
     bearingSubscription?.cancel();
     gmap?.dispose();

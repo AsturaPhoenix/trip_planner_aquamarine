@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../platform/orientation.dart' as orientation;
-import '../util/optional.dart';
+import '../util/upsample_stream.dart';
 import 'map.dart';
 
 class Compass extends StatefulWidget {
@@ -17,10 +17,9 @@ class Compass extends StatefulWidget {
   State<Compass> createState() => CompassState();
 }
 
-class CompassState extends State<Compass> {
+class CompassState extends State<Compass> with TickerProviderStateMixin {
   late final Stream<Position> positionStream;
-  late final Stream<orientation.WithGeomagneticCorrection<double>>
-      orientationStream;
+  late final Stream<double> orientationStream, geomagneticCorrectionStream;
 
   @override
   void initState() {
@@ -32,14 +31,29 @@ class CompassState extends State<Compass> {
     }()
         .asBroadcastStream();
 
+    double polar(double radians) => (radians + pi) % (2 * pi) - pi;
+
     orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-    orientationStream = orientation.withGeomagneticCorrection(
-      Rx.combineLatest2(
-        orientation.bearing,
-        positionStream,
-        orientation.WithSpaceTime.fromPosition,
-      ),
-    );
+    orientationStream = orientation.bearing
+        .map((bearing) => orientation.radians(bearing))
+        .upsample(
+          tickerProvider: this,
+          initialState: 0,
+          applyDelta: (orientation, delta) => polar(orientation + delta),
+          calculateDelta: (after, before) => polar(after - before),
+          lerp: (delta, t) => delta * t,
+        );
+    geomagneticCorrectionStream = positionStream
+        .map(orientation.CachingGeoMag().getFromPosition)
+        .whereNotNull()
+        .map((r) => orientation.radians(r.dec))
+        .upsample(
+          tickerProvider: this,
+          initialState: 0,
+          applyDelta: (correction, delta) => polar(correction + delta),
+          calculateDelta: (after, before) => polar(after - before),
+          lerp: (delta, t) => delta * t,
+        );
   }
 
   @override
@@ -74,18 +88,9 @@ class CompassState extends State<Compass> {
                 Flexible(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: StreamBuilder(
-                      stream: orientationStream,
-                      builder: (context, orientationSnapshot) => CompassDisk(
-                        magnetic: Optional(orientationSnapshot.data?.value)
-                                .map(orientation.radians) ??
-                            0,
-                        geomagneticCorrection: Optional(
-                              orientationSnapshot
-                                  .data?.geomagneticCorrection?.dec,
-                            ).map(orientation.radians) ??
-                            0,
-                      ),
+                    child: CompassDisk(
+                      magnetic: orientationStream,
+                      geomagneticCorrection: geomagneticCorrectionStream,
                     ),
                   ),
                 ),
@@ -102,29 +107,39 @@ class CompassDisk extends StatelessWidget {
     required this.magnetic,
     required this.geomagneticCorrection,
   });
-  final double magnetic, geomagneticCorrection;
+  final Stream<double> magnetic, geomagneticCorrection;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
-        child: Transform.rotate(
-          angle: -magnetic,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Transform.rotate(
-                angle: -geomagneticCorrection,
-                child: const CompassRose(elevation: 1),
+        child: StreamBuilder(
+          stream: magnetic,
+          builder: (context, magnetic) {
+            return Transform.rotate(
+              angle: -(magnetic.data ?? 0),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  StreamBuilder(
+                    stream: geomagneticCorrection,
+                    builder: (context, geomagneticCorrection) {
+                      return Transform.rotate(
+                        angle: -(geomagneticCorrection.data ?? 0),
+                        child: const CompassRose(elevation: 1),
+                      );
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: AspectRatio(
+                      aspectRatio: 7 / 72,
+                      child: CustomPaint(painter: CompassArrow(elevation: 4)),
+                    ),
+                  )
+                ],
               ),
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: AspectRatio(
-                  aspectRatio: 7 / 72,
-                  child: CustomPaint(painter: CompassArrow(elevation: 4)),
-                ),
-              )
-            ],
-          ),
+            );
+          },
         ),
       );
 }

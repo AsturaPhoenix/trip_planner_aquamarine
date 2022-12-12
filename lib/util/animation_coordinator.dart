@@ -36,6 +36,7 @@ class AnimationCoordinator<State, Delta> {
     required this.calculateDelta,
     required this.lerp,
     this.setState,
+    this.clock,
   })  : _basis = initialState,
         _target = initialState {
     ticker = tickerProvider.createTicker(_onTick);
@@ -46,17 +47,24 @@ class AnimationCoordinator<State, Delta> {
   Delta Function(Delta, double t) lerp;
   void Function(State)? setState;
 
+  /// A real-time mapping supports use cases like upsampling, which require
+  /// continuous timestamps between frames. If this is not provided, frame-time
+  /// is used and animations added between frames are treated as having started
+  /// at the most recent available frame time.
+  Duration Function()? clock;
+
   State get target => _target;
   State _basis, _target;
-  Duration? get t => _t;
-  Duration? _t;
+  Duration? get t => clock?.call() ?? _tickerTime;
+  Duration? _tickerTime, _tickerTimeOffset;
 
   bool get isActive => ticker.isActive;
   final animations = Queue<_Animation<Delta>>();
 
   void _start() {
     ticker.start();
-    _t = Duration.zero;
+    _tickerTime = Duration.zero;
+    _tickerTimeOffset = null;
   }
 
   Future<bool> addDelta(
@@ -70,7 +78,7 @@ class AnimationCoordinator<State, Delta> {
 
     final animation = _Animation(
       delta: delta,
-      start: _t!,
+      start: t!,
       length: length,
       curve: curve,
     );
@@ -91,7 +99,7 @@ class AnimationCoordinator<State, Delta> {
 
     final animation = _Animation(
       delta: calculateDelta(target, _target),
-      start: _t!,
+      start: t!,
       length: length,
       curve: curve,
     );
@@ -112,7 +120,7 @@ class AnimationCoordinator<State, Delta> {
 
     final animation = _Animation(
       delta: calculateDelta(target, _target),
-      start: _t!,
+      start: t!,
       length: length,
       curve: curve,
     );
@@ -124,8 +132,13 @@ class AnimationCoordinator<State, Delta> {
     return animation.completer.future;
   }
 
-  void _onTick(Duration t) {
-    this._t = t;
+  void _onTick(Duration tickerTime) {
+    _tickerTime = tickerTime;
+    // To honor vsync, if there's a real-time mapping, use a uniform offset from
+    // real time based on frame time.
+    _tickerTimeOffset ??= this.t! - tickerTime;
+    final t = tickerTime + _tickerTimeOffset!;
+
     while (animations.isNotEmpty && t >= animations.first.end) {
       final animation = animations.removeFirst();
       _basis = applyDelta(_basis, animation.delta);

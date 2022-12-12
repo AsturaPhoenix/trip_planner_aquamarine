@@ -283,17 +283,21 @@ class TidePanelState extends State<TidePanel> {
     return LayoutBuilder(
       builder: (context, boxConstraints) {
         var effectiveMaxWidth = double.infinity;
-        // Compensating for width scaling can inflate the time controls a
-        // little, so do a couple layout estimations.
-        for (int i = 0; i < 2; ++i) {
-          final preferredHeight = TidePanel.estimateHeight(
-            context,
-            effectiveMaxWidth,
-            graphWidth: widget.graphWidth,
-            graphHeight: widget.graphHeight,
-          );
-          effectiveMaxWidth = boxConstraints.maxWidth *
-              max(1, preferredHeight / boxConstraints.maxHeight);
+
+        if (boxConstraints.maxHeight > 0) {
+          // Compensating for width scaling can inflate the time controls a
+          // little, so do a couple layout estimations.
+          for (int i = 0; i < 2; ++i) {
+            final preferredHeight = TidePanel.estimateHeight(
+              context,
+              effectiveMaxWidth,
+              graphWidth: widget.graphWidth,
+              graphHeight: widget.graphHeight,
+            );
+
+            effectiveMaxWidth = boxConstraints.maxWidth *
+                max(1, preferredHeight / boxConstraints.maxHeight);
+          }
         }
 
         return FittedBox(

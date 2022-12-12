@@ -9,8 +9,6 @@ import 'package:motion_sensors/motion_sensors.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:vector_math/vector_math_64.dart';
 
-import '../util/optional.dart';
-
 Future<void> prefetchCapabilities() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -53,62 +51,40 @@ double calculateBearing(Quaternion q) => -degrees(yaw(q));
 
 Stream<double> bearing = canonicalOrientation.map(calculateBearing);
 
-class WithSpaceTime<T> {
-  static const feetPerMeter = 3.28084;
-  WithSpaceTime(
-    this.value, {
-    this.latitude,
-    this.longitude,
-    this.altitude,
-    this.time,
-  });
-  WithSpaceTime.fromPosition(this.value, Position? position, {this.time})
-      : latitude = position?.latitude,
-        longitude = position?.longitude,
-        altitude = Optional(position)
-            .map((position) => position.altitude * feetPerMeter);
-  final T value;
-  final double? latitude, longitude;
-
-  /// Altitude in feet.
-  final double? altitude;
-  final DateTime? time;
-}
-
-Stream<WithSpaceTime<T>> wrapWithPositionFunction<T>(
-  Stream<T> stream,
-  Position? Function() getPosition,
-) =>
-    stream.map((e) => WithSpaceTime.fromPosition(e, getPosition()));
-
-class WithGeomagneticCorrection<T> {
-  WithGeomagneticCorrection(this.value, this.geomagneticCorrection);
-  final T value;
-  final GeoMagResult? geomagneticCorrection;
-}
-
-final geomag = GeoMag();
-
-Stream<WithGeomagneticCorrection<T>> withGeomagneticCorrection<T>(
-  Stream<WithSpaceTime<T>> stream,
-) {
+class CachingGeoMag {
   // These tolerances are semi arbitrary.
-  const latitudeTolerance = 1.0, longitudeTolerance = 1.0;
+  static const latitudeTolerance = 1.0, longitudeTolerance = 1.0;
+  static const feetPerMeter = 3.28084;
 
-  GeoMagResult? geomagneticCorrection;
-  double? referenceLatitude, referenceLongitude;
-  return stream.map((e) {
-    if (e.latitude != null &&
-        e.longitude != null &&
-        (geomagneticCorrection == null ||
-            (e.latitude! - referenceLatitude!).abs() > latitudeTolerance ||
-            (e.longitude! - referenceLongitude!).abs() > longitudeTolerance)) {
-      referenceLatitude = e.latitude;
-      referenceLongitude = e.longitude;
-      geomagneticCorrection =
-          geomag.calculate(e.latitude!, e.longitude!, e.altitude ?? 0, e.time);
+  CachingGeoMag([GeoMag? geomag]) : _geomag = geomag ?? GeoMag();
+  final GeoMag _geomag;
+  GeoMagResult? _geomagneticCorrection;
+  double? _referenceLatitude, _referenceLongitude;
+
+  GeoMagResult? get(
+    double? latitude,
+    double? longitude, [
+    double altitude = 0,
+    DateTime? time,
+  ]) {
+    if (latitude != null &&
+        longitude != null &&
+        (_geomagneticCorrection == null ||
+            (latitude - _referenceLatitude!).abs() > latitudeTolerance ||
+            (longitude - _referenceLongitude!).abs() > longitudeTolerance)) {
+      _referenceLatitude = latitude;
+      _referenceLongitude = longitude;
+      _geomagneticCorrection =
+          _geomag.calculate(latitude, longitude, altitude, time);
     }
 
-    return WithGeomagneticCorrection(e.value, geomagneticCorrection);
-  });
+    return _geomagneticCorrection;
+  }
+
+  GeoMagResult? getFromPosition(Position? position, [DateTime? time]) => get(
+        position?.latitude,
+        position?.longitude,
+        (position?.altitude ?? 0) * feetPerMeter,
+        time,
+      );
 }
