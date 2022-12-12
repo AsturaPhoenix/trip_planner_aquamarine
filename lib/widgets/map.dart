@@ -5,7 +5,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -17,6 +16,7 @@ import '../persistence/blob_cache.dart';
 import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
+import '../util/animation_coordinator.dart';
 import '../util/optional.dart';
 
 class Map extends StatefulWidget {
@@ -130,6 +130,50 @@ extension on CameraPosition {
         tilt: tilt ?? this.tilt,
         zoom: zoom ?? this.zoom,
       );
+
+  CameraPosition operator +(CameraDelta delta) => CameraPosition(
+        bearing: (bearing + delta.bearing) % 360,
+        target: LatLng(
+          target.latitude + delta.target.latitude,
+          target.longitude + delta.target.longitude,
+        ),
+        zoom: zoom + delta.zoom,
+      );
+
+  CameraDelta operator -(CameraPosition other) => CameraDelta(
+        bearing: (bearing - other.bearing + 180) % 360 - 180,
+        target: LatLng(
+          target.latitude - other.target.latitude,
+          target.longitude - other.target.longitude,
+        ),
+        zoom: zoom - other.zoom,
+      );
+}
+
+class CameraDelta {
+  CameraDelta({
+    this.bearing = 0,
+    this.target = const LatLng(0, 0),
+    this.zoom = 0,
+  });
+  final double bearing;
+  final LatLng target;
+  final double zoom;
+
+  CameraDelta operator +(CameraDelta other) => CameraDelta(
+        bearing: bearing + other.bearing,
+        target: LatLng(
+          target.latitude + other.target.latitude,
+          target.longitude + other.target.longitude,
+        ),
+        zoom: zoom + other.zoom,
+      );
+
+  CameraDelta operator *(double factor) => CameraDelta(
+        bearing: bearing * factor,
+        target: LatLng(target.latitude * factor, target.longitude * factor),
+        zoom: zoom * factor,
+      );
 }
 
 extension on Position {
@@ -179,10 +223,13 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   TrackingMode _trackingMode = TrackingMode.location;
   TrackingMode get trackingMode => _trackingMode;
   CameraPosition cameraPosition = Map.initialCameraPosition;
-  late MapAnimationController mapAnimation = MapAnimationController(
+  late final mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
     tickerProvider: this,
-    cameraPosition: Map.initialCameraPosition,
-    moveCamera: (cameraPosition) async {
+    initialState: Map.initialCameraPosition,
+    applyDelta: (state, delta) => state + delta,
+    calculateDelta: (after, before) => after - before,
+    lerp: (delta, t) => delta * t,
+    setState: (cameraPosition) async {
       await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
       setState(() => this.cameraPosition = cameraPosition);
     },
@@ -209,7 +256,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           (bearing) {
             if (bearing.geomagneticCorrection != null) {
               mapAnimation.add(
-                PartialCameraPosition(
+                mapAnimation.target.copyWith(
                   bearing: bearing.value + bearing.geomagneticCorrection!.dec,
                 ),
               );
@@ -235,7 +282,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   }
 
   void animateTrackingCamera() => mapAnimation.add(
-        PartialCameraPosition(
+        mapAnimation.target.copyWith(
           target: devicePosition!.toLatLng(),
           bearing: trackingMode == TrackingMode.bearing ? null : 0,
         ),
@@ -271,7 +318,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
   void animateToSelectedStation() {
     mapAnimation
-        .set(PartialCameraPosition(target: widget.selectedStation!.marker));
+        .set(cameraPosition.copyWith(target: widget.selectedStation!.marker));
   }
 
   @override
@@ -569,7 +616,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                 trackBearing: () =>
                     setState(() => trackingMode = TrackingMode.bearing),
                 resetBearing: () =>
-                    mapAnimation.set(PartialCameraPosition(bearing: 0)),
+                    mapAnimation.set(cameraPosition.copyWith(bearing: 0)),
                 zoomIn: () => mapAnimation.addDelta(CameraDelta(zoom: 1)),
                 zoomOut: () => mapAnimation.addDelta(CameraDelta(zoom: -1)),
                 setLod: _setLod,
@@ -578,204 +625,6 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           ),
       ],
     );
-  }
-}
-
-class PartialCameraPosition {
-  PartialCameraPosition({this.bearing, this.target, this.zoom});
-  final double? bearing;
-  final LatLng? target;
-  final double? zoom;
-
-  CameraDelta operator -(CameraPosition basis) => CameraDelta(
-        bearing:
-            bearing == null ? 0 : (bearing! - basis.bearing + 180) % 360 - 180,
-        target: target == null
-            ? const LatLng(0, 0)
-            : LatLng(
-                target!.latitude - basis.target.latitude,
-                target!.longitude - basis.target.longitude,
-              ),
-        zoom: zoom == null ? 0 : zoom! - basis.zoom,
-      );
-
-  CameraPosition apply(CameraPosition original) =>
-      original.copyWith(bearing: bearing, target: target, zoom: zoom);
-}
-
-class CameraDelta {
-  CameraDelta({
-    this.bearing = 0,
-    this.target = const LatLng(0, 0),
-    this.zoom = 0,
-  });
-  final double bearing;
-  final LatLng target;
-  final double zoom;
-
-  CameraDelta operator +(CameraDelta other) => CameraDelta(
-        bearing: bearing + other.bearing,
-        target: LatLng(
-          target.latitude + other.target.latitude,
-          target.longitude + other.target.longitude,
-        ),
-        zoom: zoom + other.zoom,
-      );
-
-  CameraDelta operator *(double factor) => CameraDelta(
-        bearing: bearing * factor,
-        target: LatLng(target.latitude * factor, target.longitude * factor),
-        zoom: zoom * factor,
-      );
-}
-
-extension on CameraPosition {
-  CameraPosition operator +(CameraDelta delta) => CameraPosition(
-        bearing: (bearing + delta.bearing) % 360,
-        target: LatLng(
-          target.latitude + delta.target.latitude,
-          target.longitude + delta.target.longitude,
-        ),
-        zoom: zoom + delta.zoom,
-      );
-}
-
-class CameraAnimation {
-  CameraAnimation({
-    required this.delta,
-    required this.start,
-    required this.length,
-    required this.curve,
-  });
-  final CameraDelta delta;
-  final Duration start, length;
-  Duration get end => start + length;
-  final Curve curve;
-  final completer = Completer<bool>();
-
-  double normalize(Duration t) => t < start
-      ? 0
-      : t > end
-          ? 1
-          : (t - start).inMicroseconds / length.inMicroseconds;
-
-  CameraDelta evaluate(Duration t) => delta * curve.transform(normalize(t));
-}
-
-class MapAnimationController {
-  MapAnimationController({
-    required TickerProvider tickerProvider,
-    required CameraPosition cameraPosition,
-    this.moveCamera,
-  })  : _basis = cameraPosition,
-        _target = cameraPosition {
-    ticker = tickerProvider.createTicker(_onTick);
-  }
-  late final Ticker ticker;
-  void Function(CameraPosition)? moveCamera;
-
-  CameraPosition _basis, _target;
-  late Duration t;
-
-  bool get isActive => ticker.isActive;
-
-  final activeAnimations = <CameraAnimation>{};
-
-  void _start() {
-    ticker.start();
-    t = Duration.zero;
-  }
-
-  Future<bool> addDelta(
-    CameraDelta delta, [
-    Duration length = const Duration(milliseconds: 300),
-    Curve curve = Curves.easeInOut,
-  ]) {
-    if (activeAnimations.isEmpty) {
-      _start();
-    }
-
-    final animation = CameraAnimation(
-      delta: delta,
-      start: t,
-      length: length,
-      curve: curve,
-    );
-    activeAnimations.add(animation);
-
-    _target += delta;
-    return animation.completer.future;
-  }
-
-  Future<bool> add(
-    PartialCameraPosition target, [
-    Duration length = const Duration(milliseconds: 600),
-    Curve curve = Curves.easeInOut,
-  ]) {
-    if (activeAnimations.isEmpty) {
-      _start();
-    }
-
-    final animation = CameraAnimation(
-      delta: target - _target,
-      start: t,
-      length: length,
-      curve: curve,
-    );
-    activeAnimations.add(animation);
-
-    _target = target.apply(_target);
-    return animation.completer.future;
-  }
-
-  Future<bool> set(
-    PartialCameraPosition target, [
-    Duration length = const Duration(milliseconds: 600),
-    Curve curve = Curves.easeInOut,
-  ]) {
-    if (activeAnimations.isEmpty) {
-      _start();
-    }
-
-    final animation = CameraAnimation(
-      delta: target - _target,
-      start: t,
-      length: length,
-      curve: curve,
-    );
-    activeAnimations
-      ..clear()
-      ..add(animation);
-
-    _target = target.apply(_target);
-    return animation.completer.future;
-  }
-
-  void _onTick(Duration t) {
-    this.t = t;
-    final delta =
-        activeAnimations.map((a) => a.evaluate(t)).reduce((a, b) => a + b);
-    moveCamera?.call(_basis + delta);
-    final completed = [...activeAnimations.where((a) => t >= a.end)];
-    if (completed.isNotEmpty) {
-      _basis += completed.map((a) => a.delta).reduce((a, b) => a + b);
-      activeAnimations.removeAll(completed);
-      if (activeAnimations.isEmpty) {
-        ticker.stop();
-      }
-      for (final animation in completed) {
-        animation.completer.complete(true);
-      }
-    }
-  }
-
-  void override(CameraPosition override) {
-    ticker.stop(canceled: true);
-    _basis = _target = override;
-    for (final animation in activeAnimations) {
-      animation.completer.complete(false);
-    }
-    activeAnimations.clear();
   }
 }
 
