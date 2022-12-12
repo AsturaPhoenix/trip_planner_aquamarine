@@ -51,12 +51,19 @@ class AnimationCoordinator<State, Delta> {
   /// continuous timestamps between frames. If this is not provided, frame-time
   /// is used and animations added between frames are treated as having started
   /// at the most recent available frame time.
+  //
+  // Exact animation timings with respect to frame and real time may vary from
+  // frame to frame, so motion may not be smooth. However, this is probably the
+  // best we can do without much more complicated logic. If we attempt to map
+  // using a uniform offset calculated at the first frame, we can run into cases
+  // where frame time is suspended for a while, such as when the screen is off,
+  // and end with an incorrect offset that suspends animation.
   Duration Function()? clock;
 
   State get target => _target;
   State _basis, _target;
   Duration? get t => clock?.call() ?? _tickerTime;
-  Duration? _tickerTime, _tickerTimeOffset;
+  Duration? _tickerTime;
 
   bool get isActive => ticker.isActive;
   final animations = Queue<_Animation<Delta>>();
@@ -64,7 +71,6 @@ class AnimationCoordinator<State, Delta> {
   void _start() {
     ticker.start();
     _tickerTime = Duration.zero;
-    _tickerTimeOffset = null;
   }
 
   Future<bool> addDelta(
@@ -134,12 +140,8 @@ class AnimationCoordinator<State, Delta> {
 
   void _onTick(Duration tickerTime) {
     _tickerTime = tickerTime;
-    // To honor vsync, if there's a real-time mapping, use a uniform offset from
-    // real time based on frame time.
-    _tickerTimeOffset ??= this.t! - tickerTime;
-    final t = tickerTime + _tickerTimeOffset!;
 
-    while (animations.isNotEmpty && t >= animations.first.end) {
+    while (animations.isNotEmpty && t! >= animations.first.end) {
       final animation = animations.removeFirst();
       _basis = applyDelta(_basis, animation.delta);
       if (!animation.completer.isCompleted) {
@@ -152,8 +154,8 @@ class AnimationCoordinator<State, Delta> {
       // order to handle the case of animations with non-commutative effects
       // like 3-space rotations.
       state =
-          applyDelta(state, lerp(animation.delta, animation.parameterize(t)));
-      if (t >= animation.end && !animation.completer.isCompleted) {
+          applyDelta(state, lerp(animation.delta, animation.parameterize(t!)));
+      if (t! >= animation.end && !animation.completer.isCompleted) {
         animation.completer.complete(true);
       }
     }
