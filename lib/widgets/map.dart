@@ -9,10 +9,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:rxdart/rxdart.dart';
 
-import '../main.dart' show canRequestLocation;
 import '../persistence/blob_cache.dart';
+import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
@@ -43,8 +45,6 @@ class Map extends StatefulWidget {
     this.selectedStation,
     double Function(StationType type)? stationPriority,
     this.onStationSelected,
-    this.locationEnabled = false,
-    this.onLocationRequest,
   }) : stationPriority =
             stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
 
@@ -55,9 +55,6 @@ class Map extends StatefulWidget {
 
   final double Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
-
-  final bool locationEnabled;
-  final Future<bool> Function()? onLocationRequest;
 
   @override
   MapState createState() => MapState();
@@ -216,63 +213,53 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       });
 
   Future<_MarkerIcons>? _markerIcons;
+  late final _position = location.passivePosition.whereNotNull();
 
-  Position? devicePosition;
-  // TODO: suspend on screen off
-  StreamSubscription? positionSubscription, bearingSubscription;
-  TrackingMode _trackingMode = TrackingMode.location;
-  TrackingMode get trackingMode => _trackingMode;
   CameraPosition cameraPosition = Map.initialCameraPosition;
   late final AnimationCoordinator<CameraPosition, CameraDelta> mapAnimation;
+
+  StreamSubscription? trackingSubscription;
+  TrackingMode _trackingMode = TrackingMode.free;
+  TrackingMode get trackingMode => _trackingMode;
   set trackingMode(TrackingMode value) {
     if (value != _trackingMode) {
-      if (_trackingMode == TrackingMode.bearing) {
-        bearingSubscription!.cancel();
-        bearingSubscription = null;
-      }
+      trackingSubscription?.cancel();
+      trackingSubscription = null;
 
       _trackingMode = value;
 
-      if (value == TrackingMode.bearing) {
-        orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-        final geomag = orientation.CachingGeoMag();
-        bearingSubscription = orientation.bearing.listen(
-          (bearing) {
-            final geomagneticCorrection =
-                geomag.getFromPosition(devicePosition);
-            if (geomagneticCorrection != null) {
-              mapAnimation.add(
-                mapAnimation.target.copyWith(
-                  bearing: bearing + geomagneticCorrection.dec,
-                ),
-              );
-            }
-          },
-        );
+      switch (value) {
+        case TrackingMode.location:
+          trackingSubscription = location.requestedPosition.listen(
+            (position) {
+              if (position == null) {
+                setState(() => trackingMode = TrackingMode.free);
+              } else {
+                mapAnimation.add(
+                  mapAnimation.target
+                      .copyWith(target: position.toLatLng(), bearing: 0),
+                );
+              }
+            },
+          );
+          break;
+        case TrackingMode.bearing:
+          orientation.updateInterval =
+              const Duration(microseconds: 100000 ~/ 6);
+          final geomag = orientation.CachingGeoMag();
+          trackingSubscription = Rx.combineLatest2(
+            location.requestedPosition,
+            orientation.bearing,
+            (position, bearing) => mapAnimation.target.copyWith(
+              target: position?.toLatLng(),
+              bearing: bearing + (geomag.getFromPosition(position)?.dec ?? 0),
+            ),
+          ).listen(mapAnimation.add);
+          break;
+        case TrackingMode.free:
       }
     }
   }
-
-  void subscribeToPosition() {
-    positionSubscription = Geolocator.getPositionStream().listen(
-      updateDevicePosition,
-      onError: (_) => setState(() => devicePosition = null),
-    );
-  }
-
-  void updateDevicePosition(Position position) {
-    setState(() => devicePosition = position);
-    if (trackingMode != TrackingMode.free) {
-      animateTrackingCamera();
-    }
-  }
-
-  void animateTrackingCamera() => mapAnimation.add(
-        mapAnimation.target.copyWith(
-          target: devicePosition!.toLatLng(),
-          bearing: trackingMode == TrackingMode.bearing ? null : 0,
-        ),
-      );
 
   // For the most part this isn't called for moveCamera, but there are cases
   // where it is.
@@ -310,9 +297,6 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    if (widget.locationEnabled) {
-      subscribeToPosition();
-    }
 
     mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
       tickerProvider: this,
@@ -325,6 +309,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         setState(() => this.cameraPosition = cameraPosition);
       },
     );
+
+    if (!kIsWeb) {
+      trackingMode = TrackingMode.location;
+    }
   }
 
   @override
@@ -386,18 +374,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       overlay.tileProvider.cache = widget.tileCache;
     }
 
-    if (widget.locationEnabled && !oldWidget.locationEnabled) {
-      subscribeToPosition();
-    } else if (oldWidget.locationEnabled && !widget.locationEnabled) {
-      positionSubscription?.cancel();
-      positionSubscription = null;
-      devicePosition = null;
-    }
-
     if (widget.selectedStation != null &&
         oldWidget.selectedStation == null &&
         gmap != null &&
-        (trackingMode == TrackingMode.free || !widget.locationEnabled)) {
+        (trackingMode == TrackingMode.free || !location.isEnabled)) {
       animateToSelectedStation();
     }
   }
@@ -406,8 +386,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   void dispose() {
     super.dispose();
     mapAnimation.ticker.stop(canceled: true);
-    positionSubscription?.cancel();
-    bearingSubscription?.cancel();
+    trackingSubscription?.cancel();
     gmap?.dispose();
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
@@ -429,141 +408,139 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       children: [
         FutureBuilder(
           future: _markerIcons,
-          builder: (context, iconsSnapshot) {
-            final markers = <Marker>{};
+          builder: (context, markerIcons) => StreamBuilder(
+            stream: _position,
+            builder: (context, position) {
+              final markers = <Marker>{};
 
-            if (iconsSnapshot.hasData) {
-              final markerIcons = iconsSnapshot.data!;
-
-              if (devicePosition != null) {
-                const markerId = MarkerId('current location');
-                markers.add(
-                  Marker(
-                    markerId: markerId,
-                    anchor: const Offset(.5, .5),
-                    position: devicePosition!.toLatLng(),
-                    icon: markerIcons.location,
-                    // TODO: This text does not update while the info window is
-                    // shown.
-                    infoWindow: InfoWindow(
-                      title: formatPosition(devicePosition!),
-                      onTap: kIsWeb
-                          ? null
-                          : () => gmap!.hideMarkerInfoWindow(markerId),
-                    ),
-                    // Take precedence over other markers.
-                    zIndex: MarkerClass.currentLocation,
-                    onTap: () {
-                      setState(() => trackingMode = TrackingMode.location);
-                      // Although the map will automatically animate, start an
-                      // explicit animation so we don't have to try to ignore
-                      // the onCameraMove events.
-                      animateTrackingCamera();
-                    },
-                  ),
-                );
-              }
-
-              // tp.js: show_hide_marker
-              bool stationFilter(Station station) =>
-                  Map.showMarkerTypes.contains(station.type) &&
-                  !(station.type.isTideCurrent && station.isLegacy);
-
-              for (final station
-                  in widget.stations.values.where(stationFilter)) {
-                final icon = markerIcons.stations[station.type];
-                if (icon != null) {
-                  // tp.js: create_station
-                  final markerId = MarkerId(station.id.toString());
-                  final visualMinor =
-                      [station.isLegacy, station.isSubordinate].indexOf(true) %
-                          3;
-                  final visualMajor = widget.stationPriority(station.type);
-
+              if (markerIcons.hasData) {
+                if (position.hasData) {
+                  const markerId = MarkerId('current location');
                   markers.add(
                     Marker(
                       markerId: markerId,
-                      position: station.marker,
-                      alpha: (1 + visualMinor) / 3,
-                      icon: icon,
+                      anchor: const Offset(.5, .5),
+                      position: position.data!.toLatLng(),
+                      icon: markerIcons.requireData.location,
+                      // TODO: This text does not update while the info window is
+                      // shown.
                       infoWindow: InfoWindow(
-                        title: station.typedShortTitle,
+                        title: formatPosition(position.requireData),
                         onTap: kIsWeb
                             ? null
                             : () => gmap!.hideMarkerInfoWindow(markerId),
                       ),
-                      // In tp.js, this is 4 for current stations and 3 for
-                      // everything else. However, on smaller screens we
-                      // should try to keep touch response consistent with
-                      // alpha.
-                      zIndex:
-                          MarkerClass.station + 3 * visualMajor + visualMinor,
-                      onTap: () => widget.onStationSelected?.call(station),
+                      // Take precedence over other markers.
+                      zIndex: MarkerClass.currentLocation,
+                      onTap: () =>
+                          setState(() => trackingMode = TrackingMode.location),
                     ),
                   );
                 }
+
+                // tp.js: show_hide_marker
+                bool stationFilter(Station station) =>
+                    Map.showMarkerTypes.contains(station.type) &&
+                    !(station.type.isTideCurrent && station.isLegacy);
+
+                for (final station
+                    in widget.stations.values.where(stationFilter)) {
+                  final icon = markerIcons.requireData.stations[station.type];
+                  if (icon != null) {
+                    // tp.js: create_station
+                    final markerId = MarkerId(station.id.toString());
+                    final visualMinor = [
+                          station.isLegacy,
+                          station.isSubordinate
+                        ].indexOf(true) %
+                        3;
+                    final visualMajor = widget.stationPriority(station.type);
+
+                    markers.add(
+                      Marker(
+                        markerId: markerId,
+                        position: station.marker,
+                        alpha: (1 + visualMinor) / 3,
+                        icon: icon,
+                        infoWindow: InfoWindow(
+                          title: station.typedShortTitle,
+                          onTap: kIsWeb
+                              ? null
+                              : () => gmap!.hideMarkerInfoWindow(markerId),
+                        ),
+                        // In tp.js, this is 4 for current stations and 3 for
+                        // everything else. However, on smaller screens we
+                        // should try to keep touch response consistent with
+                        // alpha.
+                        zIndex:
+                            MarkerClass.station + 3 * visualMajor + visualMinor,
+                        onTap: () => widget.onStationSelected?.call(station),
+                      ),
+                    );
+                  }
+                }
+
+                // tp.js: create_sel_marker
+                void createSelectionMarker(
+                  MarkerId id,
+                  BitmapDescriptor icon,
+                  LatLng? location,
+                ) =>
+                    markers.add(
+                      Marker(
+                        markerId: id,
+                        anchor: const Offset(.5, .65),
+                        icon: icon,
+                        // tp.js: move_sel_marker
+                        position: location ?? const LatLng(0, 0),
+                        visible: location != null,
+                        zIndex: MarkerClass.selection,
+                      ),
+                    );
+
+                createSelectionMarker(
+                  const MarkerId('sel'),
+                  markerIcons.requireData.selected,
+                  widget.selectedStation?.marker,
+                );
+
+                createSelectionMarker(
+                  const MarkerId('tc_sel'),
+                  markerIcons.requireData.tcSelected,
+                  Optional(widget.selectedStation?.tideCurrentStationId)
+                      .map((tcid) => widget.stations[tcid]?.marker),
+                );
               }
 
-              // tp.js: create_sel_marker
-              void createSelectionMarker(
-                MarkerId id,
-                BitmapDescriptor icon,
-                LatLng? location,
-              ) =>
-                  markers.add(
-                    Marker(
-                      markerId: id,
-                      anchor: const Offset(.5, .65),
-                      icon: icon,
-                      // tp.js: move_sel_marker
-                      position: location ?? const LatLng(0, 0),
-                      visible: location != null,
-                      zIndex: MarkerClass.selection,
-                    ),
+              return GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition: Map.initialCameraPosition,
+                markers: markers,
+                tileOverlays: {
+                  TileOverlay(
+                    tileOverlayId: chartOverlay.id,
+                    tileProvider: chartOverlay.tileProvider,
+                    tileSize: tileSize,
+                  ),
+                },
+                compassEnabled: false,
+                zoomControlsEnabled: false,
+                onCameraMove: updateCameraPosition,
+                onMapCreated: (controller) async {
+                  setState(() => gmap = controller);
+                  controller.setMapStyle(
+                    await DefaultAssetBundle.of(context)
+                        .loadString('assets/nautical-style.json'),
                   );
-
-              createSelectionMarker(
-                const MarkerId('sel'),
-                markerIcons.selected,
-                widget.selectedStation?.marker,
+                  if (widget.selectedStation != null &&
+                      (trackingMode == TrackingMode.free ||
+                          !location.isEnabled)) {
+                    animateToSelectedStation();
+                  }
+                },
               );
-
-              createSelectionMarker(
-                const MarkerId('tc_sel'),
-                markerIcons.tcSelected,
-                Optional(widget.selectedStation?.tideCurrentStationId)
-                    .map((tcid) => widget.stations[tcid]?.marker),
-              );
-            }
-
-            return GoogleMap(
-              mapType: MapType.normal,
-              initialCameraPosition: Map.initialCameraPosition,
-              markers: markers,
-              tileOverlays: {
-                TileOverlay(
-                  tileOverlayId: chartOverlay.id,
-                  tileProvider: chartOverlay.tileProvider,
-                  tileSize: tileSize,
-                ),
-              },
-              compassEnabled: false,
-              zoomControlsEnabled: false,
-              onCameraMove: updateCameraPosition,
-              onMapCreated: (controller) async {
-                setState(() => gmap = controller);
-                controller.setMapStyle(
-                  await DefaultAssetBundle.of(context)
-                      .loadString('assets/nautical-style.json'),
-                );
-                if (widget.selectedStation != null &&
-                    (trackingMode == TrackingMode.free ||
-                        !widget.locationEnabled)) {
-                  animateToSelectedStation();
-                }
-              },
-            );
-          },
+            },
+          ),
         ),
         if (gmap != null)
           Theme(
@@ -594,24 +571,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                 cameraPosition: cameraPosition,
                 lod: chartOverlay.tileProvider.levelOfDetail,
                 maxOversample: chartOverlay.tileProvider.maxOversample,
-                trackingMode: trackingMode == TrackingMode.location
-                    ? devicePosition == null
-                        ? TrackingMode.free
-                        : TrackingMode.location
-                    : trackingMode,
-                trackLocation: Optional(devicePosition).map(
-                      (_) => () {
-                        setState(() => trackingMode = TrackingMode.location);
-                        animateTrackingCamera();
-                      },
-                    ) ??
-                    Optional(widget.onLocationRequest).map(
-                      (f) => () {
-                        setState(() => trackingMode = TrackingMode.location);
-                        f();
-                        // Tracking will begin once location is enabled.
-                      },
-                    ),
+                trackingMode: trackingMode,
+                trackLocation: () =>
+                    setState(() => trackingMode = TrackingMode.location),
                 trackBearing: () =>
                     setState(() => trackingMode = TrackingMode.bearing),
                 resetBearing: () =>
@@ -782,20 +744,32 @@ class _LocationControlsState extends State<LocationControls> {
     switch (widget.trackingMode) {
       case TrackingMode.free:
         if (widget.cameraPosition.bearing == 0) {
+          final String tooltip;
+          final bool enabled;
+          if (!location.canRequestLocation) {
+            // We anticipate canRequestLocation to be true in most real cases,
+            // so let's not make too much of an effort to tailor the UI to this
+            // case (simply disable and show a tooltip for now). We might have
+            // to revisit this later though.
+            tooltip = 'My location (requires HTTPS)';
+            enabled = false;
+          } else if (location.permissionStatus?.isPermanentlyDenied ?? false) {
+            tooltip = 'My location (disabled)';
+            enabled = false;
+          } else {
+            tooltip = 'My location';
+            enabled = true;
+          }
+
           button = Tooltip(
-            message:
-                // We anticipate canRequestLocation to be true in most real
-                // cases, so let's not make too much of an effort to tailor the
-                // UI to this case (simply disable and show a tooltip for now).
-                // We might have to revisit this later though.
-                canRequestLocation
-                    ? 'My location'
-                    : 'My location (requires HTTPS)',
+            message: tooltip,
             child: TextButton(
-              onPressed: widget.trackLocation,
-              child: orientation.isOrientationAvailable
-                  ? Image(image: PrecachedAsset.locationReticle.image)
-                  : const Icon(Icons.location_searching),
+              onPressed: enabled ? widget.trackLocation : null,
+              child: enabled
+                  ? orientation.isOrientationAvailable
+                      ? Image(image: PrecachedAsset.locationReticle.image)
+                      : const Icon(Icons.location_searching)
+                  : const Icon(Icons.location_disabled),
             ),
           );
         } else {

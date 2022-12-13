@@ -3,9 +3,9 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:rxdart/rxdart.dart';
 
+import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
 import '../util/upsample_stream.dart';
 import 'map.dart';
@@ -25,11 +25,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    positionStream = () async* {
-      await Permission.locationWhenInUse.request().isGranted;
-      yield* Geolocator.getPositionStream();
-    }()
-        .asBroadcastStream();
+    positionStream = location.requestedPosition.whereNotNull();
 
     double polar(double radians) => (radians + pi) % (2 * pi) - pi;
 

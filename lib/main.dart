@@ -11,12 +11,12 @@ import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:timezone/data/latest.dart';
 
 import 'persistence/blob_cache.dart';
 import 'persistence/cache_box.dart';
+import 'platform/location.dart' as location;
 import 'platform/orientation.dart' as orientation;
 import 'providers/trip_planner_client.dart';
 import 'util/optional.dart';
@@ -103,11 +103,6 @@ class TripPlanner extends StatefulWidget {
   TripPlannerState createState() => TripPlannerState();
 }
 
-/// Most browsers won't surface a location permission request unless we're using
-/// https.
-final bool canRequestLocation =
-    !kIsWeb || Uri.base.scheme == 'https' || Uri.base.host == 'localhost';
-
 class TripPlannerState extends State<TripPlanner> {
   static final log = Logger('TripPlannerState');
 
@@ -141,26 +136,15 @@ class TripPlannerState extends State<TripPlanner> {
 
   bool hasModal = false;
 
-  Future<bool> requestLocationPermission() async {
-    bool enabled =
-        kIsWeb ? true : await Permission.locationWhenInUse.request().isGranted;
-    setState(() => locationEnabled = enabled);
-    return enabled;
-  }
-
   @override
   void initState() {
     super.initState;
     updateClient();
 
-    initialPosition = kIsWeb
-        ? Future.value(null)
-        : requestLocationPermission().then(
-            (_) => Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 10),
-            ),
-          );
+    initialPosition =
+        (kIsWeb ? location.passivePosition : location.requestedPosition)
+            .timeout(const Duration(seconds: 10))
+            .first;
   }
 
   @override
@@ -217,7 +201,7 @@ class TripPlannerState extends State<TripPlanner> {
         ),
         home: FutureBuilder(
           future: initialPosition,
-          builder: (context, initialPositionSnapshot) => StreamBuilder(
+          builder: (context, initialPosition) => StreamBuilder(
             stream: stations,
             builder: (context, stationsSnapshot) {
               final stations = stationsSnapshot.data ?? {};
@@ -227,12 +211,11 @@ class TripPlannerState extends State<TripPlanner> {
 
               if (selectedStation == null &&
                   selectableStations.isNotEmpty &&
-                  initialPositionSnapshot.connectionState ==
-                      ConnectionState.done) {
-                selectedStation = initialPositionSnapshot.hasData
+                  initialPosition.connectionState == ConnectionState.done) {
+                selectedStation = initialPosition.hasData
                     ? nearestStation(
                         selectableStations,
-                        initialPositionSnapshot.data!,
+                        initialPosition.data!,
                       )
                     : selectableStations.first;
               }
@@ -336,10 +319,6 @@ class TripPlannerState extends State<TripPlanner> {
                         stationPriority: stationPriority,
                         onStationSelected: (station) =>
                             setState(() => selectedStation = station),
-                        locationEnabled: locationEnabled,
-                        onLocationRequest: canRequestLocation
-                            ? requestLocationPermission
-                            : null,
                       ),
                       if (hasModal)
                         // ignore: prefer_const_constructors
