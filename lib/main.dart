@@ -141,10 +141,11 @@ class TripPlannerState extends State<TripPlanner> {
     super.initState;
     updateClient();
 
-    initialPosition =
-        (kIsWeb ? location.passivePosition : location.requestedPosition)
-            .timeout(const Duration(seconds: 10))
-            .first;
+    initialPosition = (kIsWeb
+            ? location.passivePosition.seededStream
+            : location.requestedPosition)
+        .timeout(const Duration(seconds: 10))
+        .first;
   }
 
   @override

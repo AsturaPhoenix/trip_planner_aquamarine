@@ -213,7 +213,6 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       });
 
   Future<_MarkerIcons>? _markerIcons;
-  late final _position = location.passivePosition.whereNotNull();
 
   CameraPosition cameraPosition = Map.initialCameraPosition;
   late final AnimationCoordinator<CameraPosition, CameraDelta> mapAnimation;
@@ -409,7 +408,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         FutureBuilder(
           future: _markerIcons,
           builder: (context, markerIcons) => StreamBuilder(
-            stream: _position,
+            initialData: location.passivePosition.value,
+            stream: location.passivePosition.stream,
             builder: (context, position) {
               final markers = <Marker>{};
 
@@ -425,7 +425,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                       // TODO: This text does not update while the info window is
                       // shown.
                       infoWindow: InfoWindow(
-                        title: formatPosition(position.requireData),
+                        title: formatPosition(position.data!),
                         onTap: kIsWeb
                             ? null
                             : () => gmap!.hideMarkerInfoWindow(markerId),
@@ -745,8 +745,8 @@ class _LocationControlsState extends State<LocationControls> {
       case TrackingMode.free:
         if (widget.cameraPosition.bearing == 0) {
           button = StreamBuilder(
-            initialData: location.permissionStatus,
-            stream: location.permissionStatusStream,
+            initialData: location.permissionStatus.value,
+            stream: location.permissionStatus.stream,
             builder: (context, permissionStatus) {
               final String tooltip;
               final bool enabled;
