@@ -13,9 +13,14 @@ final bool canRequestLocation =
 Future<bool> requestPermission() => _permissionRequest.fetch(
       () async {
         final wasEnabled = _isEnabled;
+        final oldPermissionStatus = _permissionStatus;
         _isEnabled = kIsWeb ||
             (_permissionStatus = await Permission.locationWhenInUse.request())
                 .isGranted;
+
+        if (oldPermissionStatus != _permissionStatus) {
+          _permissionStatusStream.add(_permissionStatus);
+        }
 
         if (_passivePositionListeners > 0 && wasEnabled != _isEnabled) {
           if (_isEnabled) {
@@ -35,6 +40,9 @@ bool get isEnabled => _isEnabled;
 bool _isEnabled = false;
 PermissionStatus? get permissionStatus => _permissionStatus;
 PermissionStatus? _permissionStatus;
+final Stream<PermissionStatus?> permissionStatusStream =
+    _permissionStatusStream.stream;
+final _permissionStatusStream = StreamController<PermissionStatus?>.broadcast();
 
 final Stream<Position?> requestedPosition = Stream.multi(
   (controller) async => controller.addStream(
@@ -67,5 +75,6 @@ void _subscribePassivePosition() {
 
 int _passivePositionListeners = 0;
 StreamSubscription? _passivePositionSubscription;
+Position? get position => _position;
 Position? _position;
 final _passivePosition = StreamController<Position?>.broadcast();

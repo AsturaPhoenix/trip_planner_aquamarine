@@ -69,6 +69,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StreamBuilder(
+                  initialData: location.position,
                   stream: positionStream,
                   builder: (context, positionSnapshot) =>
                       positionSnapshot.hasData

@@ -744,33 +744,39 @@ class _LocationControlsState extends State<LocationControls> {
     switch (widget.trackingMode) {
       case TrackingMode.free:
         if (widget.cameraPosition.bearing == 0) {
-          final String tooltip;
-          final bool enabled;
-          if (!location.canRequestLocation) {
-            // We anticipate canRequestLocation to be true in most real cases,
-            // so let's not make too much of an effort to tailor the UI to this
-            // case (simply disable and show a tooltip for now). We might have
-            // to revisit this later though.
-            tooltip = 'My location (requires HTTPS)';
-            enabled = false;
-          } else if (location.permissionStatus?.isPermanentlyDenied ?? false) {
-            tooltip = 'My location (disabled)';
-            enabled = false;
-          } else {
-            tooltip = 'My location';
-            enabled = true;
-          }
+          button = StreamBuilder(
+            initialData: location.permissionStatus,
+            stream: location.permissionStatusStream,
+            builder: (context, permissionStatus) {
+              final String tooltip;
+              final bool enabled;
+              if (!location.canRequestLocation) {
+                // We anticipate canRequestLocation to be true in most real cases,
+                // so let's not make too much of an effort to tailor the UI to this
+                // case (simply disable and show a tooltip for now). We might have
+                // to revisit this later though.
+                tooltip = 'My location (requires HTTPS)';
+                enabled = false;
+              } else if (permissionStatus.data?.isPermanentlyDenied ?? false) {
+                tooltip = 'My location (disabled)';
+                enabled = false;
+              } else {
+                tooltip = 'My location';
+                enabled = true;
+              }
 
-          button = Tooltip(
-            message: tooltip,
-            child: TextButton(
-              onPressed: enabled ? widget.trackLocation : null,
-              child: enabled
-                  ? orientation.isOrientationAvailable
-                      ? Image(image: PrecachedAsset.locationReticle.image)
-                      : const Icon(Icons.location_searching)
-                  : const Icon(Icons.location_disabled),
-            ),
+              return Tooltip(
+                message: tooltip,
+                child: TextButton(
+                  onPressed: enabled ? widget.trackLocation : null,
+                  child: enabled
+                      ? orientation.isOrientationAvailable
+                          ? Image(image: PrecachedAsset.locationReticle.image)
+                          : const Icon(Icons.location_searching)
+                      : const Icon(Icons.location_disabled),
+                ),
+              );
+            },
           );
         } else {
           button = Tooltip(
