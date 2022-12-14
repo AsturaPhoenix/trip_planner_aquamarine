@@ -3,6 +3,7 @@ import 'dart:core';
 import 'dart:core' as core;
 import 'dart:developer' as debug;
 
+import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -130,7 +131,7 @@ class TripPlannerState extends State<TripPlanner> {
   late Stream<core.Map<StationId, Station>> stations;
 
   bool locationEnabled = false;
-  late Future<Position?> initialPosition;
+  late CancelableOperation<Position?> initialPosition;
 
   double Function(StationType)? stationPriority;
 
@@ -141,11 +142,16 @@ class TripPlannerState extends State<TripPlanner> {
     super.initState;
     updateClient();
 
-    initialPosition = (kIsWeb
-            ? location.passivePosition.seededStream
-            : location.requestedPosition)
-        .timeout(const Duration(seconds: 10))
-        .first;
+    final cancel = StreamCloser<Position?>();
+    initialPosition = CancelableOperation.fromFuture(
+      (kIsWeb
+              ? location.passivePosition.seededStream
+              : location.requestedPosition)
+          .timeout(const Duration(seconds: 10))
+          .transform(cancel)
+          .first,
+      onCancel: cancel.close,
+    );
   }
 
   @override
@@ -169,6 +175,7 @@ class TripPlannerState extends State<TripPlanner> {
   void dispose() {
     super.dispose();
     widget.tripPlannerClient.close();
+    initialPosition.cancel();
   }
 
   @override
@@ -201,7 +208,7 @@ class TripPlannerState extends State<TripPlanner> {
           ),
         ),
         home: FutureBuilder(
-          future: initialPosition,
+          future: initialPosition.value,
           builder: (context, initialPosition) => StreamBuilder(
             stream: stations,
             builder: (context, stationsSnapshot) {

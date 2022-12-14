@@ -80,6 +80,7 @@ void main() {
       ),
     );
     expect(find.byType(GoogleMap), findsOneWidget);
+    await tester.pumpAndSettle();
   });
 
   group('TimeControls', () {
