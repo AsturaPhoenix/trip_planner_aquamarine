@@ -1,10 +1,12 @@
-class Optional<T extends Object> {
+class Optional<T> {
   static Optional<String> string(String value) =>
       Optional(value == '' ? null : value);
 
   Optional(this.value);
   final T? value;
 
-  U? map<U>(U? Function(T value) ifPresent) =>
-      value != null ? ifPresent(value!) : null;
+  U? map<U>(U? Function(T value) ifPresent) {
+    final value = this.value;
+    return value != null ? ifPresent(value) : null;
+  }
 }

@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geomag/geomag.dart';
 import 'package:motion_sensors/motion_sensors.dart';
-import 'package:rxdart/rxdart.dart';
+import 'package:rxdart/rxdart.dart' hide ValueStream;
 import 'package:vector_math/vector_math_64.dart';
+
+import '../util/value_stream.dart';
 
 Future<void> prefetchCapabilities() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,17 +41,33 @@ Quaternion calculateCanonicalOrientation(
 ) =>
     q * Quaternion.axisAngle(screenOrientationAxis, radians(screenOrientation));
 
-Stream<Quaternion> canonicalOrientation = Rx.combineLatest2(
-  motionSensors.absoluteOrientation
-      .map((orientation) => orientation.quaternion),
-  motionSensors.screenOrientation
-      .map((screenOrientation) => screenOrientation.angle),
-  calculateCanonicalOrientation,
-).asBroadcastStream();
+// Motion sensors don't re-emit their most recent value on resubscribe, so we
+// need to cache the screen orientation ourselves so that we can unsubscribe
+// from the orientation sensors when not in use. Otherwise, we won't be able to
+// compute orientation until the next screen rotation. Don't cache the
+// orientation itself as that will be quite stale, will refresh quickly, and
+// we'll be caching the computed canonical orientation anyway.
+final screenOrientation =
+    ValueStream.fromStream(motionSensors.screenOrientation);
+
+final canonicalOrientation = ValueStream<Quaternion>.fromStream(
+  Stream.multi(
+    (controller) => controller.addStream(
+      Rx.combineLatest2(
+        motionSensors.absoluteOrientation
+            .map((orientation) => orientation.quaternion),
+        screenOrientation.seededStream
+            .whereNotNull()
+            .map((screenOrientation) => screenOrientation.angle),
+        calculateCanonicalOrientation,
+      ),
+    ),
+  ),
+).transform((s, _) => s.refCount());
 
 double calculateBearing(Quaternion q) => -degrees(yaw(q));
 
-Stream<double> bearing = canonicalOrientation.map(calculateBearing);
+ValueStream<double> bearing = canonicalOrientation.map(calculateBearing);
 
 class CachingGeoMag {
   // These tolerances are semi arbitrary.

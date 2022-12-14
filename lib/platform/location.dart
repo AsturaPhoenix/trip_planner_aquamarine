@@ -50,11 +50,10 @@ final Stream<Position?> requestedPosition = Stream.multi(
   ),
 );
 
-final passivePosition = _passivePosition.valueStream;
+final passivePosition =
+    _passivePosition.valueStream.transform((s, _) => s.refCount());
 
 StreamSubscription? _passivePositionSubscription;
-Position? get position => _position;
-Position? _position;
 final _passivePosition = ValueStreamController<Position?>(
   StreamController.broadcast(
     onListen: () {
@@ -68,13 +67,9 @@ final _passivePosition = ValueStreamController<Position?>(
       }
     },
   ),
-  (stream) => stream.refCount(),
 );
 
 void _subscribePassivePosition() {
   _passivePositionSubscription =
-      Geolocator.getPositionStream().listen((position) {
-    _position = position;
-    _passivePosition.add(position);
-  });
+      Geolocator.getPositionStream().listen(_passivePosition.add);
 }

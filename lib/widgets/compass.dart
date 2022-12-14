@@ -3,11 +3,12 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:rxdart/rxdart.dart';
+import 'package:rxdart/rxdart.dart' hide ValueStream;
 
 import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
 import '../util/upsample_stream.dart';
+import '../util/value_stream.dart';
 import 'map.dart';
 
 class Compass extends StatefulWidget {
@@ -18,37 +19,42 @@ class Compass extends StatefulWidget {
 }
 
 class CompassState extends State<Compass> with TickerProviderStateMixin {
-  late final Stream<Position> positionStream;
-  late final Stream<double> orientationStream, geomagneticCorrectionStream;
+  late final ValueStream<Position?> devicePosition;
+  late final ValueStream<double> deviceOrientation, geomagneticCorrection;
 
   @override
   void initState() {
     super.initState();
 
-    positionStream = location.requestedPosition.whereNotNull();
+    location.requestPermission();
+    devicePosition = location.passivePosition;
 
     double polar(double radians) => (radians + pi) % (2 * pi) - pi;
 
     orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-    orientationStream = orientation.bearing
+    deviceOrientation = orientation.bearing
         .map((bearing) => orientation.radians(bearing))
-        .upsample(
-          tickerProvider: this,
-          initialState: 0,
-          applyDelta: (orientation, delta) => polar(orientation + delta),
-          calculateDelta: (after, before) => polar(after - before),
-          lerp: (delta, t) => delta * t,
+        .transform(
+          (s, v) => s.upsample(
+            tickerProvider: this,
+            initialState: v ?? 0,
+            applyDelta: (orientation, delta) => polar(orientation + delta),
+            calculateDelta: (after, before) => polar(after - before),
+            lerp: (delta, t) => delta * t,
+          ),
         );
-    geomagneticCorrectionStream = positionStream
+    geomagneticCorrection = devicePosition
         .map(orientation.CachingGeoMag().getFromPosition)
-        .whereNotNull()
+        .transform((s, _) => s.whereNotNull())
         .map((r) => orientation.radians(r.dec))
-        .upsample(
-          tickerProvider: this,
-          initialState: 0,
-          applyDelta: (correction, delta) => polar(correction + delta),
-          calculateDelta: (after, before) => polar(after - before),
-          lerp: (delta, t) => delta * t,
+        .transform(
+          (s, v) => s.upsample(
+            tickerProvider: this,
+            initialState: v ?? 0,
+            applyDelta: (correction, delta) => polar(correction + delta),
+            calculateDelta: (after, before) => polar(after - before),
+            lerp: (delta, t) => delta * t,
+          ),
         );
   }
 
@@ -69,8 +75,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StreamBuilder(
-                  initialData: location.position,
-                  stream: positionStream,
+                  initialData: devicePosition.value,
+                  stream: devicePosition.stream,
                   builder: (context, positionSnapshot) =>
                       positionSnapshot.hasData
                           ? Text(
@@ -86,8 +92,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: CompassDisk(
-                      magnetic: orientationStream,
-                      geomagneticCorrection: geomagneticCorrectionStream,
+                      magnetic: deviceOrientation,
+                      geomagneticCorrection: geomagneticCorrection,
                     ),
                   ),
                 ),
@@ -104,13 +110,14 @@ class CompassDisk extends StatelessWidget {
     required this.magnetic,
     required this.geomagneticCorrection,
   });
-  final Stream<double> magnetic, geomagneticCorrection;
+  final ValueStream<double> magnetic, geomagneticCorrection;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
         child: StreamBuilder(
-          stream: magnetic,
+          initialData: magnetic.value,
+          stream: magnetic.stream,
           builder: (context, magnetic) {
             return Transform.rotate(
               angle: -(magnetic.data ?? 0),
@@ -118,7 +125,8 @@ class CompassDisk extends StatelessWidget {
                 alignment: Alignment.center,
                 children: [
                   StreamBuilder(
-                    stream: geomagneticCorrection,
+                    initialData: geomagneticCorrection.value,
+                    stream: geomagneticCorrection.stream,
                     builder: (context, geomagneticCorrection) {
                       return Transform.rotate(
                         angle: -(geomagneticCorrection.data ?? 0),

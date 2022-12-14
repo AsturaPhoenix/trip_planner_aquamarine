@@ -248,7 +248,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           final geomag = orientation.CachingGeoMag();
           trackingSubscription = Rx.combineLatest2(
             location.requestedPosition,
-            orientation.bearing,
+            orientation.bearing.seededStream.whereNotNull(),
             (position, bearing) => mapAnimation.target.copyWith(
               target: position?.toLatLng(),
               bearing: bearing + (geomag.getFromPosition(position)?.dec ?? 0),
