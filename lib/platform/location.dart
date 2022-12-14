@@ -14,30 +14,31 @@ final bool canRequestLocation =
 
 Future<bool> requestPermission() => _permissionRequest.fetch(
       () async {
-        final wasEnabled = _isEnabled;
+        final wasEnabled = isEnabled.value;
         if (kIsWeb) {
-          _isEnabled = true;
+          _isEnabled.add(true);
         } else {
           _permissionStatus.add(await Permission.locationWhenInUse.request());
-          _isEnabled = permissionStatus.value!.isGranted;
+          _isEnabled.add(permissionStatus.value!.isGranted);
         }
 
         if (_passivePosition.streamController.hasListener &&
-            wasEnabled != _isEnabled) {
-          if (_isEnabled) {
+            wasEnabled != isEnabled.value) {
+          if (isEnabled.value) {
             _subscribePassivePosition();
           } else {
             _passivePositionSubscription!.cancel();
             _passivePosition.add(null);
           }
         }
-        return _isEnabled;
+        return isEnabled.value;
       },
     );
 final _permissionRequest = AsyncCache<bool>.ephemeral();
 
-bool get isEnabled => _isEnabled;
-bool _isEnabled = false;
+final isEnabled = _isEnabled.valueStream;
+final _isEnabled =
+    InitializedValueStreamController<bool>(StreamController.broadcast(), false);
 final permissionStatus = _permissionStatus.valueStream;
 final _permissionStatus =
     ValueStreamController<PermissionStatus>(StreamController.broadcast());
@@ -57,12 +58,12 @@ StreamSubscription? _passivePositionSubscription;
 final _passivePosition = ValueStreamController<Position?>(
   StreamController.broadcast(
     onListen: () {
-      if (_isEnabled) {
+      if (isEnabled.value) {
         _subscribePassivePosition();
       }
     },
     onCancel: () {
-      if (_isEnabled) {
+      if (isEnabled.value) {
         _passivePositionSubscription!.cancel();
       }
     },

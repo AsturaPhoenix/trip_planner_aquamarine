@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'optional.dart';
 
+typedef ValueStream<T> = ValueStreamBase<T, T?>;
+typedef InitializedValueStream<T> = ValueStreamBase<T, T>;
+
 /// A dart-idiomatic version of rxdart's `ValueStream`, which plays well with
 /// `StreamBuilder`s and doesn't necessarily exhibit #452.
-abstract class ValueStream<T> {
-  ValueStream();
+abstract class ValueStreamBase<T extends Initial, Initial> {
+  ValueStreamBase();
 
   /// Constructs a [ValueStream] that intercepts and caches values from a
   /// single-subscription stream. Using a [ValueStreamController] is preferred
@@ -14,40 +17,50 @@ abstract class ValueStream<T> {
   /// necessarily prohibit multiple listeners, but ideally events should only
   /// publish once. If a broadcast is needed, it should be done using
   /// [transform].
-  factory ValueStream.fromStream(Stream<T> source) {
-    late _CachedValueStream<T> impl;
+  static ValueStream<T> fromStream<T>(Stream<T> source) {
+    late _CachedValueStream<T, T?> impl;
     impl = _CachedValueStream(
       source.map((e) {
         impl._value = e;
         return e;
       }),
+      null,
     );
     return impl;
   }
 
-  T? get value;
+  Initial get value;
   Stream<T> get stream;
 
-  late final Stream<T?> seededStream = Stream.multi((controller) {
+  late final Stream<Initial> seededStream = Stream.multi((controller) {
     controller
       ..add(value)
       ..addStream(stream);
   });
 
-  ValueStream<U> map<U>(U Function(T) f) => _MappedValueStream(this, f);
-  ValueStream<U> transform<U>(
-    Stream<U> Function(Stream<T> stream, T? initialValue) transformation,
+  ValueStreamBase<U, Initial> transform<U extends Initial>(
+    Stream<U> Function(Stream<T> stream, Initial initialValue) transformation,
   ) =>
       _TransformedValueStream(this, transformation);
 }
 
-class _CachedValueStream<T> extends ValueStream<T> {
-  _CachedValueStream(this.stream);
+extension UninitializedMap<T extends Object> on ValueStream<T> {
+  ValueStream<U> map<U>(U Function(T) f) => _MappedValueStream(this, f);
+}
+
+extension InitializedMap<T> on InitializedValueStream<T> {
+  InitializedValueStream<U> map<U>(U Function(T) f) =>
+      _MappedInitializedValueStream(this, f);
+}
+
+class _CachedValueStream<T extends Initial, Initial>
+    extends ValueStreamBase<T, Initial> {
+  _CachedValueStream(this.stream, this._value);
 
   @override
-  T? get value => _value;
+  Initial get value => _value;
   // populated externally
-  T? _value;
+  Initial _value;
   @override
   final Stream<T> stream;
 }
@@ -57,37 +70,54 @@ class _MappedValueStream<T, U> extends ValueStream<U> {
   final ValueStream<T> source;
   final U Function(T) mapping;
 
-  U? optionalMapping(T? value) => Optional(value).map(mapping);
-
   @override
-  U? get value => optionalMapping(source.value);
+  U? get value => Optional(source.value).map(mapping);
   @override
   late final Stream<U> stream = source.stream.map(mapping);
 }
 
-class _TransformedValueStream<T, U> extends ValueStream<U> {
-  _TransformedValueStream(this.source, this.transformation);
-  final ValueStream<T> source;
-  final Stream<U> Function(Stream<T> stream, T? initialValue) transformation;
+class _MappedInitializedValueStream<T, U> extends InitializedValueStream<U> {
+  _MappedInitializedValueStream(this.source, this.mapping);
+  final InitializedValueStream<T> source;
+  final U Function(T) mapping;
 
-  // This actually requires T extends U, but we can't enforce that because Dart
-  // doesn't have generic lower bounds.
   @override
-  U? get value => source.value as U?;
+  U get value => mapping(source.value);
+  @override
+  late final Stream<U> stream = source.stream.map(mapping);
+}
+
+class _TransformedValueStream<T extends Initial, U extends Initial, Initial>
+    extends ValueStreamBase<U, Initial> {
+  _TransformedValueStream(this.source, this.transformation);
+  final ValueStreamBase<T, Initial> source;
+  final Stream<U> Function(Stream<T> stream, Initial initialValue)
+      transformation;
+
+  @override
+  Initial get value => source.value;
   @override
   late final Stream<U> stream = transformation(source.stream, source.value);
 }
 
-class ValueStreamController<T> {
-  ValueStreamController(this.streamController)
-      : valueStream = _CachedValueStream(streamController.stream);
+typedef InitializedValueStreamController<T> = ValueStreamControllerBase<T, T>;
+
+class ValueStreamControllerBase<T extends Initial, Initial> {
+  ValueStreamControllerBase(this.streamController, Initial initialValue)
+      : valueStream = _CachedValueStream(streamController.stream, initialValue);
+
   final StreamController<T> streamController;
-  final ValueStream<T> valueStream;
+  final ValueStreamBase<T, Initial> valueStream;
 
   void add(T value) {
     (valueStream as _CachedValueStream)._value = value;
     streamController.add(value);
   }
+}
+
+class ValueStreamController<T> extends ValueStreamControllerBase<T, T?> {
+  ValueStreamController(StreamController<T> streamController)
+      : super(streamController, null);
 }
 
 extension RefCount<T> on Stream<T> {

@@ -50,7 +50,7 @@ Quaternion calculateCanonicalOrientation(
 final screenOrientation =
     ValueStream.fromStream(motionSensors.screenOrientation);
 
-final canonicalOrientation = ValueStream<Quaternion>.fromStream(
+final canonicalOrientation = ValueStream.fromStream<Quaternion>(
   Stream.multi(
     (controller) => controller.addStream(
       Rx.combineLatest2(

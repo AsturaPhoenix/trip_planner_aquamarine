@@ -376,7 +376,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     if (widget.selectedStation != null &&
         oldWidget.selectedStation == null &&
         gmap != null &&
-        (trackingMode == TrackingMode.free || !location.isEnabled)) {
+        (trackingMode == TrackingMode.free || !location.isEnabled.value)) {
       animateToSelectedStation();
     }
   }
@@ -534,7 +534,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                   );
                   if (widget.selectedStation != null &&
                       (trackingMode == TrackingMode.free ||
-                          !location.isEnabled)) {
+                          !location.isEnabled.value)) {
                     animateToSelectedStation();
                   }
                 },
