@@ -35,26 +35,37 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
     deviceOrientation = orientation.bearing
         .map((bearing) => orientation.radians(bearing))
         .transform(
-          (s, v) => s.upsample(
-            tickerProvider: this,
-            initialState: v ?? 0,
-            applyDelta: (orientation, delta) => polar(orientation + delta),
-            calculateDelta: (after, before) => polar(after - before),
-            lerp: (delta, t) => delta * t,
-          ),
+          // We unsubscribe from the orientation sensors while they're not
+          // needed, which seems to cause the platform channel to buffer some
+          // events. We need to skip these buffered events to animate properly
+          // between the last cached state and the first updated state. If we
+          // don't skip the buffered events, the upsampler treats all but the
+          // first event as an immediate series of movements that causes the
+          // animation to skip.
+          //
+          // Unfortunately there doesn't seem to be a great way to reliably skip
+          // all buffered events, so at some point we might want to explore
+          // limiting the deltas instead.
+          (s, v) => s.skipBuffered().upsample(
+                tickerProvider: this,
+                initialState: polar(v ?? 0),
+                applyDelta: (orientation, delta) => polar(orientation + delta),
+                calculateDelta: (after, before) => polar(after - before),
+                lerp: (delta, t) => delta * t,
+              ),
         );
     geomagneticCorrection = devicePosition
         .map(orientation.CachingGeoMag().getFromPosition)
         .transform((s, _) => s.whereNotNull())
         .map((r) => orientation.radians(r.dec))
         .transform(
-          (s, v) => s.upsample(
-            tickerProvider: this,
-            initialState: v ?? 0,
-            applyDelta: (correction, delta) => polar(correction + delta),
-            calculateDelta: (after, before) => polar(after - before),
-            lerp: (delta, t) => delta * t,
-          ),
+          (s, v) => s.skipBuffered().upsample(
+                tickerProvider: this,
+                initialState: polar(v ?? 0),
+                applyDelta: (correction, delta) => polar(correction + delta),
+                calculateDelta: (after, before) => polar(after - before),
+                lerp: (delta, t) => delta * t,
+              ),
         );
   }
 

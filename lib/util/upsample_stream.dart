@@ -53,4 +53,11 @@ extension Upsample<T> on Stream<T> {
 
     return controller.stream;
   }
+
+  Stream<T> skipBuffered() => Stream.multi((controller) {
+        var skip = true;
+        final skipTimer = Timer(Duration.zero, () => skip = false);
+        controller.addStream(skipWhile((_) => skip));
+        controller.onCancel = skipTimer.cancel;
+      });
 }
