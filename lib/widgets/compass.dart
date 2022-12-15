@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
 
+import '../main.dart' show sharedPreferences;
 import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
 import '../util/upsample_stream.dart';
@@ -22,12 +23,22 @@ class Compass extends StatefulWidget {
   State<Compass> createState() => CompassState();
 }
 
-typedef CompassBuilder = Widget Function({
-  required ValueStream<double> magnetic,
-  required ValueStream<double> geomagneticCorrection,
-});
+enum CompassType {
+  classic('Classic', CompassDisk.new),
+  nautical('Nautical', NauticalCompass.new);
+
+  const CompassType(this.description, this.builder);
+
+  final String description;
+  final Widget Function({
+    required ValueStream<double> magnetic,
+    required ValueStream<double> geomagneticCorrection,
+  }) builder;
+}
 
 class CompassState extends State<Compass> with TickerProviderStateMixin {
+  static const compassTypeSettingKey = 'compass/compassType';
+
   late final ValueStream<Position?> devicePosition;
   late final ValueStream<double> geomagneticCorrection,
       upsampledOrientation,
@@ -35,7 +46,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   StreamSubscription? orientationBroadcastSubscription,
       geomagBroadcastSubscription;
 
-  CompassBuilder compass = CompassDisk.new;
+  var compassType =
+      CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
 
   @override
   void initState() {
@@ -120,20 +132,20 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
         child: Scaffold(
           appBar: AppBar(
             actions: [
-              PopupMenuButton<CompassBuilder>(
+              PopupMenuButton(
                 icon: const Icon(Icons.settings),
                 tooltip: 'Compass style',
-                initialValue: compass,
-                onSelected: (value) => setState(() => compass = value),
+                initialValue: compassType,
+                onSelected: (value) => setState(() {
+                  compassType = value;
+                  sharedPreferences.setInt(compassTypeSettingKey, value.index);
+                }),
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: CompassDisk.new,
-                    child: Text('Classic'),
-                  ),
-                  const PopupMenuItem(
-                    value: NauticalCompass.new,
-                    child: Text('Nautical'),
-                  )
+                  for (final compassType in CompassType.values)
+                    PopupMenuItem(
+                      value: compassType,
+                      child: Text(compassType.description),
+                    ),
                 ],
               )
             ],
@@ -154,7 +166,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                           Flexible(
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: compass(
+                              child: compassType.builder(
                                 magnetic: upsampledOrientation,
                                 geomagneticCorrection: upsampledGeomag,
                               ),
@@ -173,7 +185,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerRight,
-                            child: compass(
+                            child: compassType.builder(
                               magnetic: upsampledOrientation,
                               geomagneticCorrection: upsampledGeomag,
                             ),

@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart';
 
 import 'persistence/blob_cache.dart';
@@ -26,6 +27,8 @@ import 'widgets/details_panel.dart';
 import 'widgets/map.dart';
 import 'widgets/tide_panel.dart';
 
+late final SharedPreferences sharedPreferences;
+
 void main() async {
   Logger.root.onRecord.listen(
     (record) => debug.log(
@@ -36,7 +39,11 @@ void main() async {
     ),
   );
 
-  final prefetch = orientation.prefetchCapabilities();
+  final prefetch = Future.wait([
+    orientation.prefetchCapabilities(),
+    SharedPreferences.getInstance()
+        .then((instance) => sharedPreferences = instance)
+  ]);
 
   initializeTimeZones();
 
