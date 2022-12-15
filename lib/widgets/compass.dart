@@ -21,13 +21,18 @@ class Compass extends StatefulWidget {
   State<Compass> createState() => CompassState();
 }
 
+typedef CompassBuilder = Widget Function({
+  required ValueStream<double> magnetic,
+  required ValueStream<double> geomagneticCorrection,
+});
+
 class CompassState extends State<Compass> with TickerProviderStateMixin {
   late final ValueStream<Position?> devicePosition;
   late final ValueStream<double> geomagneticCorrection,
       upsampledOrientation,
       upsampledGeomag;
 
-  late final Widget compass;
+  CompassBuilder compass = CompassDisk.new;
 
   @override
   void initState() {
@@ -82,14 +87,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               )
               .asBroadcastStream(),
         );
-
-    compass = Padding(
-      padding: const EdgeInsets.all(16),
-      child: NauticalCompass(
-        magnetic: upsampledOrientation,
-        geomagneticCorrection: upsampledGeomag,
-      ),
-    );
   }
 
   @override
@@ -103,7 +100,26 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
           scaffoldBackgroundColor: Colors.black,
         ),
         child: Scaffold(
-          appBar: AppBar(),
+          appBar: AppBar(
+            actions: [
+              PopupMenuButton<CompassBuilder>(
+                icon: const Icon(Icons.settings),
+                tooltip: 'Compass style',
+                initialValue: compass,
+                onSelected: (value) => setState(() => compass = value),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: CompassDisk.new,
+                    child: Text('Classic'),
+                  ),
+                  const PopupMenuItem(
+                    value: NauticalCompass.new,
+                    child: Text('Nautical'),
+                  )
+                ],
+              )
+            ],
+          ),
           body: DefaultTextStyle(
             style: const TextStyle(
               fontSize: 24,
@@ -117,7 +133,15 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const LocationInfo(),
-                          Flexible(child: compass),
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: compass(
+                                magnetic: upsampledOrientation,
+                                geomagneticCorrection: upsampledGeomag,
+                              ),
+                            ),
+                          ),
                           BearingInfo(
                             magnetic: orientation.bearing,
                             magneticCorrection: geomagneticCorrection,
@@ -131,7 +155,10 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerRight,
-                            child: compass,
+                            child: compass(
+                              magnetic: upsampledOrientation,
+                              geomagneticCorrection: upsampledGeomag,
+                            ),
                           ),
                         ),
                         Expanded(
