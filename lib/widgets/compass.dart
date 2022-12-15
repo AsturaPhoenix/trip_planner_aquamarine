@@ -177,8 +177,9 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                   : Row(
                       children: [
                         Expanded(
-                          child: Align(
+                          child: Container(
                             alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.all(4),
                             child: compassType.builder(compass: this),
                           ),
                         ),
