@@ -220,21 +220,22 @@ class BearingInfo extends StatelessWidget {
         initialData: magnetic.value,
         stream: magnetic.stream,
         builder: (context, magnetic) => magnetic.hasData
-            ? Column(
-                crossAxisAlignment: crossAxisAlignment,
-                children: [
-                  StreamBuilder(
-                    initialData: magneticCorrection.value,
-                    stream: magneticCorrection.stream,
-                    builder: (context, correction) => Text(
-                      formatBearing(
-                        magnetic.data! + (correction.data ?? 0),
-                        'true',
+            ? StreamBuilder(
+                initialData: magneticCorrection.value,
+                stream: magneticCorrection.stream,
+                builder: (context, correction) => Column(
+                  crossAxisAlignment: crossAxisAlignment,
+                  children: [
+                    if (correction.hasData)
+                      Text(
+                        formatBearing(
+                          magnetic.data! + correction.data!,
+                          'true',
+                        ),
                       ),
-                    ),
-                  ),
-                  Text(formatBearing(magnetic.data!, 'magnetic')),
-                ],
+                    Text(formatBearing(magnetic.data!, 'magnetic')),
+                  ],
+                ),
               )
             : magnetic.hasError
                 ? const Text('Could not acquire compass.')
