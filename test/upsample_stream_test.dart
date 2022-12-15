@@ -27,6 +27,7 @@ void main() {
   DateTime? tickerStart;
 
   late TestTickerProvider tickerProvider;
+  late MockTicker ticker;
   late StreamController<double> input;
   late Stream<double> output;
 
@@ -47,13 +48,13 @@ void main() {
       clock: () => t,
     );
 
-    final mockTicker = MockTicker();
-    tickerProvider.ticker = mockTicker;
-    when(mockTicker.start()).thenAnswer((realInvocation) {
+    ticker = MockTicker();
+    tickerProvider.ticker = ticker;
+    when(ticker.start()).thenAnswer((realInvocation) {
       tickerStart = t;
       return TickerFuture.complete();
     });
-    when(mockTicker.stop()).thenAnswer((realInvocation) => tickerStart = null);
+    when(ticker.stop()).thenAnswer((realInvocation) => tickerStart = null);
     subscription = output.listen((event) {
       expect(sample, null);
       sample = event;
@@ -122,5 +123,12 @@ void main() {
       input.add(i);
       expect(await tick(), i);
     }
+  });
+
+  test('Cleans up animations in progress', () async {
+    input.add(1);
+    await tick();
+    subscription.cancel();
+    verify(ticker.dispose());
   });
 }

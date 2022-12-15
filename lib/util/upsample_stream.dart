@@ -21,6 +21,9 @@ extension Upsample<T> on Stream<T> {
     late final AnimationCoordinator<T, Delta> blender;
     DateTime? lastEventTime;
 
+    // Although it'd be conceivable to make this a broadcast controller from
+    // here, let's avoid that since the animation controller initial state is
+    // seeded only once at initialization by the caller.
     controller = StreamController(
       onListen: () {
         final DateTime start = clock();
@@ -47,7 +50,7 @@ extension Upsample<T> on Stream<T> {
       onResume: () => subscription.resume(),
       onCancel: () {
         subscription.cancel();
-        blender.ticker.stop(canceled: true);
+        blender.ticker.dispose();
       },
     );
 

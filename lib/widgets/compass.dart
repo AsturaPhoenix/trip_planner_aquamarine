@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:collection/collection.dart';
@@ -31,6 +32,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   late final ValueStream<double> geomagneticCorrection,
       upsampledOrientation,
       upsampledGeomag;
+  StreamSubscription? orientationBroadcastSubscription,
+      geomagBroadcastSubscription;
 
   CompassBuilder compass = CompassDisk.new;
 
@@ -67,7 +70,10 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                 calculateDelta: (after, before) => polar(after - before),
                 lerp: (delta, t) => delta * t,
               )
-              .asBroadcastStream(),
+              .asBroadcastStream(
+                onListen: (subscription) =>
+                    orientationBroadcastSubscription = subscription,
+              ),
         );
     geomagneticCorrection = devicePosition
         .map(orientation.CachingGeoMag().getFromPosition)
@@ -85,8 +91,20 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                 calculateDelta: (after, before) => polar(after - before),
                 lerp: (delta, t) => delta * t,
               )
-              .asBroadcastStream(),
+              .asBroadcastStream(
+                onListen: (subscription) =>
+                    geomagBroadcastSubscription = subscription,
+              ),
         );
+  }
+
+  @override
+  void dispose() {
+    orientationBroadcastSubscription?.cancel();
+    geomagBroadcastSubscription?.cancel();
+    // This needs to happen after the subscription cancellations or the ticker
+    // provider mixin will complain about leaks.
+    super.dispose();
   }
 
   @override
