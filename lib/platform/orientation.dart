@@ -67,6 +67,7 @@ final canonicalOrientation = ValueStream.fromStream<Quaternion>(
 
 double calculateBearing(Quaternion q) => -degrees(yaw(q));
 
+/// degrees
 ValueStream<double> bearing = canonicalOrientation.map(calculateBearing);
 
 class CachingGeoMag {

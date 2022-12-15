@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_arc_text/flutter_arc_text.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
 
@@ -83,7 +85,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
 
     compass = Padding(
       padding: const EdgeInsets.all(16),
-      child: CompassDisk(
+      child: NauticalCompass(
         magnetic: upsampledOrientation,
         geomagneticCorrection: upsampledGeomag,
       ),
@@ -300,40 +302,25 @@ class CompassRose extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           const referenceSize = 0x180;
-          final sizeBasis = min(
-            min(constraints.maxWidth, constraints.maxHeight),
-            referenceSize,
+          final fontScale = min(
+            min(constraints.maxWidth, constraints.maxHeight) / referenceSize,
+            1,
           );
-          final largeText = TextStyle(
-            fontSize: sizeBasis * 72 / referenceSize,
-            fontWeight: FontWeight.bold,
-          );
-          final smallText = TextStyle(
-            fontSize: sizeBasis * 32 / referenceSize,
-            fontWeight: FontWeight.bold,
-          );
+          final textStyles = [
+            for (final fontSize in [72.0, 32.0])
+              TextStyle(
+                fontSize: fontSize * fontScale,
+                fontWeight: FontWeight.bold,
+              )
+          ];
 
-          return Stack(
-            fit: StackFit.expand,
+          return RingStack(
             children: [
-              ...['N', 'E', 'S', 'W'].mapIndexed(
-                (index, element) => Transform.rotate(
-                  angle: index * pi / 2,
-                  child: Text(
-                    element,
-                    textAlign: TextAlign.center,
-                    style: largeText,
-                  ),
-                ),
-              ),
-              ...['NE', 'SE', 'SW', 'NW'].mapIndexed(
-                (index, element) => Transform.rotate(
-                  angle: (index + .5) * pi / 2,
-                  child: Text(
-                    element,
-                    textAlign: TextAlign.center,
-                    style: smallText,
-                  ),
+              ...['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].mapIndexed(
+                (index, label) => Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: textStyles[index % 2],
                 ),
               )
             ],
@@ -418,4 +405,229 @@ class CompassArrow extends CustomPainter {
   @override
   bool shouldRepaint(covariant CompassArrow oldDelegate) =>
       elevation != oldDelegate.elevation;
+}
+
+class NauticalCompass extends StatelessWidget {
+  static const color = Colors.pinkAccent;
+  static const fontSize = 10.0;
+  static const textStyle = TextStyle(color: color, fontSize: fontSize);
+  static const innerRadius = 48.0;
+
+  static String formatMagneticCorrection(double degrees) {
+    final minutes = (degrees.abs() * 60).round();
+    return "VAR ${minutes ~/ 60}°${minutes % 60}'${degrees >= 0 ? 'E' : 'W'}";
+  }
+
+  const NauticalCompass({
+    super.key,
+    required this.magnetic,
+    required this.geomagneticCorrection,
+  });
+  final ValueStream<double> magnetic, geomagneticCorrection;
+
+  @override
+  Widget build(BuildContext context) => DividerTheme(
+        data: const DividerThemeData(color: color, space: 0),
+        child: DefaultTextStyle(
+          style: textStyle,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const threshold =
+                    2 * (innerRadius + 2 * fontSize + 16 + 28 + 40);
+                bool compact = constraints.maxWidth < threshold ||
+                    constraints.maxHeight < threshold;
+
+                return StreamBuilder(
+                  initialData: geomagneticCorrection.value,
+                  stream: geomagneticCorrection.stream,
+                  builder: (context, geomagneticCorrection) => Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      StreamBuilder(
+                        initialData: magnetic.value,
+                        stream: magnetic.stream,
+                        builder: (context, magnetic) => Transform.rotate(
+                          angle: -(magnetic.data ?? 0),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Transform.rotate(
+                                angle: -(geomagneticCorrection.data ?? 0),
+                                child: Stack(
+                                  alignment: Alignment.topCenter,
+                                  children: [
+                                    SvgPicture.asset(
+                                      'assets/nautical_star.svg',
+                                      height: 16,
+                                      color: color,
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: _DecimalRing(
+                                        labelInterval: compact ? 30 : 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(40 + fontSize),
+                                child: _NauticalCompassInnerRing(
+                                  compact: compact,
+                                ),
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (!compact)
+                        const ArcText(
+                          radius: innerRadius,
+                          text: 'MAGNETIC',
+                          textStyle: NauticalCompass.textStyle,
+                          startAngleAlignment: StartAngleAlignment.center,
+                          placement: Placement.inside,
+                        ),
+                      if (!compact && geomagneticCorrection.hasData)
+                        ArcText(
+                          radius: innerRadius,
+                          text: formatMagneticCorrection(
+                            orientation.degrees(geomagneticCorrection.data!),
+                          ),
+                          textStyle: NauticalCompass.textStyle,
+                          startAngle: pi,
+                          startAngleAlignment: StartAngleAlignment.center,
+                          direction: Direction.counterClockwise,
+                          placement: Placement.inside,
+                        ),
+                      const Icon(Icons.add, color: color)
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+}
+
+class _DecimalRing extends StatelessWidget {
+  static const quarterMark = _TickMark(length: 8);
+  const _DecimalRing({
+    this.labelInterval = 10,
+    this.increment = 1,
+    this.northMarker = quarterMark,
+  });
+  final int labelInterval, increment;
+  final Widget northMarker;
+
+  @override
+  Widget build(BuildContext context) => RingStack(
+        children: [
+          for (int degrees = 0; degrees < 360; degrees += increment)
+            Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                alignment: Alignment.bottomCenter,
+                height: 24 + NauticalCompass.fontSize,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (degrees % 90 == 0)
+                      degrees == 0 ? northMarker : quarterMark,
+                    if (degrees % labelInterval == 0) Text('$degrees'),
+                    degrees % 10 == 0
+                        ? const _TickMark(length: 10)
+                        : degrees % 5 == 0 && increment < 5
+                            ? const _TickMark(length: 7)
+                            : const _TickMark(length: 4),
+                  ],
+                ),
+              ),
+            )
+        ],
+      );
+}
+
+class _NauticalCompassInnerRing extends StatelessWidget {
+  const _NauticalCompassInnerRing({this.compact = false});
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        alignment: Alignment.center,
+        children: [
+          _DecimalRing(
+            labelInterval: 30,
+            increment: compact ? 5 : 1,
+            northMarker: const Icon(
+              Icons.arrow_upward,
+              size: 8,
+              color: NauticalCompass.color,
+            ),
+          ),
+          if (!compact)
+            Padding(
+              padding: const EdgeInsets.all(28 + NauticalCompass.fontSize),
+              child: RingStack(
+                children: [
+                  for (int tick = 0; tick < 128; ++tick)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: tick % 32 == 0
+                          ? const _InsideRelativeTickMark(
+                              innerRadius: NauticalCompass.innerRadius,
+                            )
+                          : tick % 4 == 0
+                              ? const _TickMark(length: 16)
+                              : tick % 2 == 0
+                                  ? const _TickMark(length: 8)
+                                  : const _TickMark(length: 4),
+                    )
+                ],
+              ),
+            ),
+        ],
+      );
+}
+
+class _TickMark extends StatelessWidget {
+  const _TickMark({required this.length});
+  final double length;
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(height: length, child: const VerticalDivider());
+}
+
+class _InsideRelativeTickMark extends StatelessWidget {
+  const _InsideRelativeTickMark({required this.innerRadius});
+  final double innerRadius;
+
+  @override
+  Widget build(BuildContext context) => FractionallySizedBox(
+        alignment: Alignment.topCenter,
+        heightFactor: .5,
+        child: VerticalDivider(endIndent: innerRadius),
+      );
+}
+
+class RingStack extends StatelessWidget {
+  const RingStack({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+        fit: StackFit.expand,
+        children: [
+          ...children.mapIndexed(
+            (index, child) => Transform.rotate(
+              angle: index / children.length * 2 * pi,
+              child: child,
+            ),
+          )
+        ],
+      );
 }
