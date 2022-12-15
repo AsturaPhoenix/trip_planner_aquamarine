@@ -5,7 +5,6 @@ import 'package:flutter_arc_text/flutter_arc_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../platform/orientation.dart' as orientation;
-import '../util/value_stream.dart';
 import 'compass.dart';
 
 class NauticalCompass extends StatelessWidget {
@@ -21,10 +20,9 @@ class NauticalCompass extends StatelessWidget {
 
   const NauticalCompass({
     super.key,
-    required this.magnetic,
-    required this.geomagneticCorrection,
+    required this.compass,
   });
-  final ValueStream<double> magnetic, geomagneticCorrection;
+  final CompassState compass;
 
   @override
   Widget build(BuildContext context) => DividerTheme(
@@ -41,71 +39,80 @@ class NauticalCompass extends StatelessWidget {
                     constraints.maxHeight < threshold;
 
                 return StreamBuilder(
-                  initialData: geomagneticCorrection.value,
-                  stream: geomagneticCorrection.stream,
-                  builder: (context, geomagneticCorrection) => Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      StreamBuilder(
-                        initialData: magnetic.value,
-                        stream: magnetic.stream,
-                        builder: (context, magnetic) => Transform.rotate(
-                          angle: -(magnetic.data ?? 0),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Transform.rotate(
-                                angle: -(geomagneticCorrection.data ?? 0),
-                                child: Stack(
-                                  alignment: Alignment.topCenter,
-                                  children: [
-                                    SvgPicture.asset(
-                                      'assets/nautical_star.svg',
-                                      height: 16,
-                                      color: color,
+                  // Use the raw magnetic correction for the readout display
+                  // since it's in degrees and not animated.
+                  initialData: compass.geomagneticCorrection.value,
+                  stream: compass.geomagneticCorrection.stream,
+                  builder: (context, magneticCorrection) {
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        StreamBuilder(
+                          initialData: compass.upsampledOrientation.value,
+                          stream: compass.upsampledOrientation.stream,
+                          builder: (context, magnetic) => Transform.rotate(
+                            angle: -(magnetic.data ?? 0),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                StreamBuilder(
+                                  initialData: compass.upsampledGeomag.value,
+                                  stream: compass.upsampledGeomag.stream,
+                                  builder: (context, magneticCorrection) =>
+                                      Transform.rotate(
+                                    angle: -(magneticCorrection.data ?? 0),
+                                    child: Stack(
+                                      alignment: Alignment.topCenter,
+                                      children: [
+                                        SvgPicture.asset(
+                                          'assets/nautical_star.svg',
+                                          height: 16,
+                                          color: color,
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: _DecimalRing(
+                                            labelInterval: compact ? 30 : 10,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: _DecimalRing(
-                                        labelInterval: compact ? 30 : 10,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(40 + fontSize),
-                                child: _InnerRing(
-                                  compact: compact,
-                                ),
-                              )
-                            ],
+                                Padding(
+                                  padding: const EdgeInsets.all(40 + fontSize),
+                                  child: _InnerRing(
+                                    compact: compact,
+                                  ),
+                                )
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      if (!compact)
-                        const ArcText(
-                          radius: innerRadius,
-                          text: 'MAGNETIC',
-                          textStyle: NauticalCompass.textStyle,
-                          startAngleAlignment: StartAngleAlignment.center,
-                          placement: Placement.inside,
-                        ),
-                      if (!compact && geomagneticCorrection.hasData)
-                        ArcText(
-                          radius: innerRadius,
-                          text: formatMagneticCorrection(
-                            orientation.degrees(geomagneticCorrection.data!),
+                        if (!compact)
+                          const ArcText(
+                            radius: innerRadius,
+                            text: 'MAGNETIC',
+                            textStyle: NauticalCompass.textStyle,
+                            startAngleAlignment: StartAngleAlignment.center,
+                            placement: Placement.inside,
                           ),
-                          textStyle: NauticalCompass.textStyle,
-                          startAngle: pi,
-                          startAngleAlignment: StartAngleAlignment.center,
-                          direction: Direction.counterClockwise,
-                          placement: Placement.inside,
-                        ),
-                      const Icon(Icons.add, color: color)
-                    ],
-                  ),
+                        if (!compact && magneticCorrection.hasData)
+                          ArcText(
+                            radius: innerRadius,
+                            text: formatMagneticCorrection(
+                              magneticCorrection.data!,
+                            ),
+                            textStyle: NauticalCompass.textStyle,
+                            startAngle: pi,
+                            startAngleAlignment: StartAngleAlignment.center,
+                            direction: Direction.counterClockwise,
+                            placement: Placement.inside,
+                          ),
+                        const Icon(Icons.add, color: color)
+                      ],
+                    );
+                  },
                 );
               },
             ),

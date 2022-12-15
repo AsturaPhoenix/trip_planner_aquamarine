@@ -3,23 +3,21 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
-import '../util/value_stream.dart';
 import 'compass.dart';
 
 class ClassicCompass extends StatelessWidget {
   const ClassicCompass({
     super.key,
-    required this.magnetic,
-    required this.geomagneticCorrection,
+    required this.compass,
   });
-  final ValueStream<double> magnetic, geomagneticCorrection;
+  final CompassState compass;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
         child: StreamBuilder(
-          initialData: magnetic.value,
-          stream: magnetic.stream,
+          initialData: compass.upsampledOrientation.value,
+          stream: compass.upsampledOrientation.stream,
           builder: (context, magnetic) {
             return Transform.rotate(
               angle: -(magnetic.data ?? 0),
@@ -27,11 +25,11 @@ class ClassicCompass extends StatelessWidget {
                 alignment: Alignment.center,
                 children: [
                   StreamBuilder(
-                    initialData: geomagneticCorrection.value,
-                    stream: geomagneticCorrection.stream,
-                    builder: (context, geomagneticCorrection) {
+                    initialData: compass.upsampledGeomag.value,
+                    stream: compass.upsampledGeomag.stream,
+                    builder: (context, magneticCorrection) {
                       return Transform.rotate(
-                        angle: -(geomagneticCorrection.data ?? 0),
+                        angle: -(magneticCorrection.data ?? 0),
                         child: const CompassRose(elevation: 1),
                       );
                     },

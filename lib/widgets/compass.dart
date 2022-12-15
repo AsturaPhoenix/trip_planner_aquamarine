@@ -30,10 +30,7 @@ enum CompassType {
   const CompassType(this.description, this.builder);
 
   final String description;
-  final Widget Function({
-    required ValueStream<double> magnetic,
-    required ValueStream<double> geomagneticCorrection,
-  }) builder;
+  final Widget Function({required CompassState compass}) builder;
 }
 
 class CompassState extends State<Compass> with TickerProviderStateMixin {
@@ -166,10 +163,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                           Flexible(
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: compassType.builder(
-                                magnetic: upsampledOrientation,
-                                geomagneticCorrection: upsampledGeomag,
-                              ),
+                              child: compassType.builder(compass: this),
                             ),
                           ),
                           BearingInfo(
@@ -185,10 +179,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerRight,
-                            child: compassType.builder(
-                              magnetic: upsampledOrientation,
-                              geomagneticCorrection: upsampledGeomag,
-                            ),
+                            child: compassType.builder(compass: this),
                           ),
                         ),
                         Expanded(
