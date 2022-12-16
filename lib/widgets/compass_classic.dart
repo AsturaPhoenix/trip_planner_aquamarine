@@ -111,54 +111,27 @@ class CompassArrow extends CustomPainter {
       false,
     );
 
-    canvas.drawPath(
-      Path()
-        ..addPolygon(
-          [
-            center,
-            outline[0],
-            outline[1],
-          ],
-          true,
-        ),
-      Paint()..color = const Color(0xffc84031),
-    );
-    canvas.drawPath(
-      Path()
-        ..addPolygon(
-          [
-            center,
-            outline[1],
-            outline[2],
-          ],
-          true,
-        ),
-      Paint()..color = const Color(0xffb73327),
-    );
-    canvas.drawPath(
-      Path()
-        ..addPolygon(
-          [
-            center,
-            outline[2],
-            outline[3],
-          ],
-          true,
-        ),
-      Paint()..color = const Color(0xffd1d3d7),
-    );
-    canvas.drawPath(
-      Path()
-        ..addPolygon(
-          [
-            center,
-            outline[3],
-            outline[0],
-          ],
-          true,
-        ),
-      Paint()..color = const Color(0xffbdc0c5),
-    );
+    const colors = [
+      Color(0xffc84031),
+      Color(0xffb73327),
+      Color(0xffd1d3d7),
+      Color(0xffbdc0c5)
+    ];
+
+    for (int i = 0; i < 4; ++i) {
+      canvas.drawPath(
+        Path()
+          ..addPolygon(
+            [
+              center,
+              outline[i],
+              outline[(i + 1) % 4],
+            ],
+            true,
+          ),
+        Paint()..color = colors[i],
+      );
+    }
   }
 
   @override
