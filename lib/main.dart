@@ -304,7 +304,9 @@ class TripPlannerState extends State<TripPlanner> {
             IconButton(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const Compass()),
+                MaterialPageRoute(
+                  builder: (context) => Compass(waypoint: selectedStation),
+                ),
               ),
               icon: const Icon(Icons.explore),
               tooltip: 'Compass',

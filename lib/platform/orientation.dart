@@ -9,6 +9,7 @@ import 'package:motion_sensors/motion_sensors.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
 import 'package:vector_math/vector_math_64.dart';
 
+import '../util/optional.dart';
 import '../util/value_stream.dart';
 
 Future<void> prefetchCapabilities() async {
@@ -27,19 +28,67 @@ bool _isOrientationAvailable = false;
 set updateInterval(Duration interval) =>
     motionSensors.absoluteOrientationUpdateInterval = interval.inMicroseconds;
 
-double degrees(double radians) => radians * 180 / pi;
-double radians(double degrees) => degrees * pi / 180;
+abstract class Angle {
+  static const zero = Radians(0);
 
-double yaw(Quaternion q) =>
-    atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+  const Angle();
+  double get degrees;
+  double get radians;
+  Angle operator -();
+  Angle operator +(Angle other);
+  Angle operator -(Angle other) => this + -other;
+  Angle operator *(double factor);
+  Angle get norm360;
+  Angle get norm180;
+}
+
+class Degrees extends Angle {
+  const Degrees(this.degrees);
+  @override
+  final double degrees;
+  @override
+  get radians => degrees * pi / 180;
+  @override
+  Angle operator -() => Degrees(-degrees);
+  @override
+  Angle operator +(Angle other) => Degrees(degrees + other.degrees);
+  @override
+  Angle operator *(double factor) => Degrees(degrees * factor);
+  @override
+  Angle get norm360 => Degrees(degrees % 360);
+  @override
+  Angle get norm180 => Degrees((degrees + 180) % 360 - 180);
+}
+
+class Radians extends Angle {
+  const Radians(this.radians);
+  @override
+  get degrees => radians * 180 / pi;
+  @override
+  final double radians;
+  @override
+  Angle operator -() => Radians(-radians);
+  @override
+  Angle operator +(Angle other) => Radians(radians + other.radians);
+  @override
+  Angle operator *(double factor) => Radians(radians * factor);
+  @override
+  Angle get norm360 => Radians(radians % (2 * pi));
+  @override
+  Angle get norm180 => Radians((radians + pi) % (2 * pi) - pi);
+}
+
+Angle yaw(Quaternion q) => Radians(
+      atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)),
+    );
 
 final screenOrientationAxis = Vector3(0, 0, -1);
 
 Quaternion calculateCanonicalOrientation(
   Quaternion q,
-  double screenOrientation,
+  Angle screenOrientation,
 ) =>
-    q * Quaternion.axisAngle(screenOrientationAxis, radians(screenOrientation));
+    q * Quaternion.axisAngle(screenOrientationAxis, screenOrientation.radians);
 
 // Motion sensors don't re-emit their most recent value on resubscribe, so we
 // need to cache the screen orientation ourselves so that we can unsubscribe
@@ -58,17 +107,14 @@ final canonicalOrientation = ValueStream.fromStream<Quaternion>(
             .map((orientation) => orientation.quaternion),
         screenOrientation.seededStream
             .whereNotNull()
-            .map((screenOrientation) => screenOrientation.angle),
+            .map((screenOrientation) => Degrees(screenOrientation.angle)),
         calculateCanonicalOrientation,
       ),
     ),
   ),
 ).transform((s, _) => s.refCount());
 
-double calculateBearing(Quaternion q) => -degrees(yaw(q));
-
-/// degrees
-ValueStream<double> bearing = canonicalOrientation.map(calculateBearing);
+ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
 
 class CachingGeoMag {
   // These tolerances are semi arbitrary.
@@ -109,18 +155,18 @@ class CachingGeoMag {
 }
 
 const _accuracyApproximations = [
-  pi / 2, // low
-  pi / 6, // medium
-  pi / 12, // high
+  Degrees(90), // low
+  Degrees(30), // medium
+  Degrees(15), // high
 ];
 
-ValueStream<double?> accuracy = ValueStream.fromStream<double?>(
+ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
   motionSensors.absoluteOrientation
       .map((event) => event.accuracy)
       .distinct()
       .map(
         (accuracy) => (accuracy ?? 0) >= 0
-            ? accuracy
+            ? Optional(accuracy).map(Radians.new)
             : _accuracyApproximations[-accuracy!.toInt()],
       ),
 );

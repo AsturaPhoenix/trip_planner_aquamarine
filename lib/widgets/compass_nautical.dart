@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_arc_text/flutter_arc_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../platform/orientation.dart' show Angle;
 import 'compass.dart';
 
 class NauticalCompass extends StatelessWidget {
@@ -24,9 +25,10 @@ class NauticalCompass extends StatelessWidget {
     128.0
   ];
 
-  static String formatMagneticCorrection(double degrees) {
-    final minutes = (degrees.abs() * 60).round();
-    return "VAR ${minutes ~/ 60}°${minutes % 60}'${degrees >= 0 ? 'E' : 'W'}";
+  static String formatMagneticCorrection(Angle correction) {
+    final minutes = (correction.degrees.abs() * 60).round();
+    return "VAR ${minutes ~/ 60}°${minutes % 60}'"
+        '${correction.degrees >= 0 ? 'E' : 'W'}';
   }
 
   const NauticalCompass({
@@ -47,7 +49,11 @@ class NauticalCompass extends StatelessWidget {
             aspectRatio: 1,
             child: Stack(
               children: [
-                if (background != null) background!,
+                if (background != null)
+                  Padding(
+                    padding: const EdgeInsets.all(_OuterRing.iconSize),
+                    child: background!,
+                  ),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final radius =
@@ -70,10 +76,18 @@ class NauticalCompass extends StatelessWidget {
                               initialData: compass.animatedOrientation.value,
                               stream: compass.animatedOrientation.stream,
                               builder: (context, magnetic) => Transform.rotate(
-                                angle: -(magnetic.data ?? 0),
+                                angle: -(magnetic.data?.radians ?? 0),
                                 child: Stack(
                                   alignment: Alignment.center,
                                   children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(
+                                        _OuterRing.width + intraRingPadding,
+                                      ),
+                                      child: _InnerRing(
+                                        compactness: compactness,
+                                      ),
+                                    ),
                                     StreamBuilder(
                                       initialData: compass
                                           .animatedMagneticCorrection.value,
@@ -81,28 +95,27 @@ class NauticalCompass extends StatelessWidget {
                                           .animatedMagneticCorrection.stream,
                                       builder: (context, magneticCorrection) =>
                                           Transform.rotate(
-                                        angle: -(magneticCorrection.data ?? 0),
+                                        angle: -(magneticCorrection
+                                                .data?.radians ??
+                                            0),
                                         child: Stack(
                                           alignment: Alignment.topCenter,
                                           children: [
-                                            if (child != null)
-                                              DefaultTextStyle(
-                                                style: const TextStyle(),
-                                                child: child!,
-                                              ),
                                             _OuterRing(
                                               compactness: compactness,
                                             ),
+                                            if (child != null)
+                                              Padding(
+                                                padding: const EdgeInsets.all(
+                                                  _OuterRing.iconSize,
+                                                ),
+                                                child: DefaultTextStyle(
+                                                  style: const TextStyle(),
+                                                  child: child!,
+                                                ),
+                                              )
                                           ],
                                         ),
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(
-                                        _OuterRing.width + intraRingPadding,
-                                      ),
-                                      child: _InnerRing(
-                                        compactness: compactness,
                                       ),
                                     )
                                   ],

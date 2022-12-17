@@ -251,7 +251,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
             orientation.bearing.seededStream.whereNotNull(),
             (position, bearing) => mapAnimation.target.copyWith(
               target: position?.toLatLng(),
-              bearing: bearing + (geomag.getFromPosition(position)?.dec ?? 0),
+              bearing: bearing.degrees +
+                  (geomag.getFromPosition(position)?.dec ?? 0),
             ),
           ).listen(mapAnimation.add);
           break;

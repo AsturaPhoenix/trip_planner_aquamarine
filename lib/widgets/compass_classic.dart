@@ -29,7 +29,7 @@ class ClassicCompass extends StatelessWidget {
                 stream: compass.animatedOrientation.stream,
                 builder: (context, magnetic) {
                   return Transform.rotate(
-                    angle: -(magnetic.data ?? 0),
+                    angle: -(magnetic.data?.radians ?? 0),
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
@@ -38,7 +38,7 @@ class ClassicCompass extends StatelessWidget {
                           stream: compass.animatedMagneticCorrection.stream,
                           builder: (context, magneticCorrection) {
                             return Transform.rotate(
-                              angle: -(magneticCorrection.data ?? 0),
+                              angle: -(magneticCorrection.data?.radians ?? 0),
                               child: CompassRose(child: child),
                             );
                           },
