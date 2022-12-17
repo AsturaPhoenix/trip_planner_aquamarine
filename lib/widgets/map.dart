@@ -300,9 +300,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
       tickerProvider: this,
       initialState: Map.initialCameraPosition,
-      applyDelta: (state, delta) => state + delta,
-      calculateDelta: (after, before) => after - before,
-      lerp: (delta, t) => delta * t,
+      stateSpace: StateSpace<CameraPosition, CameraDelta>(
+        applyDelta: (state, delta) => state + delta,
+        calculateDelta: (after, before) => after - before,
+        lerp: (delta, t) => delta * t,
+      ),
       setState: (cameraPosition) async {
         await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
         setState(() => this.cameraPosition = cameraPosition);

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Gradient;
 import 'package:geolocator/geolocator.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
+import 'package:trip_planner_aquamarine/util/animation_coordinator.dart';
 
 import '../main.dart' show sharedPreferences;
 import '../platform/location.dart' as location;
@@ -15,6 +17,20 @@ import 'blinking_icon.dart';
 import 'compass_classic.dart';
 import 'compass_nautical.dart';
 import 'map.dart';
+
+final scalarSpace = StateSpace<double, double>(
+  applyDelta: (state, delta) => state + delta,
+  calculateDelta: (after, before) => after - before,
+  lerp: (delta, t) => delta * t,
+);
+
+double polar(double radians) => (radians + pi) % (2 * pi) - pi;
+
+final polarSpace = StateSpace<double, double>(
+  applyDelta: (orientation, delta) => polar(orientation + delta),
+  calculateDelta: (after, before) => polar(after - before),
+  lerp: (delta, t) => delta * t,
+);
 
 class Compass extends StatefulWidget {
   const Compass({super.key});
@@ -30,18 +46,24 @@ enum CompassType {
   const CompassType(this.description, this.builder);
 
   final String description;
-  final Widget Function({required CompassState compass}) builder;
+  final Widget Function({
+    required CompassState compass,
+    Widget? background,
+    Widget? child,
+  }) builder;
 }
 
 class CompassState extends State<Compass> with TickerProviderStateMixin {
   static const compassTypeSettingKey = 'compass/compassType';
 
   late final ValueStream<Position?> devicePosition;
-  late final ValueStream<double> geomagneticCorrection,
-      upsampledOrientation,
-      upsampledGeomag;
-  StreamSubscription? orientationBroadcastSubscription,
-      geomagBroadcastSubscription;
+  late final ValueStream<double> magneticCorrection,
+      animatedOrientation,
+      animatedMagneticCorrection;
+  late final InitializedValueStream<double> animatedAccuracy;
+  // rxdart CompositeSubscription is backed by a list. Let's not risk unbounded
+  // growth.
+  final broadcastSubscriptions = <StreamSubscription>{};
 
   var compassType =
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
@@ -53,10 +75,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
     location.requestPermission();
     devicePosition = location.passivePosition;
 
-    double polar(double radians) => (radians + pi) % (2 * pi) - pi;
-
     orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-    upsampledOrientation = orientation.bearing
+    animatedOrientation = orientation.bearing
         .map((bearing) => orientation.radians(bearing))
         .transform(
           // We unsubscribe from the orientation sensors while they're not
@@ -75,134 +95,142 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               .upsample(
                 tickerProvider: this,
                 initialState: polar(v ?? 0),
-                applyDelta: (orientation, delta) => polar(orientation + delta),
-                calculateDelta: (after, before) => polar(after - before),
-                lerp: (delta, t) => delta * t,
+                stateSpace: polarSpace,
               )
-              .asBroadcastStream(
-                onListen: (subscription) =>
-                    orientationBroadcastSubscription = subscription,
-              ),
+              .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
-    geomagneticCorrection = devicePosition
+    magneticCorrection = devicePosition
         .map(orientation.CachingGeoMag().getFromPosition)
         .transform((s, _) => s.whereNotNull())
         .map((r) => r.dec);
-    upsampledGeomag = geomagneticCorrection
-        .map((dec) => orientation.radians(dec))
-        .transform(
-          (s, v) => s
-              .skipBuffered()
-              .upsample(
-                tickerProvider: this,
-                initialState: polar(v ?? 0),
-                applyDelta: (correction, delta) => polar(correction + delta),
-                calculateDelta: (after, before) => polar(after - before),
-                lerp: (delta, t) => delta * t,
-              )
-              .asBroadcastStream(
-                onListen: (subscription) =>
-                    geomagBroadcastSubscription = subscription,
-              ),
-        );
+    animatedMagneticCorrection =
+        magneticCorrection.map((dec) => orientation.radians(dec)).transform(
+              (s, v) => s
+                  .skipBuffered()
+                  .upsample(
+                    tickerProvider: this,
+                    initialState: polar(v ?? 0),
+                    stateSpace: polarSpace,
+                  )
+                  .asBroadcastStream(onListen: broadcastSubscriptions.add),
+            );
+    animatedAccuracy =
+        orientation.accuracy.map((accuracy) => accuracy ?? pi).transform(
+              (s, v) => s
+                  .skipBuffered()
+                  .upsample(
+                    tickerProvider: this,
+                    initialState: v,
+                    stateSpace: scalarSpace,
+                  )
+                  .asBroadcastStream(onListen: broadcastSubscriptions.add),
+            );
   }
 
   @override
   void dispose() {
-    orientationBroadcastSubscription?.cancel();
-    geomagBroadcastSubscription?.cancel();
+    for (final subscription in broadcastSubscriptions) {
+      subscription.cancel();
+    }
     // This needs to happen after the subscription cancellations or the ticker
     // provider mixin will complain about leaks.
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Theme(
-        data: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.black45,
-            brightness: Brightness.dark,
-            primary: Colors.black45,
-          ),
-          scaffoldBackgroundColor: Colors.black,
+  Widget build(BuildContext context) {
+    final compass = compassType.builder(
+      compass: this,
+      background: _CompassInfo(accuracy: animatedAccuracy),
+    );
+
+    return Theme(
+      data: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.black45,
+          brightness: Brightness.dark,
+          primary: Colors.black45,
         ),
-        child: Scaffold(
-          appBar: AppBar(
-            actions: [
-              PopupMenuButton(
-                icon: const Icon(Icons.settings),
-                tooltip: 'Compass style',
-                initialValue: compassType,
-                onSelected: (value) => setState(() {
-                  compassType = value;
-                  sharedPreferences.setInt(compassTypeSettingKey, value.index);
-                }),
-                itemBuilder: (context) => [
-                  for (final compassType in CompassType.values)
-                    PopupMenuItem(
-                      value: compassType,
-                      child: Text(compassType.description),
-                    ),
-                ],
-              )
-            ],
+        scaffoldBackgroundColor: Colors.black,
+      ),
+      child: Scaffold(
+        appBar: AppBar(
+          actions: [
+            PopupMenuButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Compass style',
+              initialValue: compassType,
+              onSelected: (value) => setState(() {
+                compassType = value;
+                sharedPreferences.setInt(compassTypeSettingKey, value.index);
+              }),
+              itemBuilder: (context) => [
+                for (final compassType in CompassType.values)
+                  PopupMenuItem(
+                    value: compassType,
+                    child: Text(compassType.description),
+                  ),
+              ],
+            )
+          ],
+        ),
+        body: DefaultTextStyle(
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
-          body: DefaultTextStyle(
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-            child: OrientationBuilder(
-              builder: (context, screenOrientation) => screenOrientation ==
-                      Orientation.portrait
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+          child: OrientationBuilder(
+            builder: (context, screenOrientation) =>
+                screenOrientation == Orientation.portrait
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const LocationInfo(),
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: compass,
+                              ),
+                            ),
+                            BearingInfo(
+                              magnetic: orientation.bearing,
+                              magneticCorrection: magneticCorrection,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                            )
+                          ],
+                        ),
+                      )
+                    : Row(
                         children: [
-                          const LocationInfo(),
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: compassType.builder(compass: this),
+                          Expanded(
+                            child: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.all(4),
+                              child: compass,
                             ),
                           ),
-                          BearingInfo(
-                            magnetic: orientation.bearing,
-                            magneticCorrection: geomagneticCorrection,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                          )
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const LocationInfo(),
+                                BearingInfo(
+                                  magnetic: orientation.bearing,
+                                  magneticCorrection: magneticCorrection,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                )
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.all(4),
-                            child: compassType.builder(compass: this),
-                          ),
-                        ),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const LocationInfo(),
-                              BearingInfo(
-                                magnetic: orientation.bearing,
-                                magneticCorrection: geomagneticCorrection,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                              )
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class LocationInfo extends StatelessWidget {
@@ -310,4 +338,65 @@ class RingStack extends StatelessWidget {
           )
         ],
       );
+}
+
+class _CompassInfo extends StatelessWidget {
+  const _CompassInfo({required this.accuracy});
+  final InitializedValueStream<double> accuracy;
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder(
+        initialData: accuracy.value,
+        stream: accuracy.stream,
+        builder: (context, accuracy) {
+          return CustomPaint(
+            size: Size.infinite,
+            painter: _CompassAccuracyPainter(accuracy: accuracy.data!),
+          );
+        },
+      );
+}
+
+class _CompassAccuracyPainter extends CustomPainter {
+  _CompassAccuracyPainter({required this.accuracy});
+  final double accuracy;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+
+    final heading = Colors.red.shade900, highlight = Colors.grey.shade800;
+
+    // Gradient.sweep has trouble blending across 0, so rotate away from that.
+    canvas
+      ..translate(center.dx, center.dy)
+      ..rotate(pi / 2)
+      ..drawArc(
+        -center & size,
+        pi - accuracy,
+        2 * accuracy,
+        true,
+        Paint()
+          ..shader = Gradient.sweep(
+            Offset.zero,
+            [heading, highlight, highlight.withAlpha(0)],
+            [0, .05, 1],
+            TileMode.mirror,
+            pi,
+            pi + accuracy,
+          )
+          ..blendMode = BlendMode.plus,
+      )
+      ..drawLine(
+        Offset.zero,
+        Offset(-center.dx, 0),
+        Paint()
+          ..color = heading
+          ..strokeWidth = 1.5,
+      );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompassAccuracyPainter oldDelegate) =>
+      accuracy != oldDelegate.accuracy;
 }

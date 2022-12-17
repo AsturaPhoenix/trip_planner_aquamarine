@@ -26,15 +26,24 @@ class _Animation<T> {
   double parameterize(Duration t) => curve.transform(normalize(t));
 }
 
+class StateSpace<State, Delta> {
+  const StateSpace({
+    required this.applyDelta,
+    required this.calculateDelta,
+    required this.lerp,
+  });
+  final State Function(State state, Delta delta) applyDelta;
+  final Delta Function(State after, State before) calculateDelta;
+  final Delta Function(Delta delta, double t) lerp;
+}
+
 class AnimationCoordinator<State, Delta> {
   static const defaultAnimationDuration = Duration(milliseconds: 600);
 
   AnimationCoordinator({
     required TickerProvider tickerProvider,
     required State initialState,
-    required this.applyDelta,
-    required this.calculateDelta,
-    required this.lerp,
+    required this.stateSpace,
     this.setState,
     this.clock,
   })  : _basis = initialState,
@@ -42,9 +51,7 @@ class AnimationCoordinator<State, Delta> {
     ticker = tickerProvider.createTicker(_onTick);
   }
   late final Ticker ticker;
-  State Function(State, Delta) applyDelta;
-  Delta Function(State after, State before) calculateDelta;
-  Delta Function(Delta, double t) lerp;
+  final StateSpace<State, Delta> stateSpace;
   void Function(State)? setState;
 
   /// A real-time mapping supports use cases like upsampling, which require
@@ -90,7 +97,7 @@ class AnimationCoordinator<State, Delta> {
     );
     animations.add(animation);
 
-    _target = applyDelta(_target, delta);
+    _target = stateSpace.applyDelta(_target, delta);
     return animation.completer.future;
   }
 
@@ -104,7 +111,7 @@ class AnimationCoordinator<State, Delta> {
     }
 
     final animation = _Animation(
-      delta: calculateDelta(target, _target),
+      delta: stateSpace.calculateDelta(target, _target),
       start: t!,
       length: length,
       curve: curve,
@@ -125,7 +132,7 @@ class AnimationCoordinator<State, Delta> {
     }
 
     final animation = _Animation(
-      delta: calculateDelta(target, _target),
+      delta: stateSpace.calculateDelta(target, _target),
       start: t!,
       length: length,
       curve: curve,
@@ -143,7 +150,7 @@ class AnimationCoordinator<State, Delta> {
 
     while (animations.isNotEmpty && t! >= animations.first.end) {
       final animation = animations.removeFirst();
-      _basis = applyDelta(_basis, animation.delta);
+      _basis = stateSpace.applyDelta(_basis, animation.delta);
       if (!animation.completer.isCompleted) {
         animation.completer.complete(true);
       }
@@ -153,8 +160,10 @@ class AnimationCoordinator<State, Delta> {
       // We need to apply all animations, including completed animations, in
       // order to handle the case of animations with non-commutative effects
       // like 3-space rotations.
-      state =
-          applyDelta(state, lerp(animation.delta, animation.parameterize(t!)));
+      state = stateSpace.applyDelta(
+        state,
+        stateSpace.lerp(animation.delta, animation.parameterize(t!)),
+      );
       if (t! >= animation.end && !animation.completer.isCompleted) {
         animation.completer.complete(true);
       }

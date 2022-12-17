@@ -9,83 +9,99 @@ class ClassicCompass extends StatelessWidget {
   const ClassicCompass({
     super.key,
     required this.compass,
+    this.background,
+    this.child,
   });
   final CompassState compass;
+  final Widget? background, child;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
-        child: StreamBuilder(
-          initialData: compass.upsampledOrientation.value,
-          stream: compass.upsampledOrientation.stream,
-          builder: (context, magnetic) {
-            return Transform.rotate(
-              angle: -(magnetic.data ?? 0),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  StreamBuilder(
-                    initialData: compass.upsampledGeomag.value,
-                    stream: compass.upsampledGeomag.stream,
-                    builder: (context, magneticCorrection) {
-                      return Transform.rotate(
-                        angle: -(magneticCorrection.data ?? 0),
-                        child: const CompassRose(elevation: 1),
-                      );
-                    },
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: AspectRatio(
-                      aspectRatio: 7 / 72,
-                      child: CustomPaint(painter: CompassArrow(elevation: 4)),
+        child: Card(
+          shape: const CircleBorder(),
+          elevation: 1,
+          child: Stack(
+            children: [
+              if (background != null) background!,
+              StreamBuilder(
+                initialData: compass.animatedOrientation.value,
+                stream: compass.animatedOrientation.stream,
+                builder: (context, magnetic) {
+                  return Transform.rotate(
+                    angle: -(magnetic.data ?? 0),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        StreamBuilder(
+                          initialData: compass.animatedMagneticCorrection.value,
+                          stream: compass.animatedMagneticCorrection.stream,
+                          builder: (context, magneticCorrection) {
+                            return Transform.rotate(
+                              angle: -(magneticCorrection.data ?? 0),
+                              child: CompassRose(child: child),
+                            );
+                          },
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: AspectRatio(
+                            aspectRatio: 7 / 72,
+                            child: CustomPaint(
+                              painter: CompassArrow(elevation: 4),
+                            ),
+                          ),
+                        )
+                      ],
                     ),
-                  )
-                ],
+                  );
+                },
               ),
-            );
-          },
+            ],
+          ),
         ),
       );
 }
 
 class CompassRose extends StatelessWidget {
-  const CompassRose({super.key, this.elevation = 0});
-  final double elevation;
+  const CompassRose({super.key, this.child});
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      shape: const CircleBorder(),
-      elevation: elevation,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          const referenceSize = 0x180;
-          final fontScale = min(
-            min(constraints.maxWidth, constraints.maxHeight) / referenceSize,
-            1,
-          );
-          final textStyles = [
-            for (final fontSize in [72.0, 32.0])
-              TextStyle(
-                fontSize: fontSize * fontScale,
-                fontWeight: FontWeight.bold,
-              )
-          ];
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const referenceSize = 0x180;
+            final fontScale = min(
+              min(constraints.maxWidth, constraints.maxHeight) / referenceSize,
+              1,
+            );
+            final textStyles = [
+              for (final fontSize in [72.0, 32.0])
+                TextStyle(
+                  fontSize: fontSize * fontScale,
+                  fontWeight: FontWeight.bold,
+                )
+            ];
 
-          return RingStack(
-            children: [
-              ...['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].mapIndexed(
-                (index, label) => Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: textStyles[index % 2],
-                ),
-              )
-            ],
-          );
-        },
-      ),
+            return RingStack(
+              children: [
+                ...['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].mapIndexed(
+                  (index, label) => Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: textStyles[index % 2],
+                  ),
+                )
+              ],
+            );
+          },
+        ),
+        if (child != null) child!
+      ],
     );
   }
 }

@@ -17,17 +17,20 @@ abstract class ValueStreamBase<T extends Initial, Initial> {
   /// necessarily prohibit multiple listeners, but ideally events should only
   /// publish once. If a broadcast is needed, it should be done using
   /// [transform].
-  static ValueStream<T> fromStream<T>(Stream<T> source) {
-    late _CachedValueStream<T, T?> impl;
+  factory ValueStreamBase.fromSeededStream(Stream<T> source, Initial initial) {
+    late _CachedValueStream<T, Initial> impl;
     impl = _CachedValueStream(
       source.map((e) {
         impl._value = e;
         return e;
       }),
-      null,
+      initial,
     );
     return impl;
   }
+
+  static ValueStream<T> fromStream<T>(Stream<T> source) =>
+      ValueStreamBase.fromSeededStream(source, null);
 
   Initial get value;
   Stream<T> get stream;

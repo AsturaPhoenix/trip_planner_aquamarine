@@ -9,9 +9,7 @@ extension Upsample<T> on Stream<T> {
   Stream<T> upsample<Delta>({
     required TickerProvider tickerProvider,
     required T initialState,
-    required T Function(T, Delta) applyDelta,
-    required Delta Function(T after, T before) calculateDelta,
-    required Delta Function(Delta, double t) lerp,
+    required StateSpace<T, Delta> stateSpace,
     Duration maxPeriod = AnimationCoordinator.defaultAnimationDuration,
     Curve blendAnimationCurve = Curves.easeInOut,
     DateTime Function() clock = DateTime.now,
@@ -30,9 +28,7 @@ extension Upsample<T> on Stream<T> {
         blender = AnimationCoordinator<T, Delta>(
           tickerProvider: tickerProvider,
           initialState: initialState,
-          applyDelta: applyDelta,
-          calculateDelta: calculateDelta,
-          lerp: lerp,
+          stateSpace: stateSpace,
           setState: (state) => controller.add(state),
           clock: () => clock().difference(start),
         );

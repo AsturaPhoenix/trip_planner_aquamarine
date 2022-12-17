@@ -107,3 +107,20 @@ class CachingGeoMag {
         time,
       );
 }
+
+const _accuracyApproximations = [
+  pi / 2, // low
+  pi / 6, // medium
+  pi / 12, // high
+];
+
+ValueStream<double?> accuracy = ValueStream.fromStream<double?>(
+  motionSensors.absoluteOrientation
+      .map((event) => event.accuracy)
+      .distinct()
+      .map(
+        (accuracy) => (accuracy ?? 0) >= 0
+            ? accuracy
+            : _accuracyApproximations[-accuracy!.toInt()],
+      ),
+);
