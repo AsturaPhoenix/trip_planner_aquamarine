@@ -6,8 +6,8 @@ import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart' hide Gradient;
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
-import 'package:trip_planner_aquamarine/util/optional.dart';
 
 import '../main.dart' show sharedPreferences;
 import '../platform/location.dart' as location;
@@ -32,6 +32,17 @@ final scalarSpace = StateSpace<Angle, Angle>(
 final polarSpace = StateSpace<Angle, Angle>(
   applyDelta: (orientation, delta) => (orientation + delta).norm180,
   calculateDelta: (after, before) => (after - before).norm180,
+  lerp: (delta, t) => delta * t,
+);
+
+// We don't need a high-fidelity lerp for GPS upsampling.
+final mercatorSpace = StateSpace<LatLng, Offset>(
+  applyDelta: (state, delta) =>
+      LatLng(state.latitude + delta.dy, state.longitude + delta.dx),
+  calculateDelta: (after, before) => Offset(
+    after.longitude - before.longitude,
+    after.latitude - before.latitude,
+  ),
   lerp: (delta, t) => delta * t,
 );
 
@@ -63,7 +74,20 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   static const compassTypeSettingKey = 'compass/compassType',
       distanceSystemSettingKey = 'distanceSystem';
 
+  static CompassMarker<LatLng> toWaypoint(Station station) => CompassMarker(
+        color: const {
+          StationType.current: Color(0xff5959ff),
+          StationType.tide: Color(0xff62d962),
+          StationType.destination: Color(0xffff4050),
+          StationType.launch: Color(0xfff2f261),
+          StationType.meeting: Color(0xffd239cd),
+          StationType.nogo: Color(0xff363636),
+        }[station.type]!,
+        location: station.marker,
+      );
+
   late final ValueStream<Position?> devicePosition;
+  late final ValueStream<LatLng?> animatedDevicePosition;
   late final ValueStream<Angle> magneticCorrection,
       trueBearing,
       animatedOrientation,
@@ -78,43 +102,23 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   var distanceSystem = DistanceSystem
       .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0];
 
-  late ValueStream<HeadingMark?> waypointHeading;
-  HeadingMark? headingFromWaypoint(Position from) =>
-      Optional(widget.waypoint).map(
-        (waypoint) => HeadingMark(
-          color: const {
-            StationType.current: Color(0xff5959ff),
-            StationType.tide: Color(0xff62d962),
-            StationType.destination: Color(0xffff4050),
-            StationType.launch: Color(0xfff2f261),
-            StationType.meeting: Color(0xffd239cd),
-            StationType.nogo: Color(0xff363636),
-          }[waypoint.type]!,
-          angle: Degrees(
-            Geolocator.bearingBetween(
-              from.latitude,
-              from.longitude,
-              waypoint.marker.latitude,
-              waypoint.marker.longitude,
-            ),
-          ),
-          distance: Meters(
-            Geolocator.distanceBetween(
-              from.latitude,
-              from.longitude,
-              waypoint.marker.latitude,
-              waypoint.marker.longitude,
-            ),
-          ),
-        ),
-      );
-
   @override
   void initState() {
     super.initState();
 
     location.requestPermission();
     devicePosition = location.passivePosition;
+    animatedDevicePosition =
+        devicePosition.map((position) => position?.toLatLng()).transform(
+              (s, v) => s
+                  .skipBuffered()
+                  .upsample(
+                    tickerProvider: this,
+                    initialState: v,
+                    stateSpace: mercatorSpace.sharpNulls(),
+                  )
+                  .asBroadcastStream(onListen: broadcastSubscriptions.add),
+            );
 
     orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
     animatedOrientation = orientation.bearing.transform(
@@ -169,17 +173,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               )
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
-    waypointHeading = location.passivePosition
-        .map((position) => Optional(position).map(headingFromWaypoint));
-  }
-
-  @override
-  void didUpdateWidget(covariant Compass oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.waypoint != oldWidget.waypoint) {
-      waypointHeading = location.passivePosition
-          .map((position) => Optional(position).map(headingFromWaypoint));
-    }
   }
 
   @override
@@ -197,14 +190,9 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
     final compass = compassType.builder(
       compass: this,
       background: _BackgroundOverlay(accuracy: animatedAccuracy),
-      child: StreamBuilder(
-        initialData: waypointHeading.value,
-        stream: waypointHeading.stream,
-        builder: (context, waypointHeading) {
-          return GeoOverlay(
-            headings: [if (waypointHeading.hasData) waypointHeading.data!],
-          );
-        },
+      child: GeoOverlay(
+        waypoints: [if (widget.waypoint != null) toWaypoint(widget.waypoint!)],
+        position: animatedDevicePosition,
       ),
     );
 
@@ -266,7 +254,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         children: [
                           LocationInfo(
                             waypoint: widget.waypoint,
-                            heading: waypointHeading,
                             bearing: trueBearing,
                             distanceSystem: distanceSystem,
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -300,7 +287,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                               children: [
                                 LocationInfo(
                                   waypoint: widget.waypoint,
-                                  heading: waypointHeading,
                                   bearing: trueBearing,
                                   distanceSystem: distanceSystem,
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,7 +339,7 @@ class LocationInfo extends StatelessWidget {
   }
 
   static String formatHeading(
-    HeadingMark heading,
+    Heading heading,
     Angle? bearing,
     DistanceSystem system,
   ) {
@@ -375,66 +361,60 @@ class LocationInfo extends StatelessWidget {
   const LocationInfo({
     super.key,
     this.waypoint,
-    required this.heading,
     required this.bearing,
     required this.distanceSystem,
     required this.crossAxisAlignment,
   });
   final Station? waypoint;
-  final ValueStream<HeadingMark?> heading;
   final ValueStream<Angle> bearing;
   final DistanceSystem distanceSystem;
   final CrossAxisAlignment crossAxisAlignment;
 
   @override
   Widget build(BuildContext context) => StreamBuilder(
-        initialData: heading.value,
-        stream: heading.stream,
-        builder: (context, heading) => Column(
+        initialData: location.passivePosition.value,
+        stream: location.passivePosition.stream,
+        builder: (context, position) => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: crossAxisAlignment,
           children: [
             StreamBuilder(
               initialData: location.isEnabled.value,
               stream: location.isEnabled.stream,
-              builder: (context, isEnabled) => StreamBuilder(
-                initialData: location.passivePosition.value,
-                stream: location.passivePosition.stream,
-                builder: (context, position) {
-                  final gpsState = [
-                        position.hasData,
-                        position.hasError,
-                        isEnabled.data,
-                      ].indexOf(true) %
-                      4;
+              builder: (context, isEnabled) {
+                final gpsState = [
+                      position.hasData,
+                      position.hasError,
+                      isEnabled.data,
+                    ].indexOf(true) %
+                    4;
 
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const [
-                        Icon(Icons.my_location),
-                        Icon(Icons.location_disabled),
-                        BlinkingIcon(
-                          icons: [Icons.my_location, Icons.location_searching],
-                        ),
-                        Icon(Icons.location_disabled)
-                      ][gpsState],
-                      const SizedBox(width: 8),
-                      AnimatedSize(
-                        alignment: Alignment.centerLeft,
-                        curve: Curves.easeInOut,
-                        duration: const Duration(milliseconds: 300),
-                        child: [
-                          () => Text(formatPosition(position.data!)),
-                          () => const Text('could not acquire gps'),
-                          () => const Text('acquiring GPS...'),
-                          () => const Text('GPS disabled'),
-                        ][gpsState](),
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const [
+                      Icon(Icons.my_location),
+                      Icon(Icons.location_disabled),
+                      BlinkingIcon(
+                        icons: [Icons.my_location, Icons.location_searching],
                       ),
-                    ],
-                  );
-                },
-              ),
+                      Icon(Icons.location_disabled)
+                    ][gpsState],
+                    const SizedBox(width: 8),
+                    AnimatedSize(
+                      alignment: Alignment.centerLeft,
+                      curve: Curves.easeInOut,
+                      duration: const Duration(milliseconds: 300),
+                      child: [
+                        () => Text(formatPosition(position.data!)),
+                        () => const Text('could not acquire gps'),
+                        () => const Text('acquiring GPS...'),
+                        () => const Text('GPS disabled'),
+                      ][gpsState](),
+                    ),
+                  ],
+                );
+              },
             ),
             if (waypoint != null)
               Row(
@@ -453,13 +433,17 @@ class LocationInfo extends StatelessWidget {
                   )
                 ],
               ),
-            if (heading.hasData)
+            if (waypoint != null && position.hasData)
               StreamBuilder(
                 initialData: bearing.value,
                 stream: bearing.stream,
                 builder: (context, bearing) {
                   return Text(
-                    formatHeading(heading.data!, bearing.data, distanceSystem),
+                    formatHeading(
+                      waypoint!.marker.toHeading(position.data!.toLatLng()),
+                      bearing.data,
+                      distanceSystem,
+                    ),
                   );
                 },
               )
@@ -582,24 +566,73 @@ class _AccuracyPainter extends CustomPainter {
 }
 
 class GeoOverlay extends StatelessWidget {
-  const GeoOverlay({super.key, required this.headings});
-  final List<HeadingMark> headings;
+  const GeoOverlay({
+    super.key,
+    required this.waypoints,
+    required this.position,
+  });
+  final List<CompassMarker<LatLng>> waypoints;
+  final ValueStream<LatLng?> position;
 
   @override
-  Widget build(BuildContext context) => CustomPaint(
-        size: Size.infinite,
-        painter: _HeadingsPainter(headings: headings),
+  Widget build(BuildContext context) => StreamBuilder(
+        initialData: position.value,
+        stream: position.stream,
+        builder: (context, position) => CustomPaint(
+          size: Size.infinite,
+          painter: _HeadingsPainter(
+            headings: [
+              if (position.hasData)
+                for (final waypoint in waypoints)
+                  waypoint.map((location) => location.toHeading(position.data!))
+            ],
+          ),
+        ),
       );
 }
 
-class HeadingMark extends Equatable {
-  const HeadingMark({required this.angle, this.distance, required this.color});
+class Heading extends Equatable {
+  const Heading({required this.angle, this.distance});
   final Angle angle;
-
   final Distance? distance;
-  final Color color;
   @override
-  List<Object?> get props => [angle, color];
+  List<Object?> get props => [angle, distance];
+}
+
+extension on Position {
+  LatLng toLatLng() => LatLng(latitude, longitude);
+}
+
+extension on LatLng {
+  Heading toHeading(LatLng from) => Heading(
+        angle: Degrees(
+          Geolocator.bearingBetween(
+            from.latitude,
+            from.longitude,
+            latitude,
+            longitude,
+          ),
+        ),
+        distance: Meters(
+          Geolocator.distanceBetween(
+            from.latitude,
+            from.longitude,
+            latitude,
+            longitude,
+          ),
+        ),
+      );
+}
+
+class CompassMarker<T> extends Equatable {
+  const CompassMarker({required this.color, required this.location});
+  final Color color;
+  final T location;
+  @override
+  List<Object?> get props => [color, location];
+
+  CompassMarker<U> map<U>(U Function(T) f) =>
+      CompassMarker(color: color, location: f(location));
 }
 
 class _HeadingsPainter extends CustomPainter {
@@ -607,7 +640,7 @@ class _HeadingsPainter extends CustomPainter {
   static const markerRadius = 4.0;
 
   _HeadingsPainter({required this.headings});
-  final List<HeadingMark> headings;
+  final List<CompassMarker<Heading>> headings;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -619,7 +652,7 @@ class _HeadingsPainter extends CustomPainter {
 
       canvas
         ..save()
-        ..rotate(heading.angle.radians)
+        ..rotate(heading.location.angle.radians)
         ..drawLine(
           Offset.zero,
           Offset(0, -center.dy),

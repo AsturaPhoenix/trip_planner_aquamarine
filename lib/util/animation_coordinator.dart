@@ -37,6 +37,33 @@ class StateSpace<State, Delta> {
   final Delta Function(Delta delta, double t) lerp;
 }
 
+class SkippableDelta<State, Delta> {
+  SkippableDelta.skip(State state)
+      : skip = true,
+        _deltaOrState = state;
+  SkippableDelta.delta(Delta delta)
+      : skip = false,
+        _deltaOrState = delta;
+  bool skip;
+  final dynamic _deltaOrState;
+  State get state => _deltaOrState as State;
+  Delta get delta => _deltaOrState as Delta;
+}
+
+extension NullableStateSpace<State extends Object, Delta extends Object>
+    on StateSpace<State, Delta> {
+  /// Handles nulls as immediate transitions.
+  StateSpace<State?, SkippableDelta<State?, Delta>> sharpNulls() => StateSpace(
+        applyDelta: (state, delta) =>
+            delta.skip ? delta.state : applyDelta(state!, delta.delta),
+        calculateDelta: (after, before) => after == null || before == null
+            ? SkippableDelta.skip(after)
+            : SkippableDelta.delta(calculateDelta(after, before)),
+        lerp: (delta, t) =>
+            delta.skip ? delta : SkippableDelta.delta(lerp(delta.delta, t)),
+      );
+}
+
 class AnimationCoordinator<State, Delta> {
   static const defaultAnimationDuration = Duration(milliseconds: 600);
 
