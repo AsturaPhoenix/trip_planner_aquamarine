@@ -204,6 +204,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
           primary: Colors.black45,
         ),
         scaffoldBackgroundColor: Colors.black,
+        dividerColor: const Color(0xc0808080),
       ),
       child: Scaffold(
         appBar: AppBar(
@@ -291,6 +292,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                                   distanceSystem: distanceSystem,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                 ),
+                                const Divider(),
                                 BearingInfo(
                                   trueBearing: trueBearing,
                                   magnetic: orientation.bearing,
