@@ -74,3 +74,38 @@ void _subscribePassivePosition() {
   _passivePositionSubscription =
       Geolocator.getPositionStream().listen(_passivePosition.add);
 }
+
+abstract class Distance {
+  static const zero = Meters(0);
+
+  const Distance();
+  double get kilometers;
+  double get meters;
+  double get miles;
+  double get feet;
+  double get nauticalMiles;
+  Distance operator -();
+  Distance operator +(Distance other);
+  Distance operator -(Distance other) => this + -other;
+  Distance operator *(double factor);
+}
+
+class Meters extends Distance {
+  const Meters(this.meters);
+  @override
+  double get kilometers => meters / 1000;
+  @override
+  final double meters;
+  @override
+  get miles => kilometers * 0.621371;
+  @override
+  get feet => miles * 5280;
+  @override
+  get nauticalMiles => miles * 0.868976;
+  @override
+  Distance operator -() => Meters(-meters);
+  @override
+  Distance operator +(Distance other) => Meters(meters + other.meters);
+  @override
+  Distance operator *(double factor) => Meters(meters * factor);
+}

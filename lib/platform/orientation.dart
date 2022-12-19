@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geomag/geomag.dart';
 import 'package:motion_sensors/motion_sensors.dart';
-import 'package:rxdart/rxdart.dart' hide ValueStream;
 import 'package:vector_math/vector_math_64.dart';
 
 import '../util/optional.dart';
@@ -96,23 +95,19 @@ Quaternion calculateCanonicalOrientation(
 // compute orientation until the next screen rotation. Don't cache the
 // orientation itself as that will be quite stale, will refresh quickly, and
 // we'll be caching the computed canonical orientation anyway.
-final screenOrientation =
-    ValueStream.fromStream(motionSensors.screenOrientation);
+final screenOrientation = ValueStream.fromStream(
+  motionSensors.screenOrientation
+      .map((screenOrientation) => Degrees(screenOrientation.angle)),
+);
 
-final canonicalOrientation = ValueStream.fromStream<Quaternion>(
-  Stream.multi(
-    (controller) => controller.addStream(
-      Rx.combineLatest2(
-        motionSensors.absoluteOrientation
-            .map((orientation) => orientation.quaternion),
-        screenOrientation.seededStream
-            .whereNotNull()
-            .map((screenOrientation) => Degrees(screenOrientation.angle)),
-        calculateCanonicalOrientation,
-      ),
-    ),
+final canonicalOrientation = CombinedValueStream(
+  ValueStream.fromStream(
+    motionSensors.absoluteOrientation
+        .map((orientation) => orientation.quaternion),
   ),
-).transform((s, _) => s.refCount());
+  screenOrientation,
+  calculateCanonicalOrientation,
+);
 
 ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
 

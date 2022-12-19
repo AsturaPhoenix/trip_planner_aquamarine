@@ -76,7 +76,7 @@ class _MappedValueStream<T, U> extends ValueStream<U> {
   @override
   U? get value => Optional(source.value).map(mapping);
   @override
-  late final Stream<U> stream = source.stream.map(mapping);
+  late final stream = source.stream.map(mapping);
 }
 
 class _MappedInitializedValueStream<T, U> extends InitializedValueStream<U> {
@@ -87,7 +87,7 @@ class _MappedInitializedValueStream<T, U> extends InitializedValueStream<U> {
   @override
   U get value => mapping(source.value);
   @override
-  late final Stream<U> stream = source.stream.map(mapping);
+  late final stream = source.stream.map(mapping);
 }
 
 class _TransformedValueStream<T extends Initial, U extends Initial, Initial>
@@ -100,7 +100,40 @@ class _TransformedValueStream<T extends Initial, U extends Initial, Initial>
   @override
   Initial get value => source.value;
   @override
-  late final Stream<U> stream = transformation(source.stream, source.value);
+  late final stream = transformation(source.stream, source.value);
+}
+
+class CombinedValueStream<T extends Object, U extends Object, V>
+    extends ValueStream<V> {
+  CombinedValueStream(this.a, this.b, this.combine)
+      : stream = Stream<V>.multi((controller) {
+          final sa = a.stream.listen(
+            (a) {
+              if (b.value != null) controller.add(combine(a, b.value!));
+            },
+            onError: controller.addError,
+          );
+          final sb = b.stream.listen(
+            (b) {
+              if (a.value != null) controller.add(combine(a.value!, b));
+            },
+            onError: controller.addError,
+          );
+          controller.onCancel = () {
+            sa.cancel();
+            sb.cancel();
+          };
+        }).refCount();
+  final ValueStream<T> a;
+  final ValueStream<U> b;
+  final V Function(T, U) combine;
+
+  @override
+  final Stream<V> stream;
+
+  @override
+  get value =>
+      a.value == null || b.value == null ? null : combine(a.value!, b.value!);
 }
 
 typedef InitializedValueStreamController<T> = ValueStreamControllerBase<T, T>;
