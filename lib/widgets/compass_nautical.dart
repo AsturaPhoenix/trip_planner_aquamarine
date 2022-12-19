@@ -10,9 +10,7 @@ import '../platform/orientation.dart' show Angle;
 import 'compass.dart';
 
 class NauticalCompass extends StatelessWidget {
-  static const color = Colors.pinkAccent;
   static const fontSize = 10.0;
-  static const textStyle = TextStyle(color: color, fontSize: fontSize);
   static const intraRingPadding = 4.0, innerRadius0 = 48.0;
   static const innerRadius = [innerRadius0, 24.0, 12.0];
 
@@ -31,18 +29,22 @@ class NauticalCompass extends StatelessWidget {
         '${correction.degrees >= 0 ? 'E' : 'W'}';
   }
 
-  const NauticalCompass({
+  NauticalCompass({
     super.key,
     required this.compass,
+    this.color = Colors.pinkAccent,
     this.background,
     this.child,
   });
   final CompassState compass;
+  final Color color;
   final Widget? background, child;
+
+  late final textStyle = TextStyle(color: color, fontSize: fontSize);
 
   @override
   Widget build(BuildContext context) => DividerTheme(
-        data: const DividerThemeData(color: color, space: 0),
+        data: DividerThemeData(color: color, space: 0),
         child: DefaultTextStyle(
           style: textStyle,
           child: AspectRatio(
@@ -85,6 +87,7 @@ class NauticalCompass extends StatelessWidget {
                                         _OuterRing.width + intraRingPadding,
                                       ),
                                       child: _InnerRing(
+                                        color: color,
                                         compactness: compactness,
                                       ),
                                     ),
@@ -102,6 +105,7 @@ class NauticalCompass extends StatelessWidget {
                                           alignment: Alignment.topCenter,
                                           children: [
                                             _OuterRing(
+                                              color: color,
                                               compactness: compactness,
                                             ),
                                             if (child != null)
@@ -123,10 +127,10 @@ class NauticalCompass extends StatelessWidget {
                               ),
                             ),
                             if (compactness == 0) ...[
-                              const ArcText(
+                              ArcText(
                                 radius: innerRadius0,
                                 text: 'MAGNETIC',
-                                textStyle: NauticalCompass.textStyle,
+                                textStyle: textStyle,
                                 startAngleAlignment: StartAngleAlignment.center,
                                 placement: Placement.inside,
                               ),
@@ -136,7 +140,7 @@ class NauticalCompass extends StatelessWidget {
                                   text: formatMagneticCorrection(
                                     magneticCorrection.data!,
                                   ),
-                                  textStyle: NauticalCompass.textStyle,
+                                  textStyle: textStyle,
                                   startAngle: pi,
                                   startAngleAlignment:
                                       StartAngleAlignment.center,
@@ -144,7 +148,7 @@ class NauticalCompass extends StatelessWidget {
                                   placement: Placement.inside,
                                 ),
                             ],
-                            const Icon(Icons.add, color: color)
+                            Icon(Icons.add, color: color)
                           ],
                         );
                       },
@@ -161,8 +165,9 @@ class NauticalCompass extends StatelessWidget {
 class _OuterRing extends StatelessWidget {
   static const iconSize = 16.0, width = iconSize + _DecimalRing.width;
 
-  const _OuterRing({this.compactness = 0});
+  const _OuterRing({this.compactness = 0, required this.color});
   final int compactness;
+  final Color color;
 
   @override
   Widget build(BuildContext context) => Stack(
@@ -171,11 +176,12 @@ class _OuterRing extends StatelessWidget {
           SvgPicture.asset(
             'assets/nautical_star.svg',
             height: iconSize,
-            color: NauticalCompass.color,
+            color: color,
           ),
           Padding(
             padding: const EdgeInsets.all(iconSize),
             child: _DecimalRing(
+              color: color,
               labelInterval: const [10, 15, 30][min(compactness, 2)],
             ),
           ),
@@ -190,19 +196,21 @@ class _InnerRing extends StatelessWidget {
       space = 4.0,
       minWidth = _DecimalRing.width + space + major;
 
-  const _InnerRing({this.compactness = 0});
+  const _InnerRing({this.compactness = 0, required this.color});
   final int compactness;
+  final Color color;
 
   @override
   Widget build(BuildContext context) => Stack(
         alignment: Alignment.topCenter,
         children: [
-          const Icon(
+          Icon(
             Icons.arrow_upward,
             size: 8,
-            color: NauticalCompass.color,
+            color: color,
           ),
           _DecimalRing(
+            color: color,
             labelInterval: 30,
             increment: compactness == 0 ? 1 : 5,
             quarterMarkOverrides: const [_Tick(dimension: 0, modulus: 4)],
@@ -212,6 +220,7 @@ class _InnerRing extends StatelessWidget {
             child: CustomPaint(
               size: Size.infinite,
               painter: _RingPainter(
+                color: color,
                 tickCount: 128,
                 tickConfiguration: [
                   _Tick(
@@ -240,10 +249,12 @@ class _DecimalRing extends StatelessWidget {
   static const quarterMark = _Tick(dimension: quarter);
 
   const _DecimalRing({
+    required this.color,
     this.labelInterval = 10,
     this.increment = 1,
     this.quarterMarkOverrides = const [],
   });
+  final Color color;
   final int labelInterval, increment;
   final List<_Tick> quarterMarkOverrides;
 
@@ -251,6 +262,7 @@ class _DecimalRing extends StatelessWidget {
   Widget build(BuildContext context) => CustomPaint(
         size: Size.infinite,
         painter: _RingPainter(
+          color: color,
           inset: quarter,
           tickCount: 4,
           tickConfiguration: [...quarterMarkOverrides, quarterMark],
@@ -271,6 +283,7 @@ class _DecimalRing extends StatelessWidget {
               CustomPaint(
                 size: Size.infinite,
                 painter: _RingPainter(
+                  color: color,
                   inset: NauticalCompass.fontSize + major,
                   tickCount: 360 ~/ increment,
                   tickConfiguration: [
@@ -304,16 +317,18 @@ class _Tick extends Equatable {
 }
 
 class _RingPainter extends CustomPainter {
-  static final _paint = Paint()..color = NauticalCompass.color;
-
-  const _RingPainter({
+  _RingPainter({
+    required this.color,
     this.inset = 0,
     required this.tickCount,
     required this.tickConfiguration,
   });
+  final Color color;
   final double inset;
   final int tickCount;
   final List<_Tick> tickConfiguration;
+
+  late final _paint = Paint()..color = color;
 
   @override
   void paint(Canvas canvas, Size size) {
