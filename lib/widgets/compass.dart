@@ -40,7 +40,7 @@ final mercatorSpace = StateSpace<LatLng, Offset>(
   applyDelta: (state, delta) =>
       LatLng(state.latitude + delta.dy, state.longitude + delta.dx),
   calculateDelta: (after, before) => Offset(
-    after.longitude - before.longitude,
+    Degrees(after.longitude - before.longitude).norm180.degrees,
     after.latitude - before.latitude,
   ),
   lerp: (delta, t) => delta * t,
