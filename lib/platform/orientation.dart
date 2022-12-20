@@ -77,6 +77,10 @@ class Radians extends Angle {
   Angle get norm180 => Radians((radians + pi) % (2 * pi) - pi);
 }
 
+extension QuaternionTransform on Quaternion {
+  Matrix4 asTransform() => Matrix4.identity()..setRotation(asRotationMatrix());
+}
+
 Angle yaw(Quaternion q) => Radians(
       atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)),
     );
@@ -102,8 +106,9 @@ final screenOrientation = ValueStream.fromStream(
 
 final canonicalOrientation = CombinedValueStream(
   ValueStream.fromStream(
-    motionSensors.absoluteOrientation
-        .map((orientation) => orientation.quaternion),
+    motionSensors.absoluteOrientation.map(
+      (orientation) => orientation.quaternion,
+    ),
   ),
   screenOrientation,
   calculateCanonicalOrientation,

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart' hide Gradient;
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
+import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../main.dart' show sharedPreferences;
 import '../platform/location.dart' as location;
@@ -22,6 +23,12 @@ import 'blinking_icon.dart';
 import 'compass_classic.dart';
 import 'compass_nautical.dart';
 import 'map.dart';
+
+final quaternionNlerp = StateSpace<Quaternion, Quaternion>(
+  applyDelta: (state, delta) => (state + delta)..normalize(),
+  calculateDelta: (after, before) => after - before,
+  lerp: (delta, t) => delta.scaled(t),
+);
 
 final scalarSpace = StateSpace<Angle, Angle>(
   applyDelta: (state, delta) => state + delta,
@@ -45,6 +52,20 @@ final mercatorSpace = StateSpace<LatLng, Offset>(
   ),
   lerp: (delta, t) => delta * t,
 );
+
+class QuaternionDecomposition {
+  QuaternionDecomposition(Quaternion? q) : q = q ?? Quaternion.identity();
+  final Quaternion q;
+
+  // Device orientation is y-up/z-out while Flutter orientation is y-down/z-in,
+  // so this needs to be flipped about the x axis, i.e. x/w or y/z need to be
+  // negated. Taken with the conjugate to invert the rotation, this is
+  // equivalent to negating x.
+  late Quaternion background = (q.clone()..x *= -1) * foreground.conjugated();
+  late Quaternion foreground =
+      // TODO: this seems like it should simplify
+      Quaternion.axisAngle(Vector3(0, 0, 1), orientation.yaw(q).radians);
+}
 
 class Compass extends StatefulWidget {
   static const defaultTextSize = 24.0;
@@ -90,8 +111,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   late final ValueStream<LatLng?> animatedDevicePosition;
   late final ValueStream<Angle> magneticCorrection,
       trueBearing,
-      animatedOrientation,
       animatedMagneticCorrection;
+  late final ValueStream<Quaternion> animatedOrientation;
   late final InitializedValueStream<Angle> animatedAccuracy;
   // rxdart CompositeSubscription is backed by a list. Let's not risk unbounded
   // growth.
@@ -101,6 +122,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
   var distanceSystem = DistanceSystem
       .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0];
+
+  final Matrix4 projection = Matrix4.identity();
 
   @override
   void initState() {
@@ -121,7 +144,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
             );
 
     orientation.updateInterval = const Duration(microseconds: 100000 ~/ 6);
-    animatedOrientation = orientation.bearing.transform(
+    animatedOrientation = orientation.canonicalOrientation.transform(
       // We unsubscribe from the orientation sensors while they're not
       // needed, which seems to cause the platform channel to buffer some
       // events. We need to skip these buffered events to animate properly
@@ -137,8 +160,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
           .skipBuffered()
           .upsample(
             tickerProvider: this,
-            initialState: v?.norm180 ?? Angle.zero,
-            stateSpace: polarSpace,
+            initialState: v ?? Quaternion.identity(),
+            stateSpace: quaternionNlerp,
           )
           .asBroadcastStream(onListen: broadcastSubscriptions.add),
     );
@@ -173,6 +196,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               )
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
+
+    projection.setEntry(3, 2, .002);
   }
 
   @override

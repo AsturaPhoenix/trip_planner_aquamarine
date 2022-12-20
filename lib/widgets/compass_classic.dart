@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
+import '../platform/orientation.dart' as orientation;
 import 'compass.dart';
 
 class ClassicCompass extends StatelessWidget {
@@ -18,46 +19,59 @@ class ClassicCompass extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
-        child: Card(
-          shape: const CircleBorder(),
-          elevation: 1,
-          child: Stack(
-            children: [
-              if (background != null) background!,
-              StreamBuilder(
-                initialData: compass.animatedOrientation.value,
-                stream: compass.animatedOrientation.stream,
-                builder: (context, magnetic) {
-                  return Transform.rotate(
-                    angle: -(magnetic.data?.radians ?? 0),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        StreamBuilder(
-                          initialData: compass.animatedMagneticCorrection.value,
-                          stream: compass.animatedMagneticCorrection.stream,
-                          builder: (context, magneticCorrection) {
-                            return Transform.rotate(
-                              angle: -(magneticCorrection.data?.radians ?? 0),
-                              child: CompassRose(child: child),
-                            );
-                          },
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: AspectRatio(
-                            aspectRatio: 7 / 72,
-                            child: CustomPaint(
-                              painter: CompassArrow(elevation: 4),
-                            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => StreamBuilder(
+            initialData: compass.animatedOrientation.value,
+            stream: compass.animatedOrientation.stream,
+            builder: (context, orientation) {
+              final decomposition = QuaternionDecomposition(orientation.data);
+              return Transform(
+                transform: compass.projection *
+                    decomposition.background.asTransform() as Matrix4,
+                origin: constraints.biggest.center(Offset.zero),
+                child: Card(
+                  shape: const CircleBorder(),
+                  elevation: 1,
+                  child: Stack(
+                    children: [
+                      if (background != null) background!,
+                      LayoutBuilder(
+                        builder: (context, constraints) => Transform(
+                          transform: decomposition.foreground.asTransform(),
+                          origin: constraints.biggest.center(Offset.zero),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              StreamBuilder(
+                                initialData:
+                                    compass.animatedMagneticCorrection.value,
+                                stream:
+                                    compass.animatedMagneticCorrection.stream,
+                                builder: (context, magneticCorrection) =>
+                                    Transform.rotate(
+                                  angle:
+                                      -(magneticCorrection.data?.radians ?? 0),
+                                  child: CompassRose(child: child),
+                                ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: AspectRatio(
+                                  aspectRatio: 7 / 72,
+                                  child: CustomPaint(
+                                    painter: CompassArrow(elevation: 4),
+                                  ),
+                                ),
+                              )
+                            ],
                           ),
-                        )
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       );
@@ -68,42 +82,41 @@ class CompassRose extends StatelessWidget {
   final Widget? child;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.topCenter,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            const referenceSize = 0x180;
-            final fontScale = min(
-              min(constraints.maxWidth, constraints.maxHeight) / referenceSize,
-              1,
-            );
-            final textStyles = [
-              for (final fontSize in [72.0, 32.0])
-                TextStyle(
-                  fontSize: fontSize * fontScale,
-                  fontWeight: FontWeight.bold,
-                )
-            ];
+  Widget build(BuildContext context) => Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const referenceSize = 0x180;
+              final fontScale = min(
+                min(constraints.maxWidth, constraints.maxHeight) /
+                    referenceSize,
+                1,
+              );
+              final textStyles = [
+                for (final fontSize in [72.0, 32.0])
+                  TextStyle(
+                    fontSize: fontSize * fontScale,
+                    fontWeight: FontWeight.bold,
+                  )
+              ];
 
-            return RingStack(
-              children: [
-                ...['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].mapIndexed(
-                  (index, label) => Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: textStyles[index % 2],
-                  ),
-                )
-              ],
-            );
-          },
-        ),
-        if (child != null) child!
-      ],
-    );
-  }
+              return RingStack(
+                children: [
+                  ...['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].mapIndexed(
+                    (index, label) => Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: textStyles[index % 2],
+                    ),
+                  )
+                ],
+              );
+            },
+          ),
+          if (child != null) child!
+        ],
+      );
 }
 
 class CompassArrow extends CustomPainter {

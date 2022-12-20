@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_arc_text/flutter_arc_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../platform/orientation.dart' as orientation;
 import '../platform/orientation.dart' show Angle;
 import 'compass.dart';
 
@@ -49,113 +50,127 @@ class NauticalCompass extends StatelessWidget {
           style: textStyle,
           child: AspectRatio(
             aspectRatio: 1,
-            child: Stack(
-              children: [
-                if (background != null)
-                  Padding(
-                    padding: const EdgeInsets.all(_OuterRing.iconSize),
-                    child: background!,
-                  ),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final radius =
-                        min(constraints.maxWidth, constraints.maxHeight) / 2;
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final radius =
+                    min(constraints.maxWidth, constraints.maxHeight) / 2;
 
-                    int compactness = sizeTiers
-                            .indexWhere((threshold) => radius >= threshold) %
-                        (sizeTiers.length + 1);
+                int compactness = sizeTiers.indexWhere(
+                      (threshold) => radius >= threshold,
+                    ) %
+                    (sizeTiers.length + 1);
 
-                    return StreamBuilder(
-                      // Use the raw magnetic correction for the readout display
-                      // since it's in degrees and not animated.
-                      initialData: compass.magneticCorrection.value,
-                      stream: compass.magneticCorrection.stream,
-                      builder: (context, magneticCorrection) {
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            StreamBuilder(
-                              initialData: compass.animatedOrientation.value,
-                              stream: compass.animatedOrientation.stream,
-                              builder: (context, magnetic) => Transform.rotate(
-                                angle: -(magnetic.data?.radians ?? 0),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.all(
-                                        _OuterRing.width + intraRingPadding,
-                                      ),
-                                      child: _InnerRing(
-                                        color: color,
-                                        compactness: compactness,
-                                      ),
-                                    ),
-                                    StreamBuilder(
-                                      initialData: compass
-                                          .animatedMagneticCorrection.value,
-                                      stream: compass
-                                          .animatedMagneticCorrection.stream,
-                                      builder: (context, magneticCorrection) =>
-                                          Transform.rotate(
-                                        angle: -(magneticCorrection
-                                                .data?.radians ??
-                                            0),
-                                        child: Stack(
-                                          alignment: Alignment.topCenter,
-                                          children: [
-                                            _OuterRing(
-                                              color: color,
-                                              compactness: compactness,
-                                            ),
-                                            if (child != null)
-                                              Padding(
-                                                padding: const EdgeInsets.all(
-                                                  _OuterRing.iconSize,
-                                                ),
-                                                child: DefaultTextStyle(
-                                                  style: const TextStyle(),
-                                                  child: child!,
-                                                ),
-                                              )
-                                          ],
+                return StreamBuilder(
+                  initialData: compass.animatedOrientation.value,
+                  stream: compass.animatedOrientation.stream,
+                  builder: (context, orientation) {
+                    final decomposition =
+                        QuaternionDecomposition(orientation.data);
+                    return Transform(
+                      transform: compass.projection *
+                          decomposition.background.asTransform() as Matrix4,
+                      origin: constraints.biggest.center(Offset.zero),
+                      child: Stack(
+                        children: [
+                          if (background != null)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.all(_OuterRing.iconSize),
+                              child: background!,
+                            ),
+                          StreamBuilder(
+                            // Use the raw magnetic correction for the readout display
+                            // since it's in degrees and not animated.
+                            initialData: compass.magneticCorrection.value,
+                            stream: compass.magneticCorrection.stream,
+                            builder: (context, magneticCorrection) => Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Transform(
+                                  transform:
+                                      decomposition.foreground.asTransform(),
+                                  origin:
+                                      constraints.biggest.center(Offset.zero),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(
+                                          _OuterRing.width + intraRingPadding,
+                                        ),
+                                        child: _InnerRing(
+                                          color: color,
+                                          compactness: compactness,
                                         ),
                                       ),
-                                    )
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (compactness == 0) ...[
-                              ArcText(
-                                radius: innerRadius0,
-                                text: 'MAGNETIC',
-                                textStyle: textStyle,
-                                startAngleAlignment: StartAngleAlignment.center,
-                                placement: Placement.inside,
-                              ),
-                              if (magneticCorrection.hasData)
-                                ArcText(
-                                  radius: innerRadius0,
-                                  text: formatMagneticCorrection(
-                                    magneticCorrection.data!,
+                                      StreamBuilder(
+                                        initialData: compass
+                                            .animatedMagneticCorrection.value,
+                                        stream: compass
+                                            .animatedMagneticCorrection.stream,
+                                        builder:
+                                            (context, magneticCorrection) =>
+                                                Transform.rotate(
+                                          angle: -(magneticCorrection
+                                                  .data?.radians ??
+                                              0),
+                                          child: Stack(
+                                            alignment: Alignment.topCenter,
+                                            children: [
+                                              _OuterRing(
+                                                color: color,
+                                                compactness: compactness,
+                                              ),
+                                              if (child != null)
+                                                Padding(
+                                                  padding: const EdgeInsets.all(
+                                                    _OuterRing.iconSize,
+                                                  ),
+                                                  child: DefaultTextStyle(
+                                                    style: const TextStyle(),
+                                                    child: child!,
+                                                  ),
+                                                )
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    ],
                                   ),
-                                  textStyle: textStyle,
-                                  startAngle: pi,
-                                  startAngleAlignment:
-                                      StartAngleAlignment.center,
-                                  direction: Direction.counterClockwise,
-                                  placement: Placement.inside,
                                 ),
-                            ],
-                            Icon(Icons.add, color: color)
-                          ],
-                        );
-                      },
+                                if (compactness == 0) ...[
+                                  ArcText(
+                                    radius: innerRadius0,
+                                    text: 'MAGNETIC',
+                                    textStyle: textStyle,
+                                    startAngleAlignment:
+                                        StartAngleAlignment.center,
+                                    placement: Placement.inside,
+                                  ),
+                                  if (magneticCorrection.hasData)
+                                    ArcText(
+                                      radius: innerRadius0,
+                                      text: formatMagneticCorrection(
+                                        magneticCorrection.data!,
+                                      ),
+                                      textStyle: textStyle,
+                                      startAngle: pi,
+                                      startAngleAlignment:
+                                          StartAngleAlignment.center,
+                                      direction: Direction.counterClockwise,
+                                      placement: Placement.inside,
+                                    ),
+                                ],
+                                Icon(Icons.add, color: color)
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     );
                   },
-                ),
-              ],
+                );
+              },
             ),
           ),
         ),
