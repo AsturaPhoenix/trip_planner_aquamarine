@@ -312,64 +312,12 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                           bearingInfo(CrossAxisAlignment.center)
                         ],
                       )
-                    : decomposition.planarDeviation < .5
-                        ? Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 4.0,
-                                    horizontal: 8.0,
-                                  ),
-                                  child: compass(decomposition),
-                                ),
-                              ),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    locationInfo(CrossAxisAlignment.start),
-                                    const Divider(),
-                                    bearingInfo(CrossAxisAlignment.start)
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )
-                        : Stack(
-                            alignment: Alignment.topCenter,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: SizedBox(
-                                  height: 84,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      locationInfo(
-                                        CrossAxisAlignment.start,
-                                      ),
-                                      const VerticalDivider(),
-                                      bearingInfo(
-                                        CrossAxisAlignment.start,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4.0,
-                                  horizontal: 8.0,
-                                ),
-                                child: compass(decomposition),
-                              )
-                            ],
-                          );
+                    : CompassLandscapeLayout(
+                        arLayout: decomposition.planarDeviation > .5,
+                        locationInfo: locationInfo(CrossAxisAlignment.start),
+                        compass: compass(decomposition),
+                        bearingInfo: bearingInfo(CrossAxisAlignment.start),
+                      );
               },
             ),
           ),
@@ -377,6 +325,151 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class CompassLandscapeLayout extends StatefulWidget {
+  const CompassLandscapeLayout({
+    super.key,
+    this.arLayout = false,
+    required this.locationInfo,
+    required this.bearingInfo,
+    required this.compass,
+  });
+  final bool arLayout;
+  final Widget locationInfo, bearingInfo, compass;
+  @override
+  State<StatefulWidget> createState() => CompassLandscapeLayoutState();
+}
+
+class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController animation;
+
+  late final transition =
+      CurvedAnimation(parent: animation, curve: Curves.easeInOut);
+
+  @override
+  void initState() {
+    super.initState();
+
+    animation = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: widget.arLayout ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant CompassLandscapeLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.arLayout) {
+      animation.forward();
+    } else {
+      animation.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          const lineHeight = 28.0, rowHeight = lineHeight * 3;
+
+          final center = constraints.biggest.center(Offset.zero);
+
+          final columnDivider = center.dy + lineHeight / 2;
+          final rowDivider = center.dx + (326 - 158) / 2;
+
+          return Stack(
+            children: [
+              PositionedTransition(
+                rect: transition.drive(
+                  RelativeRectTween(
+                    begin: RelativeRect.fromLTRB(
+                      center.dx,
+                      8,
+                      8,
+                      constraints.maxHeight - columnDivider + 8,
+                    ),
+                    end: RelativeRect.fromLTRB(
+                      8,
+                      8,
+                      constraints.maxWidth - rowDivider + 8,
+                      8,
+                    ),
+                  ),
+                ),
+                child: AlignTransition(
+                  alignment: transition.drive(
+                    Tween(
+                      begin: Alignment.bottomLeft,
+                      end: Alignment.topRight,
+                    ),
+                  ),
+                  child: widget.locationInfo,
+                ),
+              ),
+              Positioned(
+                left: center.dx,
+                top: columnDivider - 8,
+                right: 8,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizeTransition(
+                    axis: Axis.horizontal,
+                    axisAlignment: -1.0,
+                    sizeFactor: transition.drive(Tween(begin: 1, end: 0)),
+                    child: const Divider(),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: rowDivider - 8,
+                top: 8,
+                height: rowHeight,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizeTransition(
+                    sizeFactor: transition,
+                    axisAlignment: 1.0,
+                    child: const VerticalDivider(),
+                  ),
+                ),
+              ),
+              PositionedTransition(
+                rect: transition.drive(
+                  RelativeRectTween(
+                    begin: RelativeRect.fromLTRB(
+                      center.dx,
+                      columnDivider + 8,
+                      8,
+                      8,
+                    ),
+                    end: RelativeRect.fromLTRB(rowDivider + 8, 8, 8, 8),
+                  ),
+                ),
+                child: widget.bearingInfo,
+              ),
+              PositionedTransition(
+                rect: transition.drive(
+                  RelativeRectTween(
+                    begin: RelativeRect.fromLTRB(8, 4, center.dx + 8, 4),
+                    end: const RelativeRect.fromLTRB(8, 4, 8, 4),
+                  ),
+                ),
+                child: AlignTransition(
+                  alignment: transition.drive(
+                    Tween(
+                      begin: Alignment.centerRight,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: widget.compass,
+                ),
+              )
+            ],
+          );
+        },
+      );
 }
 
 class CompassViewport extends StatelessWidget {
