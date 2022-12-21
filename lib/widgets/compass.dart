@@ -57,12 +57,15 @@ class QuaternionDecomposition {
   QuaternionDecomposition(Quaternion? q) : q = q ?? Quaternion.identity();
   final Quaternion q;
 
+  // This is used to transition between flat and AR modes.
+  late final planarDeviation = min(acos(background.w.abs()) * 4 / pi, 1);
+
   // Device orientation is y-up/z-out while Flutter orientation is y-down/z-in,
   // so this needs to be flipped about the x axis, i.e. x/w or y/z need to be
   // negated. Taken with the conjugate to invert the rotation, this is
   // equivalent to negating x.
-  late Quaternion background = (q.clone()..x *= -1) * foreground.conjugated();
-  late Quaternion foreground =
+  late final background = (q.clone()..x *= -1) * foreground.conjugated();
+  late final foreground =
       // TODO: this seems like it should simplify
       Quaternion.axisAngle(Vector3(0, 0, 1), orientation.yaw(q).radians);
 }
@@ -209,20 +212,33 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final compass = CompassViewport(
-      orientation: animatedOrientation,
-      builder: (context, magnetic) => compassType.builder(
-        compass: this,
-        magnetic: magnetic,
-        background: _BackgroundOverlay(accuracy: animatedAccuracy),
-        child: GeoOverlay(
-          waypoints: [
-            if (widget.waypoint != null) toWaypoint(widget.waypoint!)
-          ],
-          position: animatedDevicePosition,
-        ),
-      ),
-    );
+    Widget locationInfo(CrossAxisAlignment crossAxisAlignment) => LocationInfo(
+          waypoint: widget.waypoint,
+          bearing: trueBearing,
+          distanceSystem: distanceSystem,
+          crossAxisAlignment: crossAxisAlignment,
+        );
+
+    Widget compass(QuaternionDecomposition orientation) => CompassViewport(
+          orientation: orientation,
+          builder: (context, magnetic) => compassType.builder(
+            compass: this,
+            magnetic: magnetic,
+            background: _BackgroundOverlay(accuracy: animatedAccuracy),
+            child: GeoOverlay(
+              waypoints: [
+                if (widget.waypoint != null) toWaypoint(widget.waypoint!)
+              ],
+              position: animatedDevicePosition,
+            ),
+          ),
+        );
+
+    Widget bearingInfo(CrossAxisAlignment crossAxisAlignment) => BearingInfo(
+          trueBearing: trueBearing,
+          magnetic: orientation.bearing,
+          crossAxisAlignment: crossAxisAlignment,
+        );
 
     return Theme(
       data: ThemeData(
@@ -276,61 +292,86 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
             fontWeight: FontWeight.bold,
           ),
           child: OrientationBuilder(
-            builder: (context, screenOrientation) =>
-                screenOrientation == Orientation.portrait
+            builder: (context, screenOrientation) => StreamBuilder(
+              initialData: animatedOrientation.value,
+              stream: animatedOrientation.stream,
+              builder: (context, animatedOrientation) {
+                final decomposition =
+                    QuaternionDecomposition(animatedOrientation.data);
+                return screenOrientation == Orientation.portrait
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          LocationInfo(
-                            waypoint: widget.waypoint,
-                            bearing: trueBearing,
-                            distanceSystem: distanceSystem,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                          ),
+                          locationInfo(CrossAxisAlignment.center),
                           Flexible(
                             child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: compass,
+                              padding: const EdgeInsets.all(16.0),
+                              child: compass(decomposition),
                             ),
                           ),
-                          BearingInfo(
-                            trueBearing: trueBearing,
-                            magnetic: orientation.bearing,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                          )
+                          bearingInfo(CrossAxisAlignment.center)
                         ],
                       )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.all(4),
-                              child: compass,
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                LocationInfo(
-                                  waypoint: widget.waypoint,
-                                  bearing: trueBearing,
-                                  distanceSystem: distanceSystem,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                    : decomposition.planarDeviation < .5
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4.0,
+                                    horizontal: 8.0,
+                                  ),
+                                  child: compass(decomposition),
                                 ),
-                                const Divider(),
-                                BearingInfo(
-                                  trueBearing: trueBearing,
-                                  magnetic: orientation.bearing,
+                              ),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                )
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                                  children: [
+                                    locationInfo(CrossAxisAlignment.start),
+                                    const Divider(),
+                                    bearingInfo(CrossAxisAlignment.start)
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Stack(
+                            alignment: Alignment.topCenter,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: SizedBox(
+                                  height: 84,
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      locationInfo(
+                                        CrossAxisAlignment.start,
+                                      ),
+                                      const VerticalDivider(),
+                                      bearingInfo(
+                                        CrossAxisAlignment.start,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4.0,
+                                  horizontal: 8.0,
+                                ),
+                                child: compass(decomposition),
+                              )
+                            ],
+                          );
+              },
+            ),
           ),
         ),
       ),
@@ -342,60 +383,55 @@ class CompassViewport extends StatelessWidget {
   static final _projection = Matrix4.identity()..setEntry(3, 2, .002);
 
   const CompassViewport({super.key, required this.orientation, this.builder});
-  final ValueStream<Quaternion> orientation;
+  final QuaternionDecomposition orientation;
   final Widget? Function(BuildContext context, Quaternion magnetic)? builder;
 
   @override
   Widget build(BuildContext context) => AspectRatio(
         aspectRatio: 1,
         child: LayoutBuilder(
-          builder: (context, constraints) => StreamBuilder(
-            initialData: orientation.value,
-            stream: orientation.stream,
-            builder: (context, orientation) {
-              final center = constraints.biggest.center(Offset.zero);
+          builder: (context, constraints) {
+            final center = constraints.biggest.center(Offset.zero);
 
-              final decomposition = QuaternionDecomposition(orientation.data);
-              final transform = _projection *
-                  decomposition.background.asTransform() as Matrix4;
+            final transform =
+                _projection * orientation.background.asTransform() as Matrix4;
 
-              // Base the reference vector for the bounding box estimation on
-              // the x unit vector.
-              // We won't use the z component.
-              final px = transform.perspectiveTransform(Vector3(1, 0, 0))
-                ..z = 0
-                ..normalize();
+            // Base the reference vector for the bounding box estimation on
+            // the x unit vector.
+            // We won't use the z component.
+            final px = transform.perspectiveTransform(Vector3(1, 0, 0))
+              ..z = 0
+              ..normalize();
 
-              // Blend the y and x axes of the reference vector based on the
-              // transformed x unit vector above.
-              final ref = Vector4(
-                px.y * center.dx,
-                px.x * center.dy,
-                0,
-                1,
-              );
+            // Blend the y and x axes of the reference vector based on the
+            // transformed x unit vector above.
+            final ref = Vector4(
+              px.y * center.dx,
+              px.x * center.dy,
+              0,
+              1,
+            );
 
-              // Translate the projection by the homogenized y component of the
-              // projected reference vector. It would also be conceivable to
-              // translate the camera instead, so that the perspective origin
-              // moved to the bottom of the screen. This is easier to size but
-              // produces a less natural effect. It would also be conceivable to
-              // translate the compass, but that would be more complex.
-              //
-              // Since we moved the compass, we'd need to do more layout passes.
-              // Since we simplified our translation, this is a geometric
-              // series derived from t += cy - (Ty . v) / (Tw . v)
-              transform.storage[13] = center.dy * transform.row3.dot(ref) -
-                  transform.entry(1, 0) * ref.x -
-                  transform.entry(1, 1) * ref.y;
+            // Translate the projection by the homogenized y component of the
+            // projected reference vector. It would also be conceivable to
+            // translate the camera instead, so that the perspective origin
+            // moved to the bottom of the screen. This is easier to size but
+            // produces a less natural effect. It would also be conceivable to
+            // translate the compass, but that would be more complex.
+            //
+            // Since we moved the compass, we'd need to do more layout passes.
+            // Since we simplified our translation, this is a geometric
+            // series derived from t += cy - (Ty . v) / (Tw . v)
+            transform.storage[13] = center.dy * transform.row3.dot(ref) -
+                transform.entry(1, 0) * ref.x -
+                transform.entry(1, 1) * ref.y;
 
-              return Transform(
-                transform: transform,
-                alignment: Alignment.center,
-                child: builder?.call(context, decomposition.foreground),
-              );
-            },
-          ),
+            return Transform(
+              transform: transform,
+              alignment: Alignment.center,
+              child: builder?.call(context, orientation.foreground),
+            );
+          },
         ),
       );
 }
@@ -566,6 +602,7 @@ class BearingInfo extends StatelessWidget {
                 initialData: trueBearing.value,
                 stream: trueBearing.stream,
                 builder: (context, trueBearing) => Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: crossAxisAlignment,
                   children: [
                     if (trueBearing.hasData)
