@@ -323,7 +323,10 @@ class _RingPainter extends CustomPainter {
   final int tickCount;
   final List<_Tick> tickConfiguration;
 
-  late final _paint = Paint()..color = color;
+  late final _paint = Paint()
+    ..color = color
+    // TODO: flutter/flutter#117434
+    ..isAntiAlias = false;
 
   @override
   void paint(Canvas canvas, Size size) {
