@@ -279,7 +279,6 @@ class TidePanelState extends State<TidePanel> {
     final theme = Theme.of(context);
 
     // TODO: visual feedback of current selections (today/weekend/days)
-    // TODO: date picker
     return LayoutBuilder(
       builder: (context, boxConstraints) {
         var effectiveMaxWidth = double.infinity;

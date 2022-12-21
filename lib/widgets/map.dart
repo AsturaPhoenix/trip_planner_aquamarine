@@ -846,9 +846,6 @@ class _LocationControlsState extends State<LocationControls> {
   }
 }
 
-// TODO: tooltip text
-// TODO: consistent weight with Maps zoom buttons (Material font doesn't support weight for these symbols)
-// TODO: consistent size with Maps zoom buttons? may need to replace them with our own
 class LodControls extends StatelessWidget {
   const LodControls({
     super.key,
