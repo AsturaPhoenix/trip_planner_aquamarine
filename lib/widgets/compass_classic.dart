@@ -2,77 +2,57 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' hide Colors;
 
-import '../platform/orientation.dart' as orientation;
+import '../platform/orientation.dart';
 import 'compass.dart';
 
 class ClassicCompass extends StatelessWidget {
   const ClassicCompass({
     super.key,
     required this.compass,
+    required this.magnetic,
     this.background,
     this.child,
   });
   final CompassState compass;
+  final Quaternion magnetic;
   final Widget? background, child;
 
   @override
-  Widget build(BuildContext context) => AspectRatio(
-        aspectRatio: 1,
-        child: LayoutBuilder(
-          builder: (context, constraints) => StreamBuilder(
-            initialData: compass.animatedOrientation.value,
-            stream: compass.animatedOrientation.stream,
-            builder: (context, orientation) {
-              final decomposition = QuaternionDecomposition(orientation.data);
-              return Transform(
-                transform: compass.projection *
-                    decomposition.background.asTransform() as Matrix4,
-                origin: constraints.biggest.center(Offset.zero),
-                child: Card(
-                  shape: const CircleBorder(),
-                  elevation: 1,
-                  child: Stack(
-                    children: [
-                      if (background != null) background!,
-                      LayoutBuilder(
-                        builder: (context, constraints) => Transform(
-                          transform: decomposition.foreground.asTransform(),
-                          origin: constraints.biggest.center(Offset.zero),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              StreamBuilder(
-                                initialData:
-                                    compass.animatedMagneticCorrection.value,
-                                stream:
-                                    compass.animatedMagneticCorrection.stream,
-                                builder: (context, magneticCorrection) =>
-                                    Transform.rotate(
-                                  angle:
-                                      -(magneticCorrection.data?.radians ?? 0),
-                                  child: CompassRose(child: child),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: AspectRatio(
-                                  aspectRatio: 7 / 72,
-                                  child: CustomPaint(
-                                    painter: CompassArrow(elevation: 4),
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                      )
-                    ],
+  Widget build(BuildContext context) => Card(
+        shape: const CircleBorder(),
+        elevation: 1,
+        child: Stack(
+          children: [
+            if (background != null) background!,
+            Transform(
+              transform: magnetic.asTransform(),
+              alignment: Alignment.center,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  StreamBuilder(
+                    initialData: compass.animatedMagneticCorrection.value,
+                    stream: compass.animatedMagneticCorrection.stream,
+                    builder: (context, magneticCorrection) => Transform.rotate(
+                      angle: -(magneticCorrection.data?.radians ?? 0),
+                      child: CompassRose(child: child),
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: AspectRatio(
+                      aspectRatio: 7 / 72,
+                      child: CustomPaint(
+                        painter: CompassArrow(elevation: 4),
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            )
+          ],
         ),
       );
 }

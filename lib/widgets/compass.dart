@@ -86,6 +86,7 @@ enum CompassType {
   final String description;
   final Widget Function({
     required CompassState compass,
+    required Quaternion magnetic,
     Widget? background,
     Widget? child,
   }) builder;
@@ -122,8 +123,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
   var distanceSystem = DistanceSystem
       .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0];
-
-  final Matrix4 projection = Matrix4.identity();
 
   @override
   void initState() {
@@ -196,8 +195,6 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               )
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
-
-    projection.setEntry(3, 2, .002);
   }
 
   @override
@@ -212,12 +209,18 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final compass = compassType.builder(
-      compass: this,
-      background: _BackgroundOverlay(accuracy: animatedAccuracy),
-      child: GeoOverlay(
-        waypoints: [if (widget.waypoint != null) toWaypoint(widget.waypoint!)],
-        position: animatedDevicePosition,
+    final compass = CompassViewport(
+      orientation: animatedOrientation,
+      builder: (context, magnetic) => compassType.builder(
+        compass: this,
+        magnetic: magnetic,
+        background: _BackgroundOverlay(accuracy: animatedAccuracy),
+        child: GeoOverlay(
+          waypoints: [
+            if (widget.waypoint != null) toWaypoint(widget.waypoint!)
+          ],
+          position: animatedDevicePosition,
+        ),
       ),
     );
 
@@ -333,6 +336,68 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+class CompassViewport extends StatelessWidget {
+  static final _projection = Matrix4.identity()..setEntry(3, 2, .002);
+
+  const CompassViewport({super.key, required this.orientation, this.builder});
+  final ValueStream<Quaternion> orientation;
+  final Widget? Function(BuildContext context, Quaternion magnetic)? builder;
+
+  @override
+  Widget build(BuildContext context) => AspectRatio(
+        aspectRatio: 1,
+        child: LayoutBuilder(
+          builder: (context, constraints) => StreamBuilder(
+            initialData: orientation.value,
+            stream: orientation.stream,
+            builder: (context, orientation) {
+              final center = constraints.biggest.center(Offset.zero);
+
+              final decomposition = QuaternionDecomposition(orientation.data);
+              final transform = _projection *
+                  decomposition.background.asTransform() as Matrix4;
+
+              // Base the reference vector for the bounding box estimation on
+              // the x unit vector.
+              // We won't use the z component.
+              final px = transform.perspectiveTransform(Vector3(1, 0, 0))
+                ..z = 0
+                ..normalize();
+
+              // Blend the y and x axes of the reference vector based on the
+              // transformed x unit vector above.
+              final ref = Vector4(
+                px.y * center.dx,
+                px.x * center.dy,
+                0,
+                1,
+              );
+
+              // Translate the projection by the homogenized y component of the
+              // projected reference vector. It would also be conceivable to
+              // translate the camera instead, so that the perspective origin
+              // moved to the bottom of the screen. This is easier to size but
+              // produces a less natural effect. It would also be conceivable to
+              // translate the compass, but that would be more complex.
+              //
+              // Since we moved the compass, we'd need to do more layout passes.
+              // Since we simplified our translation, this is a geometric
+              // series derived from t += cy - (Ty . v) / (Tw . v)
+              transform.storage[13] = center.dy * transform.row3.dot(ref) -
+                  transform.entry(1, 0) * ref.x -
+                  transform.entry(1, 1) * ref.y;
+
+              return Transform(
+                transform: transform,
+                alignment: Alignment.center,
+                child: builder?.call(context, decomposition.foreground),
+              );
+            },
+          ),
+        ),
+      );
 }
 
 enum DistanceSystem {
