@@ -58,7 +58,8 @@ class QuaternionDecomposition {
   final Quaternion q;
 
   // This is used to transition between flat and AR modes.
-  late final planarDeviation = min(acos(background.w.abs()) * 4 / pi, 1);
+  late final planarDeviation =
+      (asin(-background.x * (background.w > 0 ? 1 : -1)) * 4 / pi).clamp(0, 1);
 
   // Device orientation is y-up/z-out while Flutter orientation is y-down/z-in,
   // so this needs to be flipped about the x axis, i.e. x/w or y/z need to be
@@ -367,6 +368,12 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
     } else {
       animation.reverse();
     }
+  }
+
+  @override
+  void dispose() {
+    animation.dispose();
+    super.dispose();
   }
 
   @override
