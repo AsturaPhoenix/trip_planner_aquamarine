@@ -5,7 +5,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
-import 'package:trip_planner_aquamarine/util/animation_coordinator.dart';
 import 'package:trip_planner_aquamarine/util/upsample_stream.dart';
 
 @GenerateNiceMocks([MockSpec<Ticker>()])
@@ -41,11 +40,6 @@ void main() {
     output = input.stream.upsample<double>(
       tickerProvider: tickerProvider,
       initialState: 0,
-      stateSpace: StateSpace(
-        applyDelta: (state, delta) => state + delta,
-        calculateDelta: (after, before) => after - before,
-        lerp: (state, t) => state * t,
-      ),
       blendAnimationCurve: Curves.linear,
       maxPeriod: const Duration(seconds: 5),
       clock: () => t,

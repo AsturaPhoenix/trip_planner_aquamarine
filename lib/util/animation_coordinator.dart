@@ -27,14 +27,24 @@ class _Animation<T> {
 }
 
 class StateSpace<State, Delta> {
+  static StateSpace<State, Delta> defaultOperators<State, Delta>() =>
+      StateSpace(
+        applyDelta: (dynamic state, delta) => state + delta as State,
+        calculateDelta: (dynamic after, before) => after - before as Delta,
+        scaleDelta: (dynamic delta, t) => delta * t as Delta,
+      );
+
   const StateSpace({
     required this.applyDelta,
     required this.calculateDelta,
-    required this.lerp,
+    required this.scaleDelta,
   });
   final State Function(State state, Delta delta) applyDelta;
   final Delta Function(State after, State before) calculateDelta;
-  final Delta Function(Delta delta, double t) lerp;
+  final Delta Function(Delta delta, double t) scaleDelta;
+
+  State lerp(State a, State b, double t) =>
+      applyDelta(a, scaleDelta(calculateDelta(b, a), t));
 }
 
 class SkippableDelta<State, Delta> {
@@ -59,8 +69,9 @@ extension NullableStateSpace<State extends Object, Delta extends Object>
         calculateDelta: (after, before) => after == null || before == null
             ? SkippableDelta.skip(after)
             : SkippableDelta.delta(calculateDelta(after, before)),
-        lerp: (delta, t) =>
-            delta.skip ? delta : SkippableDelta.delta(lerp(delta.delta, t)),
+        scaleDelta: (delta, t) => delta.skip
+            ? delta
+            : SkippableDelta.delta(scaleDelta(delta.delta, t)),
       );
 }
 
@@ -70,11 +81,12 @@ class AnimationCoordinator<State, Delta> {
   AnimationCoordinator({
     required TickerProvider tickerProvider,
     required State initialState,
-    required this.stateSpace,
+    StateSpace<State, Delta>? stateSpace,
     this.setState,
     this.clock,
   })  : _basis = initialState,
-        _target = initialState {
+        _target = initialState,
+        stateSpace = stateSpace ?? StateSpace.defaultOperators() {
     ticker = tickerProvider.createTicker(_onTick);
   }
   late final Ticker ticker;
@@ -132,22 +144,13 @@ class AnimationCoordinator<State, Delta> {
     State target, [
     Duration length = defaultAnimationDuration,
     Curve curve = Curves.easeInOut,
-  ]) {
-    if (animations.isEmpty) {
-      _start();
-    }
-
-    final animation = _Animation(
-      delta: stateSpace.calculateDelta(target, _target),
-      start: t!,
-      length: length,
-      curve: curve,
-    );
-    animations.add(animation);
-
-    _target = target;
-    return animation.completer.future;
-  }
+  ]) =>
+      // Although it's tempting to set _target = target instead of applying the
+      // delta, doing so risks setting a target outside the domain of the state
+      // space, which can for example result in backwards deltas for things like
+      // quaternion nlerp if _target ends up on the opposite side of the
+      // hypersphere from _basis.
+      addDelta(stateSpace.calculateDelta(target, _target), length, curve);
 
   Future<bool> set(
     State target, [
@@ -168,7 +171,8 @@ class AnimationCoordinator<State, Delta> {
       ..clear()
       ..add(animation);
 
-    _target = target;
+    // See comment re: _target in [add].
+    _target = stateSpace.applyDelta(_target, animation.delta);
     return animation.completer.future;
   }
 
@@ -189,7 +193,7 @@ class AnimationCoordinator<State, Delta> {
       // like 3-space rotations.
       state = stateSpace.applyDelta(
         state,
-        stateSpace.lerp(animation.delta, animation.parameterize(t!)),
+        stateSpace.scaleDelta(animation.delta, animation.parameterize(t!)),
       );
       if (t! >= animation.end && !animation.completer.isCompleted) {
         animation.completer.complete(true);
@@ -198,6 +202,7 @@ class AnimationCoordinator<State, Delta> {
     setState?.call(state);
     if (animations.isEmpty) {
       ticker.stop();
+      _basis = _target;
     }
   }
 

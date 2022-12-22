@@ -9,7 +9,7 @@ extension Upsample<T> on Stream<T> {
   Stream<T> upsample<Delta>({
     required TickerProvider tickerProvider,
     required T initialState,
-    required StateSpace<T, Delta> stateSpace,
+    StateSpace<T, Delta>? stateSpace,
     Duration maxPeriod = AnimationCoordinator.defaultAnimationDuration,
     Curve blendAnimationCurve = Curves.easeInOut,
     DateTime Function() clock = DateTime.now,

@@ -304,7 +304,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       stateSpace: StateSpace<CameraPosition, CameraDelta>(
         applyDelta: (state, delta) => state + delta,
         calculateDelta: (after, before) => after - before,
-        lerp: (delta, t) => delta * t,
+        scaleDelta: (delta, t) => delta * t,
       ),
       setState: (cameraPosition) async {
         await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));

@@ -10,7 +10,7 @@ void main() {
     final delta = mercatorSpace.calculateDelta(end, start);
     expect(delta, const Offset(2, 0));
     final midpoint =
-        mercatorSpace.applyDelta(start, mercatorSpace.lerp(delta, .5));
+        mercatorSpace.applyDelta(start, mercatorSpace.scaleDelta(delta, .5));
     expect(midpoint, const LatLng(0, 180));
   });
 
@@ -19,7 +19,7 @@ void main() {
     final delta = mercatorSpace.calculateDelta(end, start);
     expect(delta, const Offset(-2, 0));
     final midpoint =
-        mercatorSpace.applyDelta(start, mercatorSpace.lerp(delta, .5));
+        mercatorSpace.applyDelta(start, mercatorSpace.scaleDelta(delta, .5));
     expect(midpoint, const LatLng(0, 180));
   });
 }

@@ -26,20 +26,19 @@ import 'map.dart';
 
 final quaternionNlerp = StateSpace<Quaternion, Quaternion>(
   applyDelta: (state, delta) => (state + delta)..normalize(),
-  calculateDelta: (after, before) => after - before,
-  lerp: (delta, t) => delta.scaled(t),
-);
-
-final scalarSpace = StateSpace<Angle, Angle>(
-  applyDelta: (state, delta) => state + delta,
-  calculateDelta: (after, before) => after - before,
-  lerp: (delta, t) => delta * t,
+  calculateDelta: (after, before) {
+    // Pick the shortest of two possible deltas.
+    // TODO: google/vector_math.dart#276
+    final a = after - before, b = (after + before)..scale(-1);
+    return a.length2 <= b.length2 ? a : b;
+  },
+  scaleDelta: (delta, t) => delta.scaled(t),
 );
 
 final polarSpace = StateSpace<Angle, Angle>(
   applyDelta: (orientation, delta) => (orientation + delta).norm180,
   calculateDelta: (after, before) => (after - before).norm180,
-  lerp: (delta, t) => delta * t,
+  scaleDelta: (delta, t) => delta * t,
 );
 
 // We don't need a high-fidelity lerp for GPS upsampling.
@@ -50,22 +49,27 @@ final mercatorSpace = StateSpace<LatLng, Offset>(
     Degrees(after.longitude - before.longitude).norm180.degrees,
     after.latitude - before.latitude,
   ),
-  lerp: (delta, t) => delta * t,
+  scaleDelta: (delta, t) => delta * t,
 );
 
 class QuaternionDecomposition {
+  static const planarDeviationCurve = Interval(.2, .8);
+
   QuaternionDecomposition(Quaternion? q) : q = q ?? Quaternion.identity();
   final Quaternion q;
 
   // This is used to transition between flat and AR modes.
-  late final planarDeviation =
-      (asin(-background.x * (background.w > 0 ? 1 : -1)) * 4 / pi).clamp(0, 1);
+  late final planarDeviation = planarDeviationCurve.transform(
+    (asin(-_background.x * (_background.w > 0 ? 1 : -1)) * 4 / pi).clamp(0, 1),
+  );
 
   // Device orientation is y-up/z-out while Flutter orientation is y-down/z-in,
   // so this needs to be flipped about the x axis, i.e. x/w or y/z need to be
   // negated. Taken with the conjugate to invert the rotation, this is
   // equivalent to negating x.
-  late final background = (q.clone()..x *= -1) * foreground.conjugated();
+  late final _background = (q.clone()..x *= -1) * foreground.conjugated();
+  late final background =
+      quaternionNlerp.lerp(Quaternion.identity(), _background, planarDeviation);
   late final foreground =
       // TODO: this seems like it should simplify
       Quaternion.axisAngle(Vector3(0, 0, 1), orientation.yaw(q).radians);
@@ -192,11 +196,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
         .transform(
           (s, v) => s
               .skipBuffered()
-              .upsample(
-                tickerProvider: this,
-                initialState: v,
-                stateSpace: scalarSpace,
-              )
+              .upsample(tickerProvider: this, initialState: v)
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
   }
@@ -314,7 +314,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                         ],
                       )
                     : CompassLandscapeLayout(
-                        arLayout: decomposition.planarDeviation > .5,
+                        arLayout: decomposition.planarDeviation > .75,
                         locationInfo: locationInfo(CrossAxisAlignment.start),
                         compass: compass(decomposition),
                         bearingInfo: bearingInfo(CrossAxisAlignment.start),
@@ -391,28 +391,18 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
               PositionedTransition(
                 rect: transition.drive(
                   RelativeRectTween(
-                    begin: RelativeRect.fromLTRB(
-                      center.dx,
-                      8,
-                      8,
-                      constraints.maxHeight - columnDivider + 8,
-                    ),
-                    end: RelativeRect.fromLTRB(
-                      8,
-                      8,
-                      constraints.maxWidth - rowDivider + 8,
-                      8,
-                    ),
+                    begin: RelativeRect.fromLTRB(8, 4, center.dx + 8, 4),
+                    end: const RelativeRect.fromLTRB(8, 4, 8, 4),
                   ),
                 ),
                 child: AlignTransition(
                   alignment: transition.drive(
                     Tween(
-                      begin: Alignment.bottomLeft,
-                      end: Alignment.topRight,
+                      begin: Alignment.centerRight,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
-                  child: widget.locationInfo,
+                  child: widget.compass,
                 ),
               ),
               Positioned(
@@ -447,6 +437,33 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
                   RelativeRectTween(
                     begin: RelativeRect.fromLTRB(
                       center.dx,
+                      8,
+                      8,
+                      constraints.maxHeight - columnDivider + 8,
+                    ),
+                    end: RelativeRect.fromLTRB(
+                      8,
+                      8,
+                      constraints.maxWidth - rowDivider + 8,
+                      8,
+                    ),
+                  ),
+                ),
+                child: AlignTransition(
+                  alignment: transition.drive(
+                    Tween(
+                      begin: Alignment.bottomLeft,
+                      end: Alignment.topRight,
+                    ),
+                  ),
+                  child: widget.locationInfo,
+                ),
+              ),
+              PositionedTransition(
+                rect: transition.drive(
+                  RelativeRectTween(
+                    begin: RelativeRect.fromLTRB(
+                      center.dx,
                       columnDivider + 8,
                       8,
                       8,
@@ -455,23 +472,6 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
                   ),
                 ),
                 child: widget.bearingInfo,
-              ),
-              PositionedTransition(
-                rect: transition.drive(
-                  RelativeRectTween(
-                    begin: RelativeRect.fromLTRB(8, 4, center.dx + 8, 4),
-                    end: const RelativeRect.fromLTRB(8, 4, 8, 4),
-                  ),
-                ),
-                child: AlignTransition(
-                  alignment: transition.drive(
-                    Tween(
-                      begin: Alignment.centerRight,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                  child: widget.compass,
-                ),
               )
             ],
           );
