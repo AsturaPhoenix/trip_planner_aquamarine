@@ -37,6 +37,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   
   async: ^2.10.0
+  camera: ^0.10.1
   collection: ^1.17.0
   equatable: ^2.0.5
   flutter_arc_text: ^0.5.0
@@ -65,6 +66,11 @@ dependencies:
   xml: ^6.2.2
 
 dependency_overrides:
+  camera_android:
+    git:
+      url: https://github.com/bottlepay/plugins.git
+      path: packages/camera/camera_android
+      ref: e1a4dba770da9bc3cf9f858bac6837083f8b9059
   flutter_html_table:
     path: ../flutter_html/packages/flutter_html_table
   google_maps_flutter:

@@ -49,6 +49,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>For showing your location on the map.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>For augmented reality features.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

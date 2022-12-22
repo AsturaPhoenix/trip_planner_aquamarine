@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:camera/camera.dart';
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart' hide Gradient;
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
@@ -102,7 +104,8 @@ enum CompassType {
   }) builder;
 }
 
-class CompassState extends State<Compass> with TickerProviderStateMixin {
+class CompassState extends State<Compass>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const compassTypeSettingKey = 'compass/compassType',
       distanceSystemSettingKey = 'distanceSystem';
 
@@ -133,6 +136,11 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
   var distanceSystem = DistanceSystem
       .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0];
+
+  CameraController? cameraController;
+  late final cameraDescription = (() async => (await availableCameras())
+      .firstWhere((c) => c.lensDirection == CameraLensDirection.back))();
+  Future<void>? cameraInitialization;
 
   @override
   void initState() {
@@ -201,13 +209,34 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               .upsample(tickerProvider: this, initialState: v)
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
+
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive) {
+      cameraController?.dispose();
+      cameraInitialization = null;
+    } else if (state == AppLifecycleState.resumed && cameraController != null) {
+      setState(() {
+        cameraController = CameraController(
+          cameraController!.description,
+          cameraController!.resolutionPreset,
+          enableAudio: false,
+        );
+        cameraInitialization = cameraController!.initialize();
+      });
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (final subscription in broadcastSubscriptions) {
       subscription.cancel();
     }
+    cameraController?.dispose();
     // This needs to happen after the subscription cancellations or the ticker
     // provider mixin will complain about leaks.
     super.dispose();
@@ -254,6 +283,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
         ),
         scaffoldBackgroundColor: Colors.black,
         dividerColor: const Color(0xc0808080),
+        progressIndicatorTheme:
+            const ProgressIndicatorThemeData(color: Colors.white60),
       ),
       child: Scaffold(
         appBar: AppBar(
@@ -300,19 +331,78 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
               builder: (context, animatedOrientation) {
                 final decomposition =
                     QuaternionDecomposition(animatedOrientation.data);
-                return screenOrientation == Orientation.portrait
-                    ? CompassPortraitLayout(
-                        arLayout: decomposition.planarDeviation,
-                        locationInfo: locationInfo(CrossAxisAlignment.center),
-                        compass: compass(decomposition),
-                        bearingInfo: bearingInfo(CrossAxisAlignment.center),
-                      )
-                    : CompassLandscapeLayout(
-                        arLayout: decomposition.planarDeviation > .75,
-                        locationInfo: locationInfo(CrossAxisAlignment.start),
-                        compass: compass(decomposition),
-                        bearingInfo: bearingInfo(CrossAxisAlignment.start),
-                      );
+                if (decomposition.planarDeviation > 0) {
+                  cameraInitialization ??= () async {
+                    cameraController = CameraController(
+                      await cameraDescription,
+                      ResolutionPreset.max,
+                      enableAudio: false,
+                    );
+                    if (mounted &&
+                        WidgetsBinding.instance.lifecycleState ==
+                            AppLifecycleState.resumed) {
+                      await cameraController!.initialize();
+                    }
+                  }();
+                }
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Opacity(
+                      opacity: decomposition.planarDeviation,
+                      child: FutureBuilder(
+                        future: cameraInitialization,
+                        builder: (context, initialized) {
+                          if (initialized.connectionState ==
+                                  ConnectionState.done &&
+                              cameraController!.value.isInitialized) {
+                            // CameraPreview uses an AspectRatio, which bases
+                            // its layout on max size and cannot acheive a
+                            // "cover" effect.
+                            var size = cameraController!.value.previewSize!;
+                            if (const [
+                              DeviceOrientation.portraitUp,
+                              DeviceOrientation.portraitDown
+                            ].contains(
+                              cameraController!.value.deviceOrientation,
+                            )) {
+                              size = size.flipped;
+                            }
+                            return FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width: size.width,
+                                height: size.height,
+                                child: CameraPreview(cameraController!),
+                              ),
+                            );
+                          } else {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    screenOrientation == Orientation.portrait
+                        ? CompassPortraitLayout(
+                            arLayout: decomposition.planarDeviation,
+                            locationInfo:
+                                locationInfo(CrossAxisAlignment.center),
+                            compass: compass(decomposition),
+                            bearingInfo: bearingInfo(CrossAxisAlignment.center),
+                          )
+                        : CompassLandscapeLayout(
+                            arLayout: decomposition.planarDeviation > .75,
+                            locationInfo:
+                                locationInfo(CrossAxisAlignment.start),
+                            compass: compass(decomposition),
+                            bearingInfo: bearingInfo(CrossAxisAlignment.start),
+                          )
+                  ],
+                );
               },
             ),
           ),

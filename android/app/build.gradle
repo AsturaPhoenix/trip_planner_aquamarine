@@ -44,7 +44,7 @@ android {
 
     defaultConfig {
         applicationId "org.bask.trip_planner"
-        minSdkVersion 23 // 20 for Maps, 23 for flutter_compass
+        minSdkVersion 23 // 20 for Maps, 23 for flutter_compass, 21 for camera
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
