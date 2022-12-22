@@ -76,7 +76,7 @@ class QuaternionDecomposition {
 }
 
 class Compass extends StatefulWidget {
-  static const defaultTextSize = 24.0;
+  static const defaultTextSize = 24.0, lineHeight = 28.0;
 
   const Compass({super.key, this.waypoint});
   final Station? waypoint;
@@ -213,7 +213,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    Widget locationInfo(CrossAxisAlignment crossAxisAlignment) => LocationInfo(
+    PreferredSizeWidget locationInfo(CrossAxisAlignment crossAxisAlignment) =>
+        LocationInfo(
           waypoint: widget.waypoint,
           bearing: trueBearing,
           distanceSystem: distanceSystem,
@@ -235,7 +236,8 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
           ),
         );
 
-    Widget bearingInfo(CrossAxisAlignment crossAxisAlignment) => BearingInfo(
+    PreferredSizeWidget bearingInfo(CrossAxisAlignment crossAxisAlignment) =>
+        BearingInfo(
           trueBearing: trueBearing,
           magnetic: orientation.bearing,
           crossAxisAlignment: crossAxisAlignment,
@@ -300,18 +302,11 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
                 final decomposition =
                     QuaternionDecomposition(animatedOrientation.data);
                 return screenOrientation == Orientation.portrait
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          locationInfo(CrossAxisAlignment.center),
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: compass(decomposition),
-                            ),
-                          ),
-                          bearingInfo(CrossAxisAlignment.center)
-                        ],
+                    ? CompassPortraitLayout(
+                        arLayout: decomposition.planarDeviation,
+                        locationInfo: locationInfo(CrossAxisAlignment.center),
+                        compass: compass(decomposition),
+                        bearingInfo: bearingInfo(CrossAxisAlignment.center),
                       )
                     : CompassLandscapeLayout(
                         arLayout: decomposition.planarDeviation > .75,
@@ -328,6 +323,40 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
   }
 }
 
+class CompassPortraitLayout extends StatelessWidget {
+  static int flex(double factor) => max((factor * 0x10000).ceil(), 1);
+
+  const CompassPortraitLayout({
+    super.key,
+    this.arLayout = 0,
+    required this.locationInfo,
+    required this.bearingInfo,
+    required this.compass,
+  });
+  final double arLayout;
+  final PreferredSizeWidget locationInfo, bearingInfo;
+  final Widget compass;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: [
+            Spacer(flex: flex(1 - arLayout / 2)),
+            locationInfo,
+            Spacer(flex: flex(arLayout)),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16.0),
+              child: compass,
+            ),
+            bearingInfo,
+            Spacer(flex: flex(1 - arLayout / 2))
+          ],
+        ),
+      );
+}
+
 class CompassLandscapeLayout extends StatefulWidget {
   const CompassLandscapeLayout({
     super.key,
@@ -337,7 +366,8 @@ class CompassLandscapeLayout extends StatefulWidget {
     required this.compass,
   });
   final bool arLayout;
-  final Widget locationInfo, bearingInfo, compass;
+  final PreferredSizeWidget locationInfo, bearingInfo;
+  final Widget compass;
   @override
   State<StatefulWidget> createState() => CompassLandscapeLayoutState();
 }
@@ -379,12 +409,20 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
   @override
   Widget build(BuildContext context) => LayoutBuilder(
         builder: (context, constraints) {
-          const lineHeight = 28.0, rowHeight = lineHeight * 3;
-
           final center = constraints.biggest.center(Offset.zero);
 
-          final columnDivider = center.dy + lineHeight / 2;
-          final rowDivider = center.dx + (326 - 158) / 2;
+          final columnDivider = center.dy +
+              (widget.locationInfo.preferredSize.height -
+                      widget.bearingInfo.preferredSize.height) /
+                  2;
+          final rowDivider = center.dx +
+              (widget.locationInfo.preferredSize.width -
+                      widget.bearingInfo.preferredSize.width) /
+                  2;
+          final rowHeight = max(
+            widget.locationInfo.preferredSize.height,
+            widget.bearingInfo.preferredSize.height,
+          );
 
           return Stack(
             children: [
@@ -545,7 +583,7 @@ enum DistanceSystem {
   final String description;
 }
 
-class LocationInfo extends StatelessWidget {
+class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
   static String formatDistance(Distance distance, DistanceSystem system) {
     switch (system) {
       case DistanceSystem.miles:
@@ -597,6 +635,10 @@ class LocationInfo extends StatelessWidget {
   final ValueStream<Angle> bearing;
   final DistanceSystem distanceSystem;
   final CrossAxisAlignment crossAxisAlignment;
+
+  @override
+  get preferredSize =>
+      Size(326, Compass.lineHeight * (waypoint == null ? 1 : 3));
 
   @override
   Widget build(BuildContext context) => StreamBuilder(
@@ -680,7 +722,7 @@ class LocationInfo extends StatelessWidget {
       );
 }
 
-class BearingInfo extends StatelessWidget {
+class BearingInfo extends StatelessWidget implements PreferredSizeWidget {
   const BearingInfo({
     super.key,
     required this.trueBearing,
@@ -689,6 +731,9 @@ class BearingInfo extends StatelessWidget {
   });
   final ValueStream<Angle> trueBearing, magnetic;
   final CrossAxisAlignment crossAxisAlignment;
+
+  @override
+  get preferredSize => const Size(158, Compass.lineHeight * 2);
 
   static String formatBearing(Angle bearing, String suffix) =>
       '${bearing.degrees.round() % 360}° $suffix';
