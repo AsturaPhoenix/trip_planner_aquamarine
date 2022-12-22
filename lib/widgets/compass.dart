@@ -280,6 +280,7 @@ class CompassState extends State<Compass>
           seedColor: Colors.black45,
           brightness: Brightness.dark,
           primary: Colors.black45,
+          surface: const Color(0x60606060),
         ),
         scaffoldBackgroundColor: Colors.black,
         dividerColor: const Color(0xc0808080),
@@ -287,6 +288,7 @@ class CompassState extends State<Compass>
             const ProgressIndicatorThemeData(color: Colors.white60),
       ),
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
           actions: [
             PopupMenuButton<Object>(
@@ -386,21 +388,28 @@ class CompassState extends State<Compass>
                         },
                       ),
                     ),
-                    screenOrientation == Orientation.portrait
-                        ? CompassPortraitLayout(
-                            arLayout: decomposition.planarDeviation,
-                            locationInfo:
-                                locationInfo(CrossAxisAlignment.center),
-                            compass: compass(decomposition),
-                            bearingInfo: bearingInfo(CrossAxisAlignment.center),
-                          )
-                        : CompassLandscapeLayout(
-                            arLayout: decomposition.planarDeviation > .75,
-                            locationInfo:
-                                locationInfo(CrossAxisAlignment.start),
-                            compass: compass(decomposition),
-                            bearingInfo: bearingInfo(CrossAxisAlignment.start),
-                          )
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: Scaffold.of(context).appBarMaxHeight!,
+                      ),
+                      child: screenOrientation == Orientation.portrait
+                          ? CompassPortraitLayout(
+                              arLayout: decomposition.planarDeviation,
+                              locationInfo:
+                                  locationInfo(CrossAxisAlignment.center),
+                              compass: compass(decomposition),
+                              bearingInfo:
+                                  bearingInfo(CrossAxisAlignment.center),
+                            )
+                          : CompassLandscapeLayout(
+                              arLayout: decomposition.planarDeviation > .75,
+                              locationInfo:
+                                  locationInfo(CrossAxisAlignment.start),
+                              compass: compass(decomposition),
+                              bearingInfo:
+                                  bearingInfo(CrossAxisAlignment.start),
+                            ),
+                    )
                   ],
                 );
               },
