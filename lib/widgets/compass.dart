@@ -76,7 +76,9 @@ class QuaternionDecomposition {
 }
 
 class Compass extends StatefulWidget {
-  static const defaultTextSize = 24.0, lineHeight = 28.0;
+  static const lineHeight = 28.0;
+  static const defaultTextStyle =
+      TextStyle(fontSize: 24, fontWeight: FontWeight.bold);
 
   const Compass({super.key, this.waypoint});
   final Station? waypoint;
@@ -290,10 +292,7 @@ class CompassState extends State<Compass> with TickerProviderStateMixin {
           ],
         ),
         body: DefaultTextStyle(
-          style: const TextStyle(
-            fontSize: Compass.defaultTextSize,
-            fontWeight: FontWeight.bold,
-          ),
+          style: Compass.defaultTextStyle,
           child: OrientationBuilder(
             builder: (context, screenOrientation) => StreamBuilder(
               initialData: animatedOrientation.value,
@@ -415,10 +414,13 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
               (widget.locationInfo.preferredSize.height -
                       widget.bearingInfo.preferredSize.height) /
                   2;
-          final rowDivider = center.dx +
-              (widget.locationInfo.preferredSize.width -
-                      widget.bearingInfo.preferredSize.width) /
-                  2;
+          final rowDivider = min(
+            center.dx +
+                (widget.locationInfo.preferredSize.width -
+                        widget.bearingInfo.preferredSize.width) /
+                    2,
+            constraints.maxWidth - widget.bearingInfo.preferredSize.width - 16,
+          );
           final rowHeight = max(
             widget.locationInfo.preferredSize.height,
             widget.bearingInfo.preferredSize.height,
@@ -624,7 +626,14 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
         : '${formatDistance(heading.distance!, system)} @ $formattedBearing';
   }
 
-  const LocationInfo({
+  static double estimateTextWidth(String text) => ((ParagraphBuilder(
+        Compass.defaultTextStyle.getParagraphStyle(),
+      )..addText(text))
+              .build()
+            ..layout(const ParagraphConstraints(width: double.infinity)))
+          .maxIntrinsicWidth;
+
+  LocationInfo({
     super.key,
     this.waypoint,
     required this.bearing,
@@ -637,8 +646,15 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
   final CrossAxisAlignment crossAxisAlignment;
 
   @override
-  get preferredSize =>
-      Size(326, Compass.lineHeight * (waypoint == null ? 1 : 3));
+  late final preferredSize = Size(
+    max(
+      326,
+      waypoint == null
+          ? 0.0
+          : 14.4 + 4 + estimateTextWidth(waypoint!.shortTitle),
+    ),
+    Compass.lineHeight * (waypoint == null ? 1 : 3),
+  );
 
   @override
   Widget build(BuildContext context) => StreamBuilder(
@@ -692,7 +708,7 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                 children: [
                   Image.asset(
                     'assets/markers/${waypoint!.type.name}-grey-outline.png',
-                    height: Compass.defaultTextSize,
+                    height: Compass.defaultTextStyle.fontSize,
                   ),
                   const SizedBox(width: 4),
                   Flexible(
