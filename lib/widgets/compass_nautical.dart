@@ -47,21 +47,26 @@ class NauticalCompass extends StatelessWidget {
   late final textStyle = TextStyle(color: color, fontSize: fontSize);
 
   @override
-  Widget build(BuildContext context) => DividerTheme(
-        data: DividerThemeData(color: color, space: 0),
-        child: DefaultTextStyle(
-          style: textStyle,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final radius =
-                  min(constraints.maxWidth, constraints.maxHeight) / 2;
+  Widget build(BuildContext context) => DefaultTextStyle(
+        style: textStyle,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final radius = min(constraints.maxWidth, constraints.maxHeight) / 2;
 
-              int compactness = sizeTiers.indexWhere(
-                    (threshold) => radius >= threshold,
-                  ) %
-                  (sizeTiers.length + 1);
+            int compactness = sizeTiers.indexWhere(
+                  (threshold) => radius >= threshold,
+                ) %
+                (sizeTiers.length + 1);
 
-              return Stack(
+            return DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  colors: [Color(0xa0000000), Colors.transparent],
+                  stops: [.85, 1],
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Stack(
                 children: [
                   if (background != null)
                     Padding(
@@ -150,9 +155,9 @@ class NauticalCompass extends StatelessWidget {
                     ),
                   ),
                 ],
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       );
 }
