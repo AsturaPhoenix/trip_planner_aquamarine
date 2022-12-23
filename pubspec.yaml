@@ -66,6 +66,8 @@ dependencies:
   xml: ^6.2.2
 
 dependency_overrides:
+  camera:
+    path: ../flutter/plugins/packages/camera/camera
   camera_android:
     git:
       url: https://github.com/bottlepay/plugins.git

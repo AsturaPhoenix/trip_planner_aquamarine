@@ -334,7 +334,11 @@ class CompassState extends State<Compass>
               builder: (context, animatedOrientation) {
                 final decomposition =
                     QuaternionDecomposition(animatedOrientation.data);
-                if (decomposition.planarDeviation > 0) {
+
+                // Planar deviation at which to enable the camera.
+                const arThreshold = .5;
+
+                if (decomposition.planarDeviation > arThreshold) {
                   cameraInitialization ??= () async {
                     cameraController = CameraController(
                       await cameraDescription,
@@ -347,13 +351,20 @@ class CompassState extends State<Compass>
                       await cameraController!.initialize();
                     }
                   }();
+
+                  cameraController
+                      ?.resumePreview()
+                      .then((_) => setState(() {}));
+                } else {
+                  cameraController?.pausePreview();
                 }
 
                 return Stack(
                   fit: StackFit.expand,
                   children: [
                     Opacity(
-                      opacity: decomposition.planarDeviation,
+                      opacity: const Interval(arThreshold, 1)
+                          .transform(decomposition.planarDeviation),
                       child: FutureBuilder(
                         future: cameraInitialization,
                         builder: (context, initialized) {
