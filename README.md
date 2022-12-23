@@ -4,6 +4,8 @@ This is a prototype cross-platform port of the BASK Trip Planner, for better off
 
 ## Development
 
+If `pub get` fails with "filename too long", you may need to set `git config --system core.longpaths true`, delete the cached package that failed, and try again.
+
 ### Forked dependencies
 
 Flutter itself needs to be forked to address a couple issues:
@@ -12,11 +14,7 @@ Flutter itself needs to be forked to address a couple issues:
 
 Fixes are at `git@github.com:AsturaPhoenix/flutter.git`, branch: `rosswang`.
 
-Additionally, the following git repos should exist as siblings to `trip_planner_aquamarine`:
-* `git@github.com:AsturaPhoenix/joda_time.git`
-* `git@github.com:AsturaPhoenix/flutter-plugins.git`, branch: `dev`
-* `git@github.com:AsturaPhoenix/flutter_html.git`, branch: `rosswang`
-* `git@github.com:AsturaPhoenix/motion_sensors.git`, branch: `rosswang`
+Other forks are tracked in `pubspec.yaml`.
 
 ### Configuration
 
