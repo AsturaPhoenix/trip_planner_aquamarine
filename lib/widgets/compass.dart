@@ -263,6 +263,7 @@ class CompassState extends State<Compass>
                 if (widget.waypoint != null) toWaypoint(widget.waypoint!)
               ],
               position: animatedDevicePosition,
+              accuracy: animatedAccuracy,
             ),
           ),
         );
@@ -925,7 +926,7 @@ class _AccuracyPainter extends CustomPainter {
       ..translate(center.dx, center.dy)
       ..rotate(pi / 2)
       ..drawArc(
-        -center & size,
+        Offset(-center.dy, -center.dx) & size,
         pi - accuracy,
         2 * accuracy,
         true,
@@ -942,7 +943,7 @@ class _AccuracyPainter extends CustomPainter {
       )
       ..drawLine(
         Offset.zero,
-        Offset(-center.dx, 0),
+        Offset(-center.dy, 0),
         Paint()
           ..color = heading
           ..strokeWidth = 1.5,
@@ -959,22 +960,30 @@ class GeoOverlay extends StatelessWidget {
     super.key,
     required this.waypoints,
     required this.position,
+    required this.accuracy,
   });
   final List<CompassMarker<LatLng>> waypoints;
   final ValueStream<LatLng?> position;
+  final InitializedValueStream<Angle> accuracy;
 
   @override
   Widget build(BuildContext context) => StreamBuilder(
-        initialData: position.value,
-        stream: position.stream,
-        builder: (context, position) => CustomPaint(
-          size: Size.infinite,
-          painter: _HeadingsPainter(
-            headings: [
-              if (position.hasData)
-                for (final waypoint in waypoints)
-                  waypoint.map((location) => location.toHeading(position.data!))
-            ],
+        initialData: accuracy.value,
+        stream: accuracy.stream,
+        builder: (context, accuracy) => StreamBuilder(
+          initialData: position.value,
+          stream: position.stream,
+          builder: (context, position) => CustomPaint(
+            size: Size.infinite,
+            painter: _HeadingsPainter(
+              headings: [
+                if (position.hasData)
+                  for (final waypoint in waypoints)
+                    waypoint
+                        .map((location) => location.toHeading(position.data!))
+              ],
+              accuracy: accuracy.data!.radians,
+            ),
           ),
         ),
       );
@@ -1028,23 +1037,55 @@ class _HeadingsPainter extends CustomPainter {
   static const outlineColor = Color(0xff404040);
   static const markerRadius = 4.0;
 
-  _HeadingsPainter({required this.headings});
+  _HeadingsPainter({required this.headings, required this.accuracy});
   final List<CompassMarker<Heading>> headings;
+  final double accuracy;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
+    final radius = min(center.dx, center.dy);
+
     canvas.translate(center.dx, center.dy);
+    final accuracyArcClip = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Rect.fromCircle(center: Offset.zero, radius: radius))
+      ..addOval(
+        Rect.fromCircle(
+          center: Offset.zero,
+          radius: radius - 2 * markerRadius,
+        ),
+      );
 
     for (final heading in headings) {
-      final markerCenter = Offset(0, markerRadius - center.dy);
+      final markerCenter = Offset(markerRadius - radius, 0);
 
       canvas
         ..save()
-        ..rotate(heading.location.angle.radians)
+        // Gradient.sweep has trouble blending across 0, so paint about pi.
+        ..rotate(heading.location.angle.radians + pi / 2)
+        ..save()
+        ..clipPath(accuracyArcClip)
+        ..drawArc(
+          Offset(-radius, -radius) & size,
+          pi - accuracy,
+          2 * accuracy,
+          true,
+          Paint()
+            ..shader = Gradient.sweep(
+              Offset.zero,
+              [heading.color, heading.color.withAlpha(0)],
+              null,
+              TileMode.mirror,
+              pi,
+              pi + accuracy,
+            )
+            ..blendMode = BlendMode.plus,
+        )
+        ..restore()
         ..drawLine(
           Offset.zero,
-          Offset(0, -center.dy),
+          Offset(-radius, 0),
           Paint()
             ..color = heading.color
             ..strokeWidth = 1.5,
