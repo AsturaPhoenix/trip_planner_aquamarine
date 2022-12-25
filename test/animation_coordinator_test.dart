@@ -11,6 +11,7 @@ import 'package:vector_math/vector_math_64.dart';
 
 @GenerateNiceMocks([MockSpec<Ticker>()])
 import 'animation_coordinator_test.mocks.dart';
+import 'util/vector_matcher.dart';
 
 class TestTickerProvider implements TickerProvider {
   late Ticker ticker;
@@ -23,42 +24,12 @@ class TestTickerProvider implements TickerProvider {
   }
 }
 
-Matcher vectorCloseTo(Vector3 value, num delta) =>
-    _VectorIsCloseTo(value, delta);
-
-class _VectorIsCloseTo extends TypeMatcher<Vector3> {
-  const _VectorIsCloseTo(this._value, this._delta);
-  final Vector3 _value;
-  final num _delta;
-
-  @override
-  bool matches(dynamic item, Map matchState) =>
-      super.matches(item, matchState) &&
-      _value.distanceToSquared(item as Vector3) <= _delta * _delta;
-
-  @override
-  Description describe(Description description) => description
-      .add('a vector within ')
-      .addDescriptionOf(_delta)
-      .add(' of ')
-      .addDescriptionOf(_value);
-
-  @override
-  Description describeMismatch(
-    Object? item,
-    Description mismatchDescription,
-    Map matchState,
-    bool verbose,
-  ) {
-    if (item is Vector3) {
-      return mismatchDescription
-          .add(' differs by ')
-          .addDescriptionOf(_value.distanceTo(item));
-    }
-
-    return super.describe(mismatchDescription.add('not an '));
-  }
-}
+Matcher vectorCloseTo(Vector3 value, num delta) => VectorIsCloseTo(
+      value,
+      delta,
+      distance: (a, b) => a.distanceTo(b),
+      distanceSquared: (a, b) => a.distanceToSquared(b),
+    );
 
 void main() {
   const frameTime = Duration(seconds: 1);

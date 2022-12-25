@@ -72,9 +72,12 @@ class QuaternionDecomposition {
   late final _background = (q.clone()..x *= -1) * foreground.conjugated();
   late final background =
       quaternionNlerp.lerp(Quaternion.identity(), _background, planarDeviation);
-  late final foreground =
-      // TODO: this seems like it should simplify
-      Quaternion.axisAngle(Vector3(0, 0, 1), orientation.yaw(q).radians);
+  late final foreground = () {
+    final tx = 1 - 2 * (q.y * q.y + q.z * q.z),
+        ty = 2 * (q.w * q.z + q.x * q.y);
+    final cos = tx / sqrt(tx * tx + ty * ty);
+    return Quaternion(0, 0, ty.sign * sqrt((1 - cos) / 2), sqrt((1 + cos) / 2));
+  }();
 }
 
 class Compass extends StatefulWidget {
