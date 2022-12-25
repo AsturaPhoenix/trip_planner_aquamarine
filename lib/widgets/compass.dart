@@ -359,7 +359,7 @@ class CompassState extends State<Compass>
                       ?.resumePreview()
                       .then((_) => setState(() {}));
                 } else {
-                  cameraController?.pausePreview();
+                  cameraController?.pausePreview().ignore();
                 }
 
                 return Stack(
