@@ -82,8 +82,12 @@ class QuaternionDecomposition {
 
 class Compass extends StatefulWidget {
   static const lineHeight = 28.0;
-  static const defaultTextStyle =
-      TextStyle(fontSize: 24, fontWeight: FontWeight.bold);
+  static const defaultShadows = [Shadow(blurRadius: 4.0)];
+  static const defaultTextStyle = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+    shadows: defaultShadows,
+  );
 
   const Compass({super.key, this.waypoint});
   final Station? waypoint;
@@ -330,104 +334,110 @@ class CompassState extends State<Compass>
         ),
         body: DefaultTextStyle(
           style: Compass.defaultTextStyle,
-          child: OrientationBuilder(
-            builder: (context, screenOrientation) => StreamBuilder(
-              initialData: animatedOrientation.value,
-              stream: animatedOrientation.stream,
-              builder: (context, animatedOrientation) {
-                final decomposition =
-                    QuaternionDecomposition(animatedOrientation.data);
+          child: IconTheme(
+            data: const IconThemeData(
+              color: Colors.white,
+              shadows: Compass.defaultShadows,
+            ),
+            child: OrientationBuilder(
+              builder: (context, screenOrientation) => StreamBuilder(
+                initialData: animatedOrientation.value,
+                stream: animatedOrientation.stream,
+                builder: (context, animatedOrientation) {
+                  final decomposition =
+                      QuaternionDecomposition(animatedOrientation.data);
 
-                // Planar deviation at which to enable the camera.
-                const arThreshold = .5;
+                  // Planar deviation at which to enable the camera.
+                  const arThreshold = .5;
 
-                if (decomposition.planarDeviation > arThreshold) {
-                  cameraInitialization ??= () async {
-                    cameraController = CameraController(
-                      await cameraDescription,
-                      ResolutionPreset.max,
-                      enableAudio: false,
-                    );
-                    if (mounted &&
-                        WidgetsBinding.instance.lifecycleState ==
-                            AppLifecycleState.resumed) {
-                      await cameraController!.initialize();
-                    }
-                  }();
+                  if (decomposition.planarDeviation > arThreshold) {
+                    cameraInitialization ??= () async {
+                      cameraController = CameraController(
+                        await cameraDescription,
+                        ResolutionPreset.max,
+                        enableAudio: false,
+                      );
+                      if (mounted &&
+                          WidgetsBinding.instance.lifecycleState ==
+                              AppLifecycleState.resumed) {
+                        await cameraController!.initialize();
+                      }
+                    }();
 
-                  cameraController
-                      ?.resumePreview()
-                      .then((_) => setState(() {}));
-                } else {
-                  cameraController?.pausePreview().ignore();
-                }
+                    cameraController
+                        ?.resumePreview()
+                        .then((_) => setState(() {}));
+                  } else {
+                    cameraController?.pausePreview().ignore();
+                  }
 
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Opacity(
-                      opacity: const Interval(arThreshold, 1)
-                          .transform(decomposition.planarDeviation),
-                      child: FutureBuilder(
-                        future: cameraInitialization,
-                        builder: (context, initialized) {
-                          if (initialized.connectionState ==
-                                  ConnectionState.done &&
-                              cameraController!.value.isInitialized) {
-                            // CameraPreview uses an AspectRatio, which bases
-                            // its layout on max size and cannot acheive a
-                            // "cover" effect.
-                            var size = cameraController!.value.previewSize!;
-                            if (const [
-                              DeviceOrientation.portraitUp,
-                              DeviceOrientation.portraitDown
-                            ].contains(
-                              cameraController!.value.deviceOrientation,
-                            )) {
-                              size = size.flipped;
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Opacity(
+                        opacity: const Interval(arThreshold, 1)
+                            .transform(decomposition.planarDeviation),
+                        child: FutureBuilder(
+                          future: cameraInitialization,
+                          builder: (context, initialized) {
+                            if (initialized.connectionState ==
+                                    ConnectionState.done &&
+                                cameraController!.value.isInitialized) {
+                              // CameraPreview uses an AspectRatio, which bases
+                              // its layout on max size and cannot acheive a
+                              // "cover" effect.
+                              var size = cameraController!.value.previewSize!;
+                              if (const [
+                                DeviceOrientation.portraitUp,
+                                DeviceOrientation.portraitDown
+                              ].contains(
+                                cameraController!.value.deviceOrientation,
+                              )) {
+                                size = size.flipped;
+                              }
+                              return FittedBox(
+                                fit: BoxFit.cover,
+                                clipBehavior: Clip.hardEdge,
+                                child: SizedBox(
+                                  width: size.width,
+                                  height: size.height,
+                                  child: CameraPreview(cameraController!),
+                                ),
+                              );
+                            } else {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
                             }
-                            return FittedBox(
-                              fit: BoxFit.cover,
-                              clipBehavior: Clip.hardEdge,
-                              child: SizedBox(
-                                width: size.width,
-                                height: size.height,
-                                child: CameraPreview(cameraController!),
+                          },
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(
+                          top: Scaffold.of(context).appBarMaxHeight!,
+                        ),
+                        child: screenOrientation == Orientation.portrait
+                            ? CompassPortraitLayout(
+                                arLayout: decomposition.planarDeviation,
+                                locationInfo:
+                                    locationInfo(CrossAxisAlignment.center),
+                                compass: compass(decomposition),
+                                bearingInfo:
+                                    bearingInfo(CrossAxisAlignment.center),
+                              )
+                            : CompassLandscapeLayout(
+                                arLayout: decomposition.planarDeviation > .75,
+                                locationInfo:
+                                    locationInfo(CrossAxisAlignment.start),
+                                compass: compass(decomposition),
+                                bearingInfo:
+                                    bearingInfo(CrossAxisAlignment.start),
                               ),
-                            );
-                          } else {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: Scaffold.of(context).appBarMaxHeight!,
-                      ),
-                      child: screenOrientation == Orientation.portrait
-                          ? CompassPortraitLayout(
-                              arLayout: decomposition.planarDeviation,
-                              locationInfo:
-                                  locationInfo(CrossAxisAlignment.center),
-                              compass: compass(decomposition),
-                              bearingInfo:
-                                  bearingInfo(CrossAxisAlignment.center),
-                            )
-                          : CompassLandscapeLayout(
-                              arLayout: decomposition.planarDeviation > .75,
-                              locationInfo:
-                                  locationInfo(CrossAxisAlignment.start),
-                              compass: compass(decomposition),
-                              bearingInfo:
-                                  bearingInfo(CrossAxisAlignment.start),
-                            ),
-                    )
-                  ],
-                );
-              },
+                      )
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
