@@ -57,6 +57,9 @@ class Degrees extends Angle {
   Angle get norm360 => Degrees(degrees % 360);
   @override
   Angle get norm180 => Degrees((degrees + 180) % 360 - 180);
+
+  @override
+  String toString() => '$degrees°';
 }
 
 class Radians extends Angle {
@@ -75,6 +78,9 @@ class Radians extends Angle {
   Angle get norm360 => Radians(radians % (2 * pi));
   @override
   Angle get norm180 => Radians((radians + pi) % (2 * pi) - pi);
+
+  @override
+  String toString() => '$radians rad';
 }
 
 extension QuaternionTransform on Quaternion {

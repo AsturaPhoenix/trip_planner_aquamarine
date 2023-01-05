@@ -298,6 +298,7 @@ class TripPlannerState extends State<TripPlanner> {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
+                          allowSnapshotting: false,
                           builder: (context) =>
                               Compass(waypoint: selectedStation),
                         ),

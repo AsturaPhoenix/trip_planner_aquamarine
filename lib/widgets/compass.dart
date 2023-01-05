@@ -70,8 +70,14 @@ class QuaternionDecomposition {
   // negated. Taken with the conjugate to invert the rotation, this is
   // equivalent to negating x.
   late final _background = (q.clone()..x *= -1) * foreground.conjugated();
+
+  /// The pitch/roll components of device orientation (adjusted for screen
+  /// rotation). This is used to apply AR effects to device-relative UI.
   late final background =
       quaternionNlerp.lerp(Quaternion.identity(), _background, planarDeviation);
+
+  /// The yaw component of the device orientation (adjusted for screen
+  /// rotation).
   late final foreground = () {
     final tx = 1 - 2 * (q.y * q.y + q.z * q.z),
         ty = 2 * (q.w * q.z + q.x * q.y);
