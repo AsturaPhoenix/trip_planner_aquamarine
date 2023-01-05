@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
@@ -14,11 +12,9 @@ class DetailsPanel extends StatefulWidget {
     super.key,
     required this.client,
     required this.station,
-    this.preferredHeight = 256,
   });
   final TripPlannerClient client;
   final Station station;
-  final double preferredHeight;
 
   @override
   State<DetailsPanel> createState() => DetailsPanelState();
@@ -46,9 +42,7 @@ class DetailsPanelState extends State<DetailsPanel>
     return LayoutBuilder(
       builder: (context, boxConstraints) => SingleChildScrollView(
         child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: min(boxConstraints.minHeight, widget.preferredHeight),
-          ),
+          constraints: BoxConstraints(minHeight: boxConstraints.minHeight),
           child: Padding(
             padding: EdgeInsets.fromLTRB(4, 4, hasScrollbar ? 8 : 4, 4),
             child: (widget.station.type.isTideCurrent

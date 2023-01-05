@@ -8,7 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../platform/orientation.dart' as orientation;
-import '../platform/orientation.dart' show Angle;
+import '../util/angle.dart';
 import 'compass.dart';
 
 class NauticalCompass extends StatelessWidget {

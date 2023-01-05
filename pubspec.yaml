@@ -44,6 +44,7 @@ dependencies:
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   collection: ^1.17.0
   equatable: ^2.0.5
+  file_picker: ^5.2.4
   flutter_arc_text: ^0.5.0
   flutter_html: ^3.0.0-alpha.6
   flutter_html_table:
@@ -64,6 +65,7 @@ dependencies:
       url: git@github.com:AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter_web
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
+  gpx: ^2.2.1
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   http: ^0.13.5
@@ -77,12 +79,14 @@ dependencies:
     git:
       url: git@github.com:AsturaPhoenix/motion_sensors.git
       ref: 97c13355834017ec9ebf6e1188d2f3a05c6e4c28
+  path: ^1.8.2
   permission_handler: ^10.2.0
   pointer_interceptor: ^0.9.3+3
   rxdart: ^0.27.7
   shared_preferences: ^2.0.15
   timezone: ^0.9.0
   url_launcher: ^6.1.7
+  uuid: ^3.0.7
   vector_math: ^2.1.4
   xml: ^6.2.2
 

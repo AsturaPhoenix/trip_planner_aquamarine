@@ -25,6 +25,7 @@ import 'util/optional.dart';
 import 'widgets/compass.dart';
 import 'widgets/details_panel.dart';
 import 'widgets/map.dart';
+import 'widgets/plot_panel.dart';
 import 'widgets/tide_panel.dart';
 
 late final SharedPreferences sharedPreferences;
@@ -137,6 +138,7 @@ class TripPlannerState extends State<TripPlanner> {
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
   var stations = <StationId, Station>{};
   StreamSubscription? _stationsSubscription;
+  var tracks = <Track>[];
 
   Iterable<Station> get selectableStations => stations.values
       .where((station) => Map.showMarkerTypes.contains(station.type));
@@ -328,6 +330,7 @@ class TripPlannerState extends State<TripPlanner> {
                                 tileCache: widget.tileCache,
                                 stations: stations,
                                 selectedStation: selectedStation,
+                                tracks: tracks,
                                 stationPriority: stationPriority,
                                 onStationSelected: (station) =>
                                     setState(() => selectedStation = station),
@@ -439,7 +442,8 @@ class _Panel extends StatefulWidget {
 
   late final List<Type> tabs = [
     if (tripPlanner.tideCurrentStation != null) TidePanel,
-    DetailsPanel
+    DetailsPanel,
+    PlotPanel,
   ];
 
   @override
@@ -448,6 +452,11 @@ class _Panel extends StatefulWidget {
 
 class _PanelState extends State<_Panel> with TickerProviderStateMixin {
   late TabController tabController;
+  final tabBarViewKey = GlobalKey(),
+      // This is needed to persist plot panel state between states with
+      // different available tabs, such as between station selections with and
+      // without tide/current information.
+      plotPanelKey = GlobalKey();
 
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
@@ -503,6 +512,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
     final theme = Theme.of(context);
 
     final viewport = TabBarView(
+      key: tabBarViewKey,
       controller: tabController,
       children: [
         if (tripPlanner.tideCurrentStation != null)
@@ -518,7 +528,14 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
         DetailsPanel(
           client: tripPlanner.widget.tripPlannerClient,
           station: tripPlanner.selectedStation!,
-        )
+        ),
+        PlotPanel(
+          key: plotPanelKey,
+          timeZone: tripPlanner.timeWindow.t.timeZone,
+          tracks: tripPlanner.tracks,
+          onTracksChanged: (tracks) =>
+              tripPlanner.setState(() => tripPlanner.tracks = tracks),
+        ),
       ],
     );
 
@@ -535,7 +552,8 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
               controller: tabController,
               tabs: [
                 if (tripPlanner.tideCurrentStation != null) const Text('Tides'),
-                const Text('Details')
+                const Text('Details'),
+                const Text('Plot'),
               ],
             ),
           ),

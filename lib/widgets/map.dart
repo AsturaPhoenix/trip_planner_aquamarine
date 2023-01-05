@@ -19,7 +19,9 @@ import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 import '../util/animation_coordinator.dart';
+import '../util/latlngbounds.dart';
 import '../util/optional.dart';
+import 'plot_panel.dart';
 
 class Map extends StatefulWidget {
   static const minZoom = 0, maxZoom = 22;
@@ -43,6 +45,7 @@ class Map extends StatefulWidget {
     required this.tileCache,
     this.stations = const {},
     this.selectedStation,
+    this.tracks = const [],
     double Function(StationType type)? stationPriority,
     this.onStationSelected,
   }) : stationPriority =
@@ -52,6 +55,7 @@ class Map extends StatefulWidget {
   final BlobCache tileCache;
   final core.Map<StationId, Station> stations;
   final Station? selectedStation;
+  final List<Track> tracks;
 
   final double Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
@@ -214,6 +218,40 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
   Future<_MarkerIcons>? _markerIcons;
 
+  late Set<Polyline> _polylines;
+
+  void _updateTrackPolylines() {
+    _polylines = {
+      for (final track in widget.tracks)
+        if (track.selected)
+          for (final segment in track.segments)
+            Polyline(
+              polylineId: segment.key,
+              color: track.color,
+              points: segment.points,
+              width: 2,
+            )
+    };
+  }
+
+  void _fitTracks() {
+    trackingMode = TrackingMode.free;
+
+    LatLngBounds? bounds;
+    for (final track in widget.tracks) {
+      if (track.selected) {
+        for (final segment in track.segments) {
+          for (final point in segment.points) {
+            bounds = bounds.expand(point);
+          }
+        }
+      }
+    }
+    if (bounds != null) {
+      gmap?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 16.0));
+    }
+  }
+
   CameraPosition cameraPosition = Map.initialCameraPosition;
   late final AnimationCoordinator<CameraPosition, CameraDelta> mapAnimation;
 
@@ -315,6 +353,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     if (!kIsWeb) {
       trackingMode = TrackingMode.location;
     }
+
+    _updateTrackPolylines();
+    _fitTracks();
   }
 
   @override
@@ -381,6 +422,22 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         gmap != null &&
         (trackingMode == TrackingMode.free || !location.isEnabled.value)) {
       animateToSelectedStation();
+    }
+
+    if (widget.tracks != oldWidget.tracks) {
+      _updateTrackPolylines();
+
+      Set<String> selectedTrackIds(Iterable<Track> tracks) => {
+            for (final track in tracks)
+              if (track.selected) track.key
+          };
+
+      if (!setEquals(
+        selectedTrackIds(widget.tracks),
+        selectedTrackIds(oldWidget.tracks),
+      )) {
+        _fitTracks();
+      }
     }
   }
 
@@ -526,6 +583,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                     tileSize: tileSize,
                   ),
                 },
+                polylines: _polylines,
                 compassEnabled: false,
                 zoomControlsEnabled: false,
                 onCameraMove: updateCameraPosition,
