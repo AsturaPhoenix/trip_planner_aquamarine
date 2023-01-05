@@ -135,14 +135,38 @@ class TripPlannerState extends State<TripPlanner> {
   Station? selectedStation;
   late GraphTimeWindow timeWindow =
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
-  late Stream<core.Map<StationId, Station>> stations;
+  var stations = <StationId, Station>{};
+  StreamSubscription? _stationsSubscription;
+
+  Iterable<Station> get selectableStations => stations.values
+      .where((station) => Map.showMarkerTypes.contains(station.type));
+
+  Station? get tideCurrentStation => Optional(selectedStation).map(
+        (station) => station.type.isTideCurrent
+            ? station
+            : stations[station.tideCurrentStationId],
+      );
 
   bool locationEnabled = false;
-  late CancelableOperation<Position?> initialPosition;
+  late CancelableOperation<void> getInitialPosition;
+  Position? _initialPosition;
 
   double Function(StationType)? stationPriority;
 
   bool hasModal = false;
+
+  void _maybeCompleteInitialStationSelection() {
+    if (mounted &&
+        selectedStation == null &&
+        getInitialPosition.isCompleted &&
+        selectableStations.isNotEmpty) {
+      setState(
+        () => selectedStation = _initialPosition != null
+            ? nearestStation(selectableStations, _initialPosition!)
+            : selectableStations.first,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -150,7 +174,7 @@ class TripPlannerState extends State<TripPlanner> {
     updateClient();
 
     final cancel = StreamCloser<Position?>();
-    initialPosition = CancelableOperation.fromFuture(
+    getInitialPosition = CancelableOperation.fromFuture(
       (kIsWeb
               ? location.passivePosition.seededStream
               : location.requestedPosition)
@@ -158,7 +182,8 @@ class TripPlannerState extends State<TripPlanner> {
           .transform(cancel)
           .first,
       onCancel: cancel.close,
-    );
+    ).then((position) => _initialPosition = position)
+      ..then((_) => _maybeCompleteInitialStationSelection());
   }
 
   @override
@@ -170,19 +195,26 @@ class TripPlannerState extends State<TripPlanner> {
   }
 
   void updateClient() {
-    stations = widget.tripPlannerClient
+    _stationsSubscription?.cancel();
+    _stationsSubscription = widget.tripPlannerClient
         .getDatapoints()
-        .where((stations) => stations.isNotEmpty)
         .handleError(
           (e, StackTrace s) => log.warning('Failed to get station list.', e, s),
-        );
+        )
+        .listen((stations) {
+      if (stations.isNotEmpty) {
+        setState(() => this.stations = stations);
+        _maybeCompleteInitialStationSelection();
+      }
+    });
   }
 
   @override
   void dispose() {
     super.dispose();
     widget.tripPlannerClient.close();
-    initialPosition.cancel();
+    getInitialPosition.cancel();
+    _stationsSubscription?.cancel();
   }
 
   @override
@@ -214,177 +246,127 @@ class TripPlannerState extends State<TripPlanner> {
             unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
-        home: FutureBuilder(
-          future: initialPosition.value,
-          builder: (context, initialPosition) => StreamBuilder(
-            stream: stations,
-            builder: (context, stationsSnapshot) {
-              final stations = stationsSnapshot.data ?? {};
-              final selectableStations = stations.values.where(
-                (station) => Map.showMarkerTypes.contains(station.type),
-              );
+        home: LayoutBuilder(
+          builder: (context, constraints) => (
+            BuildContext context,
+            BoxConstraints constraints,
+          ) {
+            const double selectedStationBarMinWidth = 480,
+                titleAreaPadding = 164,
+                selectedStationBarMinPadding = 16;
+            final centeredInlineStationBar = constraints.maxWidth >=
+                selectedStationBarMinWidth +
+                    2 *
+                        (_SelectedStationBar.blendedHorizontalPadding +
+                            selectedStationBarMinPadding +
+                            titleAreaPadding);
+            final inlineStationBar = constraints.maxWidth >=
+                selectedStationBarMinWidth +
+                    2 *
+                        (_SelectedStationBar.blendedHorizontalPadding +
+                            selectedStationBarMinPadding) +
+                    titleAreaPadding;
+            final horizontal = constraints.maxWidth >= constraints.maxHeight;
 
-              if (selectedStation == null &&
-                  selectableStations.isNotEmpty &&
-                  initialPosition.connectionState == ConnectionState.done) {
-                selectedStation = initialPosition.hasData
-                    ? nearestStation(
-                        selectableStations,
-                        initialPosition.data!,
-                      )
-                    : selectableStations.first;
-              }
+            const title = Text('BASK Trip Planner');
 
-              return LayoutBuilder(
-                builder: (context, constraints) => _buildScaffold(
-                  context,
-                  constraints,
-                  stations,
+            return Scaffold(
+              appBar: AppBar(
+                title: Row(
+                  children: [
+                    title,
+                    if (selectedStation != null && inlineStationBar)
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: selectedStationBarMinPadding,
+                          ),
+                          child: _SelectedStationBar(
+                            selectedStation!,
+                            blendEdges: true,
+                          ),
+                        ),
+                      ),
+                    if (centeredInlineStationBar)
+                      const Opacity(opacity: 0, child: title),
+                  ],
                 ),
-              );
-            },
+                actions: [
+                  if (orientation.isOrientationAvailable)
+                    IconButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              Compass(waypoint: selectedStation),
+                        ),
+                      ),
+                      icon: const Icon(Icons.explore),
+                      tooltip: 'Compass',
+                    )
+                ],
+              ),
+              body: Column(
+                children: [
+                  if (selectedStation != null && !inlineStationBar)
+                    _SelectedStationBar(
+                      selectedStation!,
+                      blendEdges: false,
+                    ),
+                  Expanded(
+                    child: Flex(
+                      direction: horizontal ? Axis.horizontal : Axis.vertical,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Map(
+                                client: widget.wmsClient,
+                                tileCache: widget.tileCache,
+                                stations: stations,
+                                selectedStation: selectedStation,
+                                stationPriority: stationPriority,
+                                onStationSelected: (station) =>
+                                    setState(() => selectedStation = station),
+                              ),
+                              if (hasModal)
+                                // ignore: prefer_const_constructors
+                                PointerInterceptor(
+                                  child: const SizedBox(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  ),
+                                )
+                            ],
+                          ),
+                        ),
+                        if (selectedStation != null)
+                          SizedBox(
+                            width: horizontal
+                                ? min(
+                                    constraints.maxWidth / 2,
+                                    TidePanel.defaultGraphWidth,
+                                  )
+                                : constraints.maxWidth,
+                            child: _Panel(
+                              tripPlanner: this,
+                              horizontal: horizontal,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }(
+            context,
+            constraints,
           ),
         ),
       );
-
-  Widget _buildScaffold(
-    BuildContext context,
-    BoxConstraints constraints,
-    core.Map<StationId, Station> stations,
-  ) {
-    const double selectedStationBarMinWidth = 480,
-        titleAreaPadding = 164,
-        selectedStationBarMinPadding = 16;
-    final centeredInlineStationBar = constraints.maxWidth >=
-        selectedStationBarMinWidth +
-            2 *
-                (_SelectedStationBar.blendedHorizontalPadding +
-                    selectedStationBarMinPadding +
-                    titleAreaPadding);
-    final inlineStationBar = constraints.maxWidth >=
-        selectedStationBarMinWidth +
-            2 *
-                (_SelectedStationBar.blendedHorizontalPadding +
-                    selectedStationBarMinPadding) +
-            titleAreaPadding;
-    final horizontal = constraints.maxWidth >= constraints.maxHeight;
-
-    final tideCurrentStation = Optional(selectedStation).map(
-      (station) => station.type.isTideCurrent
-          ? station
-          : stations[station.tideCurrentStationId],
-    );
-
-    const title = Text('BASK Trip Planner');
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            title,
-            if (selectedStation != null && inlineStationBar)
-              Expanded(
-                child: Container(
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: selectedStationBarMinPadding,
-                  ),
-                  child: _SelectedStationBar(
-                    selectedStation!,
-                    blendEdges: true,
-                  ),
-                ),
-              ),
-            if (centeredInlineStationBar)
-              const Opacity(opacity: 0, child: title),
-          ],
-        ),
-        actions: [
-          if (orientation.isOrientationAvailable)
-            IconButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => Compass(waypoint: selectedStation),
-                ),
-              ),
-              icon: const Icon(Icons.explore),
-              tooltip: 'Compass',
-            )
-        ],
-      ),
-      body: Column(
-        children: [
-          if (selectedStation != null && !inlineStationBar)
-            _SelectedStationBar(
-              selectedStation!,
-              blendEdges: false,
-            ),
-          Expanded(
-            child: Flex(
-              direction: horizontal ? Axis.horizontal : Axis.vertical,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Map(
-                        client: widget.wmsClient,
-                        tileCache: widget.tileCache,
-                        stations: stations,
-                        selectedStation: selectedStation,
-                        stationPriority: stationPriority,
-                        onStationSelected: (station) =>
-                            setState(() => selectedStation = station),
-                      ),
-                      if (hasModal)
-                        // ignore: prefer_const_constructors
-                        PointerInterceptor(
-                          child: const SizedBox(
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
-                        )
-                    ],
-                  ),
-                ),
-                if (selectedStation != null)
-                  SizedBox(
-                    width: horizontal
-                        ? min(
-                            constraints.maxWidth / 2,
-                            TidePanel.defaultGraphWidth,
-                          )
-                        : constraints.maxWidth,
-                    child: _Panel(
-                      tripPlannerClient: widget.tripPlannerClient,
-                      horizontal: horizontal,
-                      selectedStation: selectedStation!,
-                      tideCurrentStation: tideCurrentStation,
-                      timeWindow: timeWindow,
-                      onTimeWindowChanged: (timeWindow) =>
-                          setState(() => this.timeWindow = timeWindow),
-                      onPanelChanged: (panel) =>
-                          // Flipping
-                          SchedulerBinding.instance.scheduleTask(
-                        () => setState(
-                          () => stationPriority = (type) =>
-                              panel == DetailsPanel
-                                  ? (type.isTideCurrent ? 0 : 1)
-                                  : (type.isTideCurrent ? 1 : 0),
-                        ),
-                        Priority.animation - 1,
-                      ),
-                      onModal: (modal) => setState(() => hasModal = modal),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SelectedStationBar extends StatelessWidget {
@@ -449,28 +431,13 @@ class _SelectedStationBar extends StatelessWidget {
 }
 
 class _Panel extends StatefulWidget {
-  _Panel({
-    required this.tripPlannerClient,
-    required this.horizontal,
-    required this.selectedStation,
-    this.tideCurrentStation,
-    required this.timeWindow,
-    this.onTimeWindowChanged,
-    this.onPanelChanged,
-    this.onModal,
-  });
+  _Panel({required this.tripPlanner, required this.horizontal});
 
-  final TripPlannerClient tripPlannerClient;
+  final TripPlannerState tripPlanner;
   final bool horizontal;
-  final Station selectedStation;
-  final Station? tideCurrentStation;
-  final GraphTimeWindow timeWindow;
-  final void Function(GraphTimeWindow timeWindow)? onTimeWindowChanged;
-  final void Function(Type panel)? onPanelChanged;
-  final void Function(bool modal)? onModal;
 
   late final List<Type> tabs = [
-    if (tideCurrentStation != null) TidePanel,
+    if (tripPlanner.tideCurrentStation != null) TidePanel,
     DetailsPanel
   ];
 
@@ -481,8 +448,20 @@ class _Panel extends StatefulWidget {
 class _PanelState extends State<_Panel> with TickerProviderStateMixin {
   late TabController tabController;
 
-  void _firePanelChanged() {
-    widget.onPanelChanged!(widget.tabs[tabController.index]);
+  TripPlannerState get tripPlanner => widget.tripPlanner;
+
+  void _onPanelChanged() {
+    final panel = widget.tabs[tabController.index];
+    // Flipping marker z indices is relatively expensive, so defer while
+    // animations are in progress.
+    SchedulerBinding.instance.scheduleTask(
+      () => setState(
+        () => tripPlanner.stationPriority = (type) => panel == DetailsPanel
+            ? (type.isTideCurrent ? 0 : 1)
+            : (type.isTideCurrent ? 1 : 0),
+      ),
+      Priority.animation - 1,
+    );
   }
 
   @override
@@ -494,10 +473,8 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
       vsync: this,
     );
 
-    if (widget.onPanelChanged != null) {
-      tabController.addListener(_firePanelChanged);
-      scheduleMicrotask(_firePanelChanged);
-    }
+    tabController.addListener(_onPanelChanged);
+    scheduleMicrotask(_onPanelChanged);
   }
 
   @override
@@ -513,11 +490,9 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
         vsync: this,
       );
 
-      if (widget.onPanelChanged != null) {
-        tabController.addListener(_firePanelChanged);
-        if (widget.tabs[tabController.index] != oldTab) {
-          scheduleMicrotask(_firePanelChanged);
-        }
+      tabController.addListener(_onPanelChanged);
+      if (widget.tabs[tabController.index] != oldTab) {
+        scheduleMicrotask(_onPanelChanged);
       }
     }
   }
@@ -529,17 +504,19 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
     final viewport = TabBarView(
       controller: tabController,
       children: [
-        if (widget.tideCurrentStation != null)
+        if (tripPlanner.tideCurrentStation != null)
           TidePanel(
-            client: widget.tripPlannerClient,
-            station: widget.tideCurrentStation!,
-            timeWindow: widget.timeWindow,
-            onTimeWindowChanged: widget.onTimeWindowChanged,
-            onModal: widget.onModal,
+            client: tripPlanner.widget.tripPlannerClient,
+            station: tripPlanner.tideCurrentStation!,
+            timeWindow: tripPlanner.timeWindow,
+            onTimeWindowChanged: (timeWindow) =>
+                tripPlanner.setState(() => tripPlanner.timeWindow = timeWindow),
+            onModal: (modal) =>
+                tripPlanner.setState(() => tripPlanner.hasModal = modal),
           ),
         DetailsPanel(
-          client: widget.tripPlannerClient,
-          station: widget.selectedStation,
+          client: tripPlanner.widget.tripPlannerClient,
+          station: tripPlanner.selectedStation!,
         )
       ],
     );
@@ -556,7 +533,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
             child: TabBar(
               controller: tabController,
               tabs: [
-                if (widget.tideCurrentStation != null) const Text('Tides'),
+                if (tripPlanner.tideCurrentStation != null) const Text('Tides'),
                 const Text('Details')
               ],
             ),
