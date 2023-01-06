@@ -230,13 +230,12 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               color: track.color,
               points: segment.points,
               width: 2,
+              zIndex: 1,
             )
     };
   }
 
   void _fitTracks() {
-    trackingMode = TrackingMode.free;
-
     LatLngBounds? bounds;
     for (final track in widget.tracks) {
       if (track.selected) {
@@ -247,8 +246,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         }
       }
     }
-    if (bounds != null) {
-      gmap?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 16.0));
+    if (bounds != null && gmap != null) {
+      trackingMode = TrackingMode.free;
+      // Cancel any animations in progress.
+      mapAnimation.override(cameraPosition);
+      gmap!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48 + 16));
     }
   }
 
@@ -315,10 +317,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     const pixelSquaredTolerance = .25;
 
     final cmpZoom = math.min(newPosition.zoom, cameraPosition.zoom);
-    if ((toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
-                toRelativeScreenSpace(newPosition.target, cmpZoom))
-            .distanceSquared >
-        pixelSquaredTolerance) {
+    if (!mapAnimation.isActive ||
+        (toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
+                    toRelativeScreenSpace(newPosition.target, cmpZoom))
+                .distanceSquared >
+            pixelSquaredTolerance) {
       setState(() {
         trackingMode = TrackingMode.free;
         cameraPosition = newPosition;
