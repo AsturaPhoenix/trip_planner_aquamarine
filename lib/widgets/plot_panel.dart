@@ -1,15 +1,19 @@
 import 'dart:convert';
 
+import 'package:community_charts_flutter/community_charts_flutter.dart'
+    as charts;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:gpx/gpx.dart';
-import 'package:joda/time.dart';
+import 'package:joda/time.dart' hide DateTime;
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
+import '../util/distance.dart';
 import 'color_picker.dart';
 
 const _uuid = Uuid();
@@ -18,6 +22,12 @@ class TimePoint {
   TimePoint({required this.time, required this.index});
   final Instant time;
   final int index;
+}
+
+class TimeSeries<T> {
+  TimeSeries({required this.time, required this.value});
+  final Instant time;
+  final T value;
 }
 
 class Segment {
@@ -32,6 +42,44 @@ class Segment {
   final PolylineId key;
   final List<LatLng> points;
   final List<TimePoint> times;
+
+  List<TimeSeries<Speed>> deriveSpeeds([
+    Duration minPeriod = const Duration(seconds: 30),
+  ]) {
+    final speeds = <TimeSeries<Speed>>[];
+
+    if (times.length >= 2) {
+      var t0 = times.first;
+
+      void addSpeed(int end, Duration dt) {
+        var dx = 0.0;
+        for (int i = t0.index; i < end; ++i) {
+          dx += Geolocator.distanceBetween(
+            points[i].latitude,
+            points[i].longitude,
+            points[i + 1].latitude,
+            points[i + 1].longitude,
+          );
+        }
+
+        speeds.add(
+          TimeSeries(time: t0.time + dt ~/ 2, value: Speed(Meters(dx), dt)),
+        );
+      }
+
+      for (final t in times.skip(1).take(times.length - 2)) {
+        final dt = t.time.difference(t0.time);
+        if (dt < minPeriod) continue;
+
+        addSpeed(t.index, dt);
+        t0 = t;
+      }
+
+      addSpeed(times.last.index, times.last.time.difference(t0.time));
+    }
+
+    return speeds;
+  }
 }
 
 class Track {
@@ -89,6 +137,8 @@ class PlotPanelState extends State<PlotPanel>
     with AutomaticKeepAliveClientMixin<PlotPanel> {
   final scrollController = ScrollController();
   int? selectionStart;
+  var _speeds = <Segment, List<TimeSeries<Speed>>>{};
+  Speed? _maxSpeed;
 
   @override
   bool get wantKeepAlive => true;
@@ -214,6 +264,39 @@ class PlotPanelState extends State<PlotPanel>
     }
   }
 
+  void _updateSpeeds() {
+    _speeds = {
+      for (final track in tracks)
+        if (track.selected)
+          for (final segment in track.segments)
+            segment: _speeds[segment] ?? segment.deriveSpeeds()
+    };
+
+    _maxSpeed = null;
+    for (final series in _speeds.values) {
+      for (final sample in series) {
+        if (_maxSpeed == null || _maxSpeed! < sample.value) {
+          _maxSpeed = sample.value;
+        }
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _updateSpeeds();
+  }
+
+  @override
+  void didUpdateWidget(PlotPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.tracks != oldWidget.tracks) {
+      _updateSpeeds();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -294,7 +377,43 @@ class PlotPanelState extends State<PlotPanel>
               onPressed: addGpx,
               icon: const Icon(Icons.file_upload_outlined),
               label: const Text('Overlay GPX'),
-            )
+            ),
+            if (_maxSpeed != null)
+              SizedBox(
+                height: 128,
+                child: charts.TimeSeriesChart(
+                  [
+                    for (final track in tracks)
+                      if (track.selected)
+                        for (final segment in track.segments)
+                          charts.Series<TimeSeries<Speed>, DateTime>(
+                            id: segment.key.value,
+                            seriesColor:
+                                charts.ColorUtil.fromDartColor(track.color),
+                            data: segment.deriveSpeeds(),
+                            domainFn: (datum, _) => datum.time.value,
+                            measureFn: (datum, _) => datum.value.mph,
+                          )
+                  ],
+                  animate: false,
+                  primaryMeasureAxis: charts.NumericAxisSpec(
+                    viewport: charts.NumericExtents(0, _maxSpeed!.mph),
+                    renderSpec: const charts.GridlineRendererSpec(
+                      minimumPaddingBetweenLabelsPx: 8,
+                    ),
+                    tickProviderSpec: const charts.BasicNumericTickProviderSpec(
+                      zeroBound: true,
+                      desiredMinTickCount: 5,
+                      desiredMaxTickCount: 10,
+                    ),
+                  ),
+                  domainAxis: const charts.DateTimeAxisSpec(
+                    renderSpec: charts.GridlineRendererSpec(
+                      minimumPaddingBetweenLabelsPx: 8,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

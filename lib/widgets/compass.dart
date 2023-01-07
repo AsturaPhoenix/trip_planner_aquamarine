@@ -14,11 +14,11 @@ import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../main.dart' show sharedPreferences;
 import '../platform/location.dart' as location;
-import '../platform/location.dart' show Distance, Meters;
 import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
 import '../util/angle.dart';
 import '../util/animation_coordinator.dart';
+import '../util/distance.dart';
 import '../util/upsample_stream.dart';
 import '../util/value_stream.dart';
 import 'blinking_icon.dart';
@@ -704,15 +704,6 @@ class CompassViewport extends StatelessWidget {
           },
         ),
       );
-}
-
-enum DistanceSystem {
-  miles('mi'),
-  kilometers('km'),
-  nauticalMiles('nm');
-
-  const DistanceSystem(this.description);
-  final String description;
 }
 
 class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
