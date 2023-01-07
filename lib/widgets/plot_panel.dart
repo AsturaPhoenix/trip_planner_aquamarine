@@ -178,6 +178,7 @@ class PlotPanelState extends State<PlotPanel>
     final tracks = [
       for (final track in this.tracks) track.copyWith(selected: false)
     ];
+    bool tracksAdded = false;
 
     for (final file in files.files) {
       // TODO: use encoding from ?xml tag
@@ -195,10 +196,22 @@ class PlotPanelState extends State<PlotPanel>
             selected: true,
           ),
         );
+        tracksAdded = true;
       }
     }
 
     widget.onTracksChanged(tracks);
+    // (Go ahead and deselect all even if no tracks were added.)
+
+    if (tracksAdded) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
+      );
+    }
   }
 
   @override
