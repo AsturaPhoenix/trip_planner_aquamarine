@@ -450,7 +450,7 @@ class _Panel extends StatefulWidget {
   _PanelState createState() => _PanelState();
 }
 
-class _PanelState extends State<_Panel> with TickerProviderStateMixin {
+class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   late TabController tabController;
   final tabBarViewKey = GlobalKey(),
       // This is needed to persist plot panel state between states with
@@ -474,6 +474,9 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
     );
   }
 
+  void _onModal(bool modal) =>
+      tripPlanner.setState(() => tripPlanner.hasModal = modal);
+
   @override
   void initState() {
     super.initState();
@@ -494,6 +497,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
       int delta = widget.tabs.length - oldWidget.tabs.length;
       final oldTab = oldWidget.tabs[tabController.index];
 
+      tabController.dispose();
       tabController = TabController(
         length: widget.tabs.length,
         initialIndex: max(tabController.index + delta, 0),
@@ -505,6 +509,12 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
         scheduleMicrotask(_onPanelChanged);
       }
     }
+  }
+
+  @override
+  void dispose() {
+    tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -522,8 +532,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
             timeWindow: tripPlanner.timeWindow,
             onTimeWindowChanged: (timeWindow) =>
                 tripPlanner.setState(() => tripPlanner.timeWindow = timeWindow),
-            onModal: (modal) =>
-                tripPlanner.setState(() => tripPlanner.hasModal = modal),
+            onModal: _onModal,
           ),
         DetailsPanel(
           client: tripPlanner.widget.tripPlannerClient,
@@ -535,6 +544,7 @@ class _PanelState extends State<_Panel> with TickerProviderStateMixin {
           tracks: tripPlanner.tracks,
           onTracksChanged: (tracks) =>
               tripPlanner.setState(() => tripPlanner.tracks = tracks),
+          onModal: _onModal,
         ),
       ],
     );

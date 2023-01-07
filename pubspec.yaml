@@ -46,6 +46,7 @@ dependencies:
   equatable: ^2.0.5
   file_picker: ^5.2.4
   flutter_arc_text: ^0.5.0
+  flutter_colorpicker: ^1.0.3
   flutter_html: ^3.0.0-alpha.6
   flutter_html_table:
     git:

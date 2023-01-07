@@ -10,6 +10,8 @@ import 'package:joda/time.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
+import 'color_picker.dart';
+
 const _uuid = Uuid();
 
 class TimePoint {
@@ -69,11 +71,13 @@ class PlotPanel extends StatefulWidget {
     required this.timeZone,
     this.tracks = const [],
     required this.onTracksChanged,
+    this.onModal,
   });
   final Instant? t;
   final TimeZone timeZone;
   final List<Track> tracks;
   final void Function(List<Track>) onTracksChanged;
+  final void Function(bool modal)? onModal;
 
   late final selectedCount = tracks.where((track) => track.selected).length;
 
@@ -136,6 +140,19 @@ class PlotPanelState extends State<PlotPanel>
     widget.onTracksChanged([
       for (final track in tracks)
         track == current ? track.copyWith(selected: !track.selected) : track
+    ]);
+  }
+
+  void _selectColor(BuildContext context, Track current) async {
+    widget.onModal?.call(true);
+    final color =
+        await showColorPicker(context: context, initialColor: current.color);
+    widget.onModal?.call(false);
+    if (color == null) return;
+
+    widget.onTracksChanged([
+      for (final track in tracks)
+        track == current ? track.copyWith(color: color) : track
     ]);
   }
 
@@ -237,9 +254,8 @@ class PlotPanelState extends State<PlotPanel>
                                     backgroundColor: tracks[i].color,
                                   ),
                                   child: null,
-                                  onPressed: () {
-                                    // TODO: color picker
-                                  },
+                                  onPressed: () =>
+                                      _selectColor(context, tracks[i]),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.close),
