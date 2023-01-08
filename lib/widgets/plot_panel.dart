@@ -15,6 +15,7 @@ import 'package:uuid/uuid.dart';
 
 import '../util/distance.dart';
 import 'color_picker.dart';
+import 'iterative_column.dart';
 
 const _uuid = Uuid();
 
@@ -117,12 +118,14 @@ class PlotPanel extends StatefulWidget {
     super.key,
     this.t,
     required this.timeZone,
+    required this.distanceSystem,
     this.tracks = const [],
     required this.onTracksChanged,
     this.onModal,
   });
   final Instant? t;
   final TimeZone timeZone;
+  final ValueNotifier<DistanceSystem> distanceSystem;
   final List<Track> tracks;
   final void Function(List<Track>) onTracksChanged;
   final void Function(bool modal)? onModal;
@@ -282,6 +285,9 @@ class PlotPanelState extends State<PlotPanel>
     }
   }
 
+  void _setDistanceSystem(DistanceSystem? distanceSystem) =>
+      widget.distanceSystem.value = distanceSystem!;
+
   @override
   void initState() {
     super.initState();
@@ -314,15 +320,19 @@ class PlotPanelState extends State<PlotPanel>
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0.0),
+        child: IterativeColumn(
           children: [
             const Text(
               'Overlay GPS tracking to see your tracks on nautical charts.',
             ),
             if (tracks.isNotEmpty) ...[
               const SizedBox(height: 8.0),
-              Flexible(
+              IterativeFlexible(
+                pass: 1,
+                size: (availableSize) => _maxSpeed != null
+                    ? min(max(availableSize - 128, 56), availableSize)
+                    : availableSize,
                 child: Material(
                   color: theme.colorScheme.secondaryContainer,
                   elevation: 1.0,
@@ -378,42 +388,72 @@ class PlotPanelState extends State<PlotPanel>
               icon: const Icon(Icons.file_upload_outlined),
               label: const Text('Overlay GPX'),
             ),
-            if (_maxSpeed != null)
-              SizedBox(
-                height: 128,
-                child: charts.TimeSeriesChart(
-                  [
-                    for (final track in tracks)
-                      if (track.selected)
-                        for (final segment in track.segments)
-                          charts.Series<TimeSeries<Speed>, DateTime>(
-                            id: segment.key.value,
-                            seriesColor:
-                                charts.ColorUtil.fromDartColor(track.color),
-                            data: segment.deriveSpeeds(),
-                            domainFn: (datum, _) => datum.time.value,
-                            measureFn: (datum, _) => datum.value.mph,
-                          )
+            ...(_maxSpeed == null)
+                ? [const SizedBox(height: 8.0)]
+                : [
+                    IterativeFlexible(
+                      pass: 2,
+                      size: (availableSize) => min(128, availableSize),
+                      child: ValueListenableBuilder(
+                        valueListenable: widget.distanceSystem,
+                        builder: (context, distanceSystem, _) =>
+                            charts.TimeSeriesChart(
+                          [
+                            for (final track in tracks)
+                              if (track.selected)
+                                for (final segment in track.segments)
+                                  charts.Series<TimeSeries<Speed>, DateTime>(
+                                    id: segment.key.value,
+                                    seriesColor: charts.ColorUtil.fromDartColor(
+                                        track.color),
+                                    data: segment.deriveSpeeds(),
+                                    domainFn: (datum, _) => datum.time.value,
+                                    measureFn: (datum, _) =>
+                                        datum.value.forSystem(distanceSystem),
+                                  )
+                          ],
+                          animate: false,
+                          primaryMeasureAxis: charts.NumericAxisSpec(
+                            viewport: charts.NumericExtents(
+                              0,
+                              _maxSpeed!.forSystem(distanceSystem),
+                            ),
+                            renderSpec: const charts.GridlineRendererSpec(
+                              minimumPaddingBetweenLabelsPx: 8,
+                            ),
+                            tickProviderSpec:
+                                const charts.BasicNumericTickProviderSpec(
+                              zeroBound: true,
+                              desiredMinTickCount: 5,
+                              desiredMaxTickCount: 10,
+                            ),
+                          ),
+                          domainAxis: const charts.DateTimeAxisSpec(
+                            renderSpec: charts.GridlineRendererSpec(
+                              minimumPaddingBetweenLabelsPx: 8,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    ValueListenableBuilder(
+                      valueListenable: widget.distanceSystem,
+                      builder: (context, distanceSystem, _) => Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final value in DistanceSystem.values) ...[
+                            if (value.index > 0) const SizedBox(width: 8.0),
+                            Radio(
+                              value: value,
+                              groupValue: distanceSystem,
+                              onChanged: _setDistanceSystem,
+                            ),
+                            Text(Speed.systemDescription(value))
+                          ]
+                        ],
+                      ),
+                    ),
                   ],
-                  animate: false,
-                  primaryMeasureAxis: charts.NumericAxisSpec(
-                    viewport: charts.NumericExtents(0, _maxSpeed!.mph),
-                    renderSpec: const charts.GridlineRendererSpec(
-                      minimumPaddingBetweenLabelsPx: 8,
-                    ),
-                    tickProviderSpec: const charts.BasicNumericTickProviderSpec(
-                      zeroBound: true,
-                      desiredMinTickCount: 5,
-                      desiredMaxTickCount: 10,
-                    ),
-                  ),
-                  domainAxis: const charts.DateTimeAxisSpec(
-                    renderSpec: charts.GridlineRendererSpec(
-                      minimumPaddingBetweenLabelsPx: 8,
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

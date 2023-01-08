@@ -45,6 +45,17 @@ class Meters extends Distance {
 class Speed implements Comparable<Speed> {
   static const zero = Speed(Meters(0), Duration(seconds: 1));
 
+  static String systemDescription(DistanceSystem distanceSystem) {
+    switch (distanceSystem) {
+      case DistanceSystem.miles:
+        return 'mph';
+      case DistanceSystem.kilometers:
+        return 'kph';
+      case DistanceSystem.nauticalMiles:
+        return 'kt';
+    }
+  }
+
   const Speed(this.distance, this.time);
   final Distance distance;
   final Duration time;
@@ -55,4 +66,15 @@ class Speed implements Comparable<Speed> {
 
   @override
   int compareTo(Speed other) => kph.compareTo(other.kph);
+
+  double forSystem(DistanceSystem distanceSystem) {
+    switch (distanceSystem) {
+      case DistanceSystem.miles:
+        return mph;
+      case DistanceSystem.kilometers:
+        return kph;
+      case DistanceSystem.nauticalMiles:
+        return kt;
+    }
+  }
 }

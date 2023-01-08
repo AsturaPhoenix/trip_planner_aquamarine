@@ -21,6 +21,7 @@ import 'persistence/cache_box.dart';
 import 'platform/location.dart' as location;
 import 'platform/orientation.dart' as orientation;
 import 'providers/trip_planner_client.dart';
+import 'util/distance.dart';
 import 'util/optional.dart';
 import 'widgets/compass.dart';
 import 'widgets/details_panel.dart';
@@ -113,6 +114,8 @@ class TripPlanner extends StatefulWidget {
 }
 
 class TripPlannerState extends State<TripPlanner> {
+  static const distanceSystemSettingKey = 'distanceSystem';
+
   static final log = Logger('TripPlannerState');
 
   static Station nearestStation(Iterable<Station> stations, Position position) {
@@ -136,6 +139,10 @@ class TripPlannerState extends State<TripPlanner> {
   Station? selectedStation;
   late GraphTimeWindow timeWindow =
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
+  final distanceSystem = ValueNotifier(
+    DistanceSystem
+        .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0],
+  );
   var stations = <StationId, Station>{};
   StreamSubscription? _stationsSubscription;
   var tracks = <Track>[];
@@ -186,6 +193,13 @@ class TripPlannerState extends State<TripPlanner> {
       onCancel: cancel.close,
     ).then((position) => _initialPosition = position)
       ..then((_) => _maybeCompleteInitialStationSelection());
+
+    distanceSystem.addListener(
+      () => sharedPreferences.setInt(
+        distanceSystemSettingKey,
+        distanceSystem.value.index,
+      ),
+    );
   }
 
   @override
@@ -213,10 +227,11 @@ class TripPlannerState extends State<TripPlanner> {
 
   @override
   void dispose() {
-    super.dispose();
     widget.tripPlannerClient.close();
     getInitialPosition.cancel();
     _stationsSubscription?.cancel();
+    distanceSystem.dispose();
+    super.dispose();
   }
 
   @override
@@ -246,6 +261,13 @@ class TripPlannerState extends State<TripPlanner> {
             labelPadding: EdgeInsets.all(4),
             labelStyle: TextStyle(fontWeight: FontWeight.bold),
             unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          radioTheme: RadioThemeData(
+            fillColor: MaterialStateProperty.resolveWith(
+              (states) => states.contains(MaterialState.selected)
+                  ? const Color(0xb0000000)
+                  : null,
+            ),
           ),
         ),
         home: LayoutBuilder(
@@ -301,8 +323,10 @@ class TripPlannerState extends State<TripPlanner> {
                         context,
                         MaterialPageRoute(
                           allowSnapshotting: false,
-                          builder: (context) =>
-                              Compass(waypoint: selectedStation),
+                          builder: (context) => Compass(
+                            waypoint: selectedStation,
+                            distanceSystem: distanceSystem,
+                          ),
                         ),
                       ),
                       icon: const Icon(Icons.explore),
@@ -541,6 +565,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
         PlotPanel(
           key: plotPanelKey,
           timeZone: tripPlanner.timeWindow.t.timeZone,
+          distanceSystem: tripPlanner.distanceSystem,
           tracks: tripPlanner.tracks,
           onTracksChanged: (tracks) =>
               tripPlanner.setState(() => tripPlanner.tracks = tracks),

@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Gradient;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -95,8 +96,9 @@ class Compass extends StatefulWidget {
     shadows: defaultShadows,
   );
 
-  const Compass({super.key, this.waypoint});
+  const Compass({super.key, this.waypoint, required this.distanceSystem});
   final Station? waypoint;
+  final ValueNotifier<DistanceSystem> distanceSystem;
 
   @override
   State<Compass> createState() => CompassState();
@@ -119,8 +121,7 @@ enum CompassType {
 
 class CompassState extends State<Compass>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  static const compassTypeSettingKey = 'compass/compassType',
-      distanceSystemSettingKey = 'distanceSystem';
+  static const compassTypeSettingKey = 'compass/compassType';
 
   static CompassMarker<LatLng> toWaypoint(Station station) => CompassMarker(
         color: const {
@@ -147,8 +148,6 @@ class CompassState extends State<Compass>
 
   var compassType =
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
-  var distanceSystem = DistanceSystem
-      .values[sharedPreferences.getInt(distanceSystemSettingKey) ?? 0];
 
   CameraController? cameraController;
   late final cameraDescription = (() async => (await availableCameras())
@@ -261,7 +260,7 @@ class CompassState extends State<Compass>
         LocationInfo(
           waypoint: widget.waypoint,
           bearing: trueBearing,
-          distanceSystem: distanceSystem,
+          distanceSystem: widget.distanceSystem,
           crossAxisAlignment: crossAxisAlignment,
         );
 
@@ -313,11 +312,7 @@ class CompassState extends State<Compass>
                   setState(() => compassType = value);
                   sharedPreferences.setInt(compassTypeSettingKey, value.index);
                 } else if (value is DistanceSystem) {
-                  setState(() => distanceSystem = value);
-                  sharedPreferences.setInt(
-                    distanceSystemSettingKey,
-                    value.index,
-                  );
+                  widget.distanceSystem.value = value;
                 }
               },
               itemBuilder: (context) => [
@@ -328,11 +323,11 @@ class CompassState extends State<Compass>
                     child: Text(compassType.description),
                   ),
                 const PopupMenuDivider(),
-                for (final distanceSystem in DistanceSystem.values)
+                for (final value in DistanceSystem.values)
                   CheckedPopupMenuItem(
-                    value: distanceSystem,
-                    checked: this.distanceSystem == distanceSystem,
-                    child: Text(distanceSystem.description),
+                    value: value,
+                    checked: widget.distanceSystem.value == value,
+                    child: Text(value.description),
                   )
               ],
             )
@@ -763,7 +758,7 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
   });
   final Station? waypoint;
   final ValueStream<Angle> bearing;
-  final DistanceSystem distanceSystem;
+  final ValueListenable<DistanceSystem> distanceSystem;
   final CrossAxisAlignment crossAxisAlignment;
 
   @override
@@ -841,18 +836,21 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                 ],
               ),
             if (waypoint != null && position.hasData)
-              StreamBuilder(
-                initialData: bearing.value,
-                stream: bearing.stream,
-                builder: (context, bearing) {
-                  return Text(
-                    formatHeading(
-                      waypoint!.marker.toHeading(position.data!.toLatLng()),
-                      bearing.data,
-                      distanceSystem,
-                    ),
-                  );
-                },
+              ValueListenableBuilder(
+                valueListenable: distanceSystem,
+                builder: (context, distanceSystem, _) => StreamBuilder(
+                  initialData: bearing.value,
+                  stream: bearing.stream,
+                  builder: (context, bearing) {
+                    return Text(
+                      formatHeading(
+                        waypoint!.marker.toHeading(position.data!.toLatLng()),
+                        bearing.data,
+                        distanceSystem,
+                      ),
+                    );
+                  },
+                ),
               )
           ],
         ),

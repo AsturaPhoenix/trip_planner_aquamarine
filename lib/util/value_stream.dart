@@ -7,6 +7,7 @@ typedef InitializedValueStream<T> = ValueStreamBase<T, T>;
 
 /// A dart-idiomatic version of rxdart's `ValueStream`, which plays well with
 /// `StreamBuilder`s and doesn't necessarily exhibit #452.
+// TODO: Consider deprecating and using ValueListenable instead.
 abstract class ValueStreamBase<T extends Initial, Initial> {
   ValueStreamBase();
 
