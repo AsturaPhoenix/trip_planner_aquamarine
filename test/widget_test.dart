@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_10y.dart';
 
 import 'package:trip_planner_aquamarine/main.dart';
@@ -47,6 +48,9 @@ void main() {
   late TripPlannerClient tripPlannerClient;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await TripPlanner.initAsyncGlobals();
+
     await setUpTestHive();
     caches = await TestHive.open();
     tripPlannerHttpClient = MockTripPlannerHttpClient();

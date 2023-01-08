@@ -29,7 +29,7 @@ import 'widgets/map.dart';
 import 'widgets/plot_panel.dart';
 import 'widgets/tide_panel.dart';
 
-late final SharedPreferences sharedPreferences;
+late SharedPreferences sharedPreferences;
 
 void main() async {
   Logger.root.onRecord.listen(
@@ -41,11 +41,7 @@ void main() async {
     ),
   );
 
-  final prefetch = Future.wait([
-    orientation.prefetchCapabilities(),
-    SharedPreferences.getInstance()
-        .then((instance) => sharedPreferences = instance)
-  ]);
+  final prefetch = TripPlanner.initAsyncGlobals();
 
   initializeTimeZones();
 
@@ -98,6 +94,14 @@ void main() async {
 }
 
 class TripPlanner extends StatefulWidget {
+  /// Loads global prerequisites. This method may be called multiple timesd in
+  /// testing.
+  static Future<void> initAsyncGlobals() => Future.wait([
+        orientation.prefetchCapabilities(),
+        SharedPreferences.getInstance()
+            .then((instance) => sharedPreferences = instance)
+      ]);
+
   const TripPlanner({
     super.key,
     required this.tripPlannerClient,
