@@ -197,8 +197,10 @@ class TripPlannerState extends State<TripPlanner> {
           .transform(cancel)
           .first,
       onCancel: cancel.close,
-    ).then((position) => _initialPosition = position)
-      ..then((_) => _maybeCompleteInitialStationSelection());
+    ).then(
+      (position) => _initialPosition = position,
+      onError: (e, s) => log.warning('Failed to get initial position', e, s),
+    )..then((_) => _maybeCompleteInitialStationSelection());
 
     distanceSystem.addListener(
       () => sharedPreferences.setInt(
@@ -491,15 +493,26 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
   void _onPanelChanged() {
-    final panel = widget.tabs[tabController.index];
     // Flipping marker z indices is relatively expensive, so defer while
     // animations are in progress.
+    //
+    // This can actually allocate a 0-length timer used to service scheduler
+    // tasks, so there isn't a great way to cancel it. Widget tests may complain
+    // about this.
+    //
+    // Also, the task queue is a non-FIFO priority heap, so we need to make sure
+    // we're not setting stale state.
     SchedulerBinding.instance.scheduleTask(
-      () => setState(
-        () => tripPlanner.stationPriority = (type) => panel == DetailsPanel
-            ? (type.isTideCurrent ? 0 : 1)
-            : (type.isTideCurrent ? 1 : 0),
-      ),
+      () {
+        if (!tripPlanner.mounted) return;
+
+        final panel = widget.tabs[tabController.index];
+        tripPlanner.setState(
+          () => tripPlanner.stationPriority = (type) => panel == DetailsPanel
+              ? (type.isTideCurrent ? 0 : 1)
+              : (type.isTideCurrent ? 1 : 0),
+        );
+      },
       Priority.animation - 1,
     );
   }

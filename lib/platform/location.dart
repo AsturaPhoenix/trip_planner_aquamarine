@@ -44,11 +44,18 @@ final _permissionStatus =
     ValueStreamController<PermissionStatus>(StreamController.broadcast());
 
 final Stream<Position?> requestedPosition = Stream.multi(
-  (controller) async => controller.addStream(
-    await requestPermission()
-        ? passivePosition.seededStream.skipWhile((position) => position == null)
-        : passivePosition.seededStream,
-  ),
+  (controller) async {
+    try {
+      return controller.addStream(
+        await requestPermission()
+            ? passivePosition.seededStream
+                .skipWhile((position) => position == null)
+            : passivePosition.seededStream,
+      );
+    } catch (e, s) {
+      controller.addError(e, s);
+    }
+  },
 );
 
 final passivePosition =

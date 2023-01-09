@@ -68,7 +68,7 @@ void main() {
   test('does not deduplicate failed decode attempts', () async {
     when(mockHttpClient.get(any)).thenAnswer(
       (_) async => http.Response.bytes(
-        File('test/empty.png').readAsBytesSync(),
+        File('test/data/empty.png').readAsBytesSync(),
         HttpStatus.ok,
       ),
     );
