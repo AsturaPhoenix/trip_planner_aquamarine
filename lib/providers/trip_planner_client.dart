@@ -233,11 +233,7 @@ class TripPlannerHttpClient {
       throw response;
     }
 
-    return {
-      for (final stationNode
-          in XmlDocument.parse(response.body).findAllElements('station'))
-        StationId.fromXml(stationNode): Station.fromXml(stationNode)
-    };
+    return parseStations(response.body);
   }
 
   late final tidesUrl = baseUrl.resolve('tides.php');
@@ -295,6 +291,13 @@ class TripPlannerHttpClient {
     }
   }
 }
+
+Map<StationId, Station> parseStations(String xml) => {
+      for (final station in XmlDocument.parse(xml)
+          .findAllElements('station')
+          .map(Station.fromXml))
+        station.id: station
+    };
 
 LatLng latLngFromXml(XmlElement node) => LatLng(
       double.parse(node.getAttribute('lat')!),
@@ -354,6 +357,17 @@ class StationId extends Equatable {
 
 // tp.js: marker_from_xml
 class Station {
+  Station({
+    required this.id,
+    required this.type,
+    required this.marker,
+    this.noaaId = '',
+    required this.title,
+    this.source,
+    this.isSubordinate = false,
+    this.tideCurrentStationId,
+    this.details,
+  });
   Station.fromXml(XmlElement node)
       : id = StationId.fromXml(node),
         type = StationType.forName(node.getAttribute('station_type')!),

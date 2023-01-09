@@ -31,15 +31,17 @@ import 'widgets/tide_panel.dart';
 
 late SharedPreferences sharedPreferences;
 
+void initializeLogger() => Logger.root.onRecord.listen(
+      (record) => debug.log(
+        '${record.level.name}: ${record.time}: ${record.message}',
+        name: record.loggerName,
+        error: record.error,
+        stackTrace: record.stackTrace,
+      ),
+    );
+
 void main() async {
-  Logger.root.onRecord.listen(
-    (record) => debug.log(
-      '${record.level.name}: ${record.time}: ${record.message}',
-      name: record.loggerName,
-      error: record.error,
-      stackTrace: record.stackTrace,
-    ),
-  );
+  initializeLogger();
 
   final prefetch = TripPlanner.initAsyncGlobals();
 

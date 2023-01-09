@@ -2,30 +2,25 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:hive_test/hive_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/platform/compositor.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
+import 'util/test_cache.dart';
 @GenerateNiceMocks([MockSpec<http.Client>()])
 import 'wms_tile_provider_test.mocks.dart';
 
 void main() {
-  late BlobCache tileCache;
+  late FakeBlobCache tileCache;
   late MockClient mockHttpClient;
   late WmsTileProvider testTileProvider;
 
-  setUpAll(BlobCache.registerAdapters);
-
   setUp(() async {
-    await setUpTestHive();
-
-    tileCache = await BlobCache.open('TestTileCache');
+    tileCache = FakeBlobCache();
     mockHttpClient = MockClient();
 
     testTileProvider = WmsTileProvider(
@@ -36,8 +31,6 @@ void main() {
       params: WmsParams(),
     );
   });
-
-  tearDown(tearDownTestHive);
 
   test('deduplicates concurrent calls to remote', () async {
     when(mockHttpClient.get(any))

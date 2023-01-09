@@ -405,7 +405,8 @@ class PlotPanelState extends State<PlotPanel>
                                   charts.Series<TimeSeries<Speed>, DateTime>(
                                     id: segment.key.value,
                                     seriesColor: charts.ColorUtil.fromDartColor(
-                                        track.color),
+                                      track.color,
+                                    ),
                                     data: segment.deriveSpeeds(),
                                     domainFn: (datum, _) => datum.time.value,
                                     measureFn: (datum, _) =>

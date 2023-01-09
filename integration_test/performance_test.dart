@@ -11,8 +11,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
+
+import '../test/util/test_cache.dart';
 
 class FakeWmsClient extends Fake implements http.Client {
   final random = Random();
@@ -62,17 +63,6 @@ class FakeWmsClient extends Fake implements http.Client {
     return http.Response.bytes(data!.buffer.asUint8List(), HttpStatus.ok);
   }
 
-  @override
-  void close() {}
-}
-
-class FakeBlobCache extends Fake implements BlobCache {
-  final data = <String, Uint8List>{};
-
-  @override
-  Uint8List? operator [](String key) => data[key];
-  @override
-  void operator []=(String key, Uint8List value) => data[key] = value;
   @override
   void close() {}
 }
