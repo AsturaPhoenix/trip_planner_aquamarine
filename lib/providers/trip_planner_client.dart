@@ -103,14 +103,11 @@ class TripPlannerClient {
     httpClientFactory?.call().then((client) => client.close()).ignore();
   }
 
-  Stream<Map<StationId, Station>> getDatapoints() {
-    final results = StreamController<Map<StationId, Station>>();
+  Stream<Map<StationId, Station>> getDatapoints() async* {
     final bool needResults;
     if (stationCache.isNotEmpty) {
       log.fine('Stations: cache hit.');
-      results.add(
-        {for (final station in stationCache.values) station.id: station},
-      );
+      yield {for (final station in stationCache.values) station.id: station};
       needResults = false;
     } else {
       log.fine('Stations: cache miss.');
@@ -118,29 +115,21 @@ class TripPlannerClient {
     }
 
     if (httpClientFactory != null) {
-      () async {
-        try {
-          final stations = await (await httpClientFactory!()).getDatapoints();
-          log.fine('Stations: fetched/refreshed.');
-          results.add(stations);
-          stationCache
-            ..clear()
-            ..addAll(stations.values);
-        } catch (e, s) {
-          if (needResults) {
-            results.addError(e, s);
-          } else {
-            log.warning('Failed to refresh stations.', e, s);
-          }
-        } finally {
-          results.close();
+      try {
+        final stations = await (await httpClientFactory!()).getDatapoints();
+        log.fine('Stations: fetched/refreshed.');
+        yield stations;
+        stationCache
+          ..clear()
+          ..addAll(stations.values);
+      } catch (e, s) {
+        if (needResults) {
+          rethrow;
+        } else {
+          log.warning('Failed to refresh stations.', e, s);
         }
-      }();
-    } else {
-      results.close();
+      }
     }
-
-    return results.stream;
   }
 
   Stream<Uint8List> getTideGraph(
@@ -149,42 +138,31 @@ class TripPlannerClient {
     int width,
     int height,
     Date begin,
-  ) {
-    final results = StreamController<Uint8List>();
+  ) async* {
     final bool needResults;
 
     final key = TideGraphKey(station.id, begin, days).toString();
     final cached = tideGraphCache[key];
     if (cached != null) {
-      results.add(cached);
+      yield cached;
       needResults = false;
     } else {
       needResults = true;
     }
 
     if (httpClientFactory != null) {
-      () async {
-        try {
-          // TODO: Deduplicate current requests, or cancel on unsubscribe.
-          final data = await (await httpClientFactory!())
-              .getTideGraph(station, days, width, height, begin);
-          results.add(data);
-          tideGraphCache[key] = data;
-        } catch (e, s) {
-          if (needResults) {
-            results.addError(e, s);
-          } else {
-            log.warning('Failed to fetch/refresh tide graph.', e, s);
-          }
-        } finally {
-          results.close();
+      try {
+        // TODO: Deduplicate current requests, or cancel on unsubscribe.
+        yield tideGraphCache[key] = await (await httpClientFactory!())
+            .getTideGraph(station, days, width, height, begin);
+      } catch (e, s) {
+        if (needResults) {
+          rethrow;
+        } else {
+          log.warning('Failed to fetch/refresh tide graph.', e, s);
         }
-      }();
-    } else {
-      results.close();
+      }
     }
-
-    return results.stream;
   }
 
   ImageProvider getImage(Uri relative) => TripPlannerImage._(
