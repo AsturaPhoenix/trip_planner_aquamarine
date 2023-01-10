@@ -317,13 +317,17 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     const pixelSquaredTolerance = .25;
 
     final cmpZoom = math.min(newPosition.zoom, cameraPosition.zoom);
-    if (!mapAnimation.isActive ||
-        (toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
-                    toRelativeScreenSpace(newPosition.target, cmpZoom))
-                .distanceSquared >
-            pixelSquaredTolerance) {
+    if ((toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
+                toRelativeScreenSpace(newPosition.target, cmpZoom))
+            .distanceSquared >
+        pixelSquaredTolerance) {
       setState(() {
         trackingMode = TrackingMode.free;
+        cameraPosition = newPosition;
+        mapAnimation.override(newPosition);
+      });
+    } else if (!mapAnimation.isActive) {
+      setState(() {
         cameraPosition = newPosition;
         mapAnimation.override(newPosition);
       });
