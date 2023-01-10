@@ -108,6 +108,24 @@ void main() {
       await tester.pump(Duration.zero);
     });
 
+    testWidgets('Default station priority', (tester) async {
+      await tester.pumpWidget(buildTripPlanner());
+      await tester.flushAsync();
+      await tester.pumpAndSettle();
+      await tester.pump(Duration.zero);
+
+      final stationPriority =
+          tester.widget<Map>(find.byType(Map)).stationPriority;
+      expect(
+        stationPriority(StationType.current),
+        greaterThan(stationPriority(StationType.destination)),
+      );
+      expect(
+        stationPriority(StationType.destination),
+        greaterThan(stationPriority(StationType.nogo)),
+      );
+    });
+
     testWidgets('Flips station z-indices when details panel is selected',
         (tester) async {
       await tester.pumpWidget(buildTripPlanner());
@@ -123,6 +141,10 @@ void main() {
       expect(
         stationPriority(StationType.destination),
         greaterThan(stationPriority(StationType.current)),
+      );
+      expect(
+        stationPriority(StationType.current),
+        greaterThan(stationPriority(StationType.nogo)),
       );
     });
   });

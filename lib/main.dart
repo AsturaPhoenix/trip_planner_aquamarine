@@ -502,6 +502,8 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
 
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
+  Object? _panelChangedToken;
+
   void _onPanelChanged() {
     // Flipping marker z indices is relatively expensive, so defer while
     // animations are in progress.
@@ -512,15 +514,26 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
     //
     // Also, the task queue is a non-FIFO priority heap, so we need to make sure
     // we're not setting stale state.
+    final token = Object();
+    _panelChangedToken = token;
     SchedulerBinding.instance.scheduleTask(
       () {
-        if (!tripPlanner.mounted) return;
+        if (_panelChangedToken != token) return;
 
-        final panel = widget.tabs[tabController.index];
+        final priorities = widget.tabs[tabController.index] == DetailsPanel
+            ? const [
+                {StationType.launch, StationType.destination},
+                {StationType.tide, StationType.current},
+              ]
+            : const [
+                {StationType.tide, StationType.current},
+                {StationType.launch, StationType.destination},
+              ];
         tripPlanner.setState(
-          () => tripPlanner.stationPriority = (type) => panel == DetailsPanel
-              ? (type.isTideCurrent ? 0 : 1)
-              : (type.isTideCurrent ? 1 : 0),
+          () => tripPlanner.stationPriority = (type) =>
+              priorities.length -
+              priorities.indexWhere((set) => set.contains(type)) %
+                  (priorities.length + 1),
         );
       },
       Priority.animation - 1,
@@ -574,6 +587,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    _panelChangedToken = null;
     tabController.dispose();
     super.dispose();
   }

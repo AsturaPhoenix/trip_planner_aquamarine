@@ -117,7 +117,7 @@ String formatPosition(Position position) {
 
 class _ZIndex {
   static const int nogo = 1, track = 2;
-  static const double selection = 3, currentLocation = 10;
+  static const double selection = 3, currentLocation = 13;
   static double station(int major, int minor) {
     assert(0 <= minor && minor < 3);
     final zIndex = 4.0 + 3 * major + minor;
