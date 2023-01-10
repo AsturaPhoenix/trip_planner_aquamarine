@@ -65,7 +65,7 @@ final canonicalOrientation = CombinedValueStream(
   calculateCanonicalOrientation,
 );
 
-ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
+final ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
 
 class CachingGeoMag {
   // These tolerances are semi arbitrary.
@@ -111,7 +111,7 @@ const _accuracyApproximations = [
   Degrees(15), // high
 ];
 
-ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
+final ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
   motionSensors.absoluteOrientation
       .map((event) => event.accuracy)
       .distinct()

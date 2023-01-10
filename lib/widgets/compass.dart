@@ -217,7 +217,6 @@ class CompassState extends State<Compass>
         .map((accuracy) => accuracy ?? const Degrees(180))
         .transform(
           (s, v) => s
-              .skipBuffered()
               .upsample(tickerProvider: this, initialState: v)
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
@@ -1130,5 +1129,6 @@ class _HeadingsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HeadingsPainter oldDelegate) =>
-      const ListEquality().equals(headings, oldDelegate.headings);
+      !const ListEquality().equals(headings, oldDelegate.headings) ||
+      accuracy != oldDelegate.accuracy;
 }
