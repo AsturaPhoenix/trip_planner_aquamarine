@@ -367,6 +367,7 @@ class Station {
     this.isSubordinate = false,
     this.tideCurrentStationId,
     this.details,
+    this.outlines = const [],
   });
   Station.fromXml(XmlElement node)
       : id = StationId.fromXml(node),
@@ -383,7 +384,11 @@ class Station {
                 Optional(node.findElements('current_station').firstOrNull).map(
                   (csid) => StationId(StationIdPrefix.c, int.parse(csid.text)),
                 ),
-        details = node.findElements('details').firstOrNull?.text;
+        details = node.findElements('details').firstOrNull?.text,
+        outlines = [
+          for (final outline in node.findElements('outline'))
+            [...outline.findElements('coord').map(latLngFromXml)]
+        ];
   Station.read(BinaryReader reader)
       : id = StationId.parse(reader.readString()),
         type = StationType.forName(reader.readString()),
@@ -394,7 +399,10 @@ class Station {
         isSubordinate = reader.readBool(),
         tideCurrentStationId =
             Optional.string(reader.readString()).map(StationId.parse),
-        details = Optional.string(reader.readString()).value;
+        details = Optional.string(reader.readString()).value,
+        outlines = [
+          for (final outline in reader.readList()) (outline as List).cast()
+        ];
 
   final StationId id;
   final StationType type;
@@ -409,6 +417,7 @@ class Station {
   final bool isSubordinate;
   final StationId? tideCurrentStationId;
   final String? details;
+  final List<List<LatLng>> outlines;
 
   void write(BinaryWriter writer) => writer
     ..writeString(id.toString())
@@ -419,7 +428,8 @@ class Station {
     ..write(source)
     ..writeBool(isSubordinate)
     ..writeString(tideCurrentStationId?.toString() ?? '')
-    ..writeString(details ?? '');
+    ..writeString(details ?? '')
+    ..writeList(outlines);
 }
 
 class StationAdapter extends TypeAdapter<Station> {

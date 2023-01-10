@@ -37,6 +37,7 @@ class Map extends StatefulWidget {
     StationType.current,
     StationType.launch,
     StationType.destination,
+    StationType.nogo,
   };
 
   Map({
@@ -46,7 +47,7 @@ class Map extends StatefulWidget {
     this.stations = const {},
     this.selectedStation,
     this.tracks = const [],
-    double Function(StationType type)? stationPriority,
+    int Function(StationType type)? stationPriority,
     this.onStationSelected,
   }) : stationPriority =
             stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
@@ -57,7 +58,7 @@ class Map extends StatefulWidget {
   final Station? selectedStation;
   final List<Track> tracks;
 
-  final double Function(StationType type) stationPriority;
+  final int Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
 
   @override
@@ -114,8 +115,15 @@ String formatPosition(Position position) {
       '${formatPolar(position.longitude, 'E', 'W')}';
 }
 
-class MarkerClass {
-  static const double selection = 1, station = 3, currentLocation = 10;
+class _ZIndex {
+  static const int nogo = 1, track = 2;
+  static const double selection = 3, currentLocation = 10;
+  static double station(int major, int minor) {
+    assert(0 <= minor && minor < 3);
+    final zIndex = 4.0 + 3 * major + minor;
+    assert(selection < zIndex && zIndex < currentLocation);
+    return zIndex;
+  }
 }
 
 extension on CameraPosition {
@@ -230,7 +238,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               color: track.color,
               points: segment.points,
               width: 2,
-              zIndex: 1,
+              zIndex: _ZIndex.track,
             )
     };
   }
@@ -479,6 +487,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
             stream: location.passivePosition.stream,
             builder: (context, position) {
               final markers = <Marker>{};
+              final polygons = <Polygon>{};
 
               if (markerIcons.hasData) {
                 if (position.hasData) {
@@ -489,8 +498,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                       anchor: const Offset(.5, .5),
                       position: position.data!.toLatLng(),
                       icon: markerIcons.requireData.location,
-                      // TODO: This text does not update while the info window is
-                      // shown.
+                      // TODO: This text does not update while the info window
+                      // is shown.
                       infoWindow: InfoWindow(
                         title: formatPosition(position.data!),
                         onTap: kIsWeb
@@ -498,7 +507,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                             : () => gmap!.hideMarkerInfoWindow(markerId),
                       ),
                       // Take precedence over other markers.
-                      zIndex: MarkerClass.currentLocation,
+                      zIndex: _ZIndex.currentLocation,
                       onTap: () =>
                           setState(() => trackingMode = TrackingMode.location),
                     ),
@@ -539,9 +548,21 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                         // everything else. However, on smaller screens we
                         // should try to keep touch response consistent with
                         // alpha.
-                        zIndex:
-                            MarkerClass.station + 3 * visualMajor + visualMinor,
+                        zIndex: _ZIndex.station(visualMajor, visualMinor),
                         onTap: () => widget.onStationSelected?.call(station),
+                      ),
+                    );
+                  }
+
+                  for (int i = 0; i < station.outlines.length; ++i) {
+                    polygons.add(
+                      Polygon(
+                        polygonId: PolygonId('${station.id}-$i'),
+                        points: station.outlines[i],
+                        fillColor: const Color(0x40ff0000),
+                        strokeColor: Colors.red,
+                        strokeWidth: 1,
+                        zIndex: _ZIndex.nogo,
                       ),
                     );
                   }
@@ -561,7 +582,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                         // tp.js: move_sel_marker
                         position: location ?? const LatLng(0, 0),
                         visible: location != null,
-                        zIndex: MarkerClass.selection,
+                        zIndex: _ZIndex.selection,
                       ),
                     );
 
@@ -591,6 +612,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                   ),
                 },
                 polylines: _polylines,
+                polygons: polygons,
                 compassEnabled: false,
                 zoomControlsEnabled: false,
                 onCameraMove: updateCameraPosition,

@@ -166,7 +166,7 @@ class TripPlannerState extends State<TripPlanner> {
   late CancelableOperation<void> getInitialPosition;
   Position? _initialPosition;
 
-  double Function(StationType)? stationPriority;
+  int Function(StationType)? stationPriority;
 
   bool hasModal = false;
 
