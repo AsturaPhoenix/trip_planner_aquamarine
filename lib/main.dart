@@ -467,16 +467,26 @@ class _SelectedStationBar extends StatelessWidget {
 }
 
 class _Panel extends StatefulWidget {
-  _Panel({required this.tripPlanner, required this.horizontal});
+  _Panel({required this.tripPlanner, required this.horizontal})
+      : selectedStation = tripPlanner.selectedStation!,
+        tabs = [
+          if (tripPlanner.tideCurrentStation != null) TidePanel,
+          DetailsPanel,
+          PlotPanel,
+        ];
 
   final TripPlannerState tripPlanner;
   final bool horizontal;
 
-  late final List<Type> tabs = [
-    if (tripPlanner.tideCurrentStation != null) TidePanel,
-    DetailsPanel,
-    PlotPanel,
-  ];
+  // Cache a copy of the selected station so we know when it changes. This
+  // supports changing the panel to the details panel if a nogo station is
+  // selected. However, this differs from the behavior of the web trip planner,
+  // where clicking on a nogo area always switches to the info panel even if the
+  // area was already selected. If we want to do that, we would probably want to
+  // hoist the tab controller into the trip planner, but we'd need to think more
+  // carefully about where then to manage which tabs are available.
+  final Station selectedStation;
+  final List<Type> tabs;
 
   @override
   _PanelState createState() => _PanelState();
@@ -525,6 +535,9 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
     super.initState();
 
     tabController = TabController(
+      initialIndex: widget.selectedStation.type == StationType.nogo
+          ? widget.tabs.indexOf(DetailsPanel)
+          : 0,
       length: widget.tabs.length,
       vsync: this,
     );
@@ -543,7 +556,9 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
       tabController.dispose();
       tabController = TabController(
         length: widget.tabs.length,
-        initialIndex: max(tabController.index + delta, 0),
+        initialIndex: widget.selectedStation.type == StationType.nogo
+            ? widget.tabs.indexOf(DetailsPanel)
+            : max(tabController.index + delta, 0),
         vsync: this,
       );
 
@@ -551,6 +566,9 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
       if (widget.tabs[tabController.index] != oldTab) {
         scheduleMicrotask(_onPanelChanged);
       }
+    } else if (widget.selectedStation != oldWidget.selectedStation &&
+        widget.selectedStation.type == StationType.nogo) {
+      tabController.animateTo(widget.tabs.indexOf(DetailsPanel));
     }
   }
 
@@ -579,7 +597,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
           ),
         DetailsPanel(
           client: tripPlanner.widget.tripPlannerClient,
-          station: tripPlanner.selectedStation!,
+          station: widget.selectedStation,
         ),
         PlotPanel(
           key: plotPanelKey,

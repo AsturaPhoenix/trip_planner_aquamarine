@@ -244,22 +244,40 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   }
 
   void _fitTracks() {
-    LatLngBounds? bounds;
-    for (final track in widget.tracks) {
-      if (track.selected) {
-        for (final segment in track.segments) {
-          for (final point in segment.points) {
-            bounds = bounds.expand(point);
-          }
-        }
-      }
-    }
+    final bounds = _calculateBounds(
+      widget.tracks
+          .where((track) => track.selected)
+          .expand((track) => track.segments)
+          .expand((segment) => segment.points),
+    );
+
     if (bounds != null && gmap != null) {
-      trackingMode = TrackingMode.free;
-      // Cancel any animations in progress.
-      mapAnimation.override(cameraPosition);
-      gmap!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48 + 16));
+      _animateToBounds(bounds);
     }
+  }
+
+  void _fitOutlines(Station station) {
+    final bounds =
+        _calculateBounds(station.outlines.expand((outline) => outline));
+
+    if (bounds != null && gmap != null) {
+      _animateToBounds(bounds);
+    }
+  }
+
+  LatLngBounds? _calculateBounds(Iterable<LatLng> points) {
+    LatLngBounds? bounds;
+    for (final point in points) {
+      bounds = bounds.expand(point);
+    }
+    return bounds;
+  }
+
+  void _animateToBounds(LatLngBounds bounds) {
+    trackingMode = TrackingMode.free;
+    // Cancel any animations in progress.
+    mapAnimation.override(cameraPosition);
+    gmap!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48 + 16));
   }
 
   CameraPosition cameraPosition = Map.initialCameraPosition;
@@ -342,9 +360,16 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     }
   }
 
-  void animateToSelectedStation() {
-    mapAnimation
-        .set(cameraPosition.copyWith(target: widget.selectedStation!.marker));
+  void animateToStation(Station station) {
+    if (station.outlines.isEmpty) {
+      if (location.isEnabled.value) {
+        trackingMode = TrackingMode.free;
+        // Don't unlock tracking if location enablement is still pending.
+      }
+      mapAnimation.set(cameraPosition.copyWith(target: station.marker));
+    } else {
+      _fitOutlines(station);
+    }
   }
 
   @override
@@ -361,6 +386,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       ),
       setState: (cameraPosition) async {
         await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
+        // We need to update this after moveCamera because we may need to deal
+        // with a trainwreck of onCameraMove events, for which we want to
+        // compare with the previous camera position to determine whether to
+        // unlock.
         setState(() => this.cameraPosition = cameraPosition);
       },
     );
@@ -436,7 +465,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         oldWidget.selectedStation == null &&
         gmap != null &&
         (trackingMode == TrackingMode.free || !location.isEnabled.value)) {
-      animateToSelectedStation();
+      animateToStation(widget.selectedStation!);
     }
 
     if (widget.tracks != oldWidget.tracks) {
@@ -462,6 +491,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     mapAnimation.ticker.stop(canceled: true);
     trackingSubscription?.cancel();
     gmap?.dispose();
+    gmap = null;
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
     }
@@ -508,8 +538,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                       ),
                       // Take precedence over other markers.
                       zIndex: _ZIndex.currentLocation,
-                      onTap: () =>
-                          setState(() => trackingMode = TrackingMode.location),
+                      consumeTapEvents: true,
+                      onTap: () {
+                        gmap?.showMarkerInfoWindow(markerId);
+                        setState(() => trackingMode = TrackingMode.location);
+                      },
                     ),
                   );
                 }
@@ -521,10 +554,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
                 for (final station
                     in widget.stations.values.where(stationFilter)) {
+                  final markerId = MarkerId(station.id.toString());
+
                   final icon = markerIcons.requireData.stations[station.type];
                   if (icon != null) {
                     // tp.js: create_station
-                    final markerId = MarkerId(station.id.toString());
                     final visualMinor = [
                           station.isLegacy,
                           station.isSubordinate
@@ -549,7 +583,12 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                         // should try to keep touch response consistent with
                         // alpha.
                         zIndex: _ZIndex.station(visualMajor, visualMinor),
-                        onTap: () => widget.onStationSelected?.call(station),
+                        consumeTapEvents: true,
+                        onTap: () {
+                          gmap?.showMarkerInfoWindow(markerId);
+                          animateToStation(station);
+                          widget.onStationSelected?.call(station);
+                        },
                       ),
                     );
                   }
@@ -563,6 +602,12 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                         strokeColor: Colors.red,
                         strokeWidth: 1,
                         zIndex: _ZIndex.nogo,
+                        consumeTapEvents: true,
+                        onTap: () {
+                          gmap?.showMarkerInfoWindow(markerId);
+                          animateToStation(station);
+                          widget.onStationSelected?.call(station);
+                        },
                       ),
                     );
                   }
@@ -625,7 +670,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                   if (widget.selectedStation != null &&
                       (trackingMode == TrackingMode.free ||
                           !location.isEnabled.value)) {
-                    animateToSelectedStation();
+                    animateToStation(widget.selectedStation!);
                   }
                 },
               );

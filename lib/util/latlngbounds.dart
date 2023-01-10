@@ -22,3 +22,8 @@ extension Expand on LatLngBounds? {
     );
   }
 }
+
+extension ContainsBounds on LatLngBounds {
+  bool containsBounds(LatLngBounds bounds) =>
+      contains(bounds.northeast) && contains(bounds.southwest);
+}
