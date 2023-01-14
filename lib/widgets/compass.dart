@@ -917,8 +917,11 @@ class _AccuracyPainter extends CustomPainter {
     // Gradient.sweep has trouble blending across 0, so rotate away from that.
     canvas
       ..translate(center.dx, center.dy)
-      ..rotate(pi / 2)
-      ..drawArc(
+      ..rotate(pi / 2);
+
+    if (accuracy > 0) {
+      // Gradient.sweep cannot paint accuracy 0.
+      canvas.drawArc(
         Offset(-center.dy, -center.dx) & size,
         pi - accuracy,
         2 * accuracy,
@@ -933,14 +936,16 @@ class _AccuracyPainter extends CustomPainter {
             pi + accuracy,
           )
           ..blendMode = BlendMode.plus,
-      )
-      ..drawLine(
-        Offset.zero,
-        Offset(-center.dy, 0),
-        Paint()
-          ..color = heading
-          ..strokeWidth = 1.5,
       );
+    }
+
+    canvas.drawLine(
+      Offset.zero,
+      Offset(-center.dy, 0),
+      Paint()
+        ..color = heading
+        ..strokeWidth = 1.5,
+    );
   }
 
   @override
@@ -1056,26 +1061,33 @@ class _HeadingsPainter extends CustomPainter {
       canvas
         ..save()
         // Gradient.sweep has trouble blending across 0, so paint about pi.
-        ..rotate(heading.location.angle.radians + pi / 2)
-        ..save()
-        ..clipPath(accuracyArcClip)
-        ..drawArc(
-          Offset(-radius, -radius) & size,
-          pi - accuracy,
-          2 * accuracy,
-          true,
-          Paint()
-            ..shader = Gradient.sweep(
-              Offset.zero,
-              [heading.color, heading.color.withAlpha(0)],
-              null,
-              TileMode.mirror,
-              pi,
-              pi + accuracy,
-            )
-            ..blendMode = BlendMode.plus,
-        )
-        ..restore()
+        ..rotate(heading.location.angle.radians + pi / 2);
+
+      if (accuracy > 0) {
+        // Gradient.sweep cannot paint accuracy 0.
+        canvas
+          ..save()
+          ..clipPath(accuracyArcClip)
+          ..drawArc(
+            Offset(-radius, -radius) & size,
+            pi - accuracy,
+            2 * accuracy,
+            true,
+            Paint()
+              ..shader = Gradient.sweep(
+                Offset.zero,
+                [heading.color, heading.color.withAlpha(0)],
+                null,
+                TileMode.mirror,
+                pi,
+                pi + accuracy,
+              )
+              ..blendMode = BlendMode.plus,
+          )
+          ..restore();
+      }
+
+      canvas
         ..drawLine(
           Offset.zero,
           Offset(-radius, 0),

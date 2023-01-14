@@ -118,6 +118,6 @@ final ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
       .map(
         (accuracy) => (accuracy ?? 0) >= 0
             ? Optional(accuracy).map(Radians.new)
-            : _accuracyApproximations[-accuracy!.toInt()],
+            : _accuracyApproximations[-accuracy!.toInt() - 1],
       ),
 );
