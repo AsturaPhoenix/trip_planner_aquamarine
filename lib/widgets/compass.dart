@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:camera/camera.dart';
+import 'package:camera/camera.dart' as camera;
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +14,7 @@ import 'package:rxdart/rxdart.dart' hide ValueStream;
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../main.dart' show sharedPreferences;
+import '../platform/camera.dart';
 import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
 import '../providers/trip_planner_client.dart';
@@ -149,10 +150,7 @@ class CompassState extends State<Compass>
   var compassType =
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
 
-  CameraController? cameraController;
-  late final cameraDescription = (() async => (await availableCameras())
-      .firstWhere((c) => c.lensDirection == CameraLensDirection.back))();
-  Future<void>? cameraInitialization;
+  late final CameraController cameraController;
 
   @override
   void initState() {
@@ -221,25 +219,19 @@ class CompassState extends State<Compass>
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
 
+    cameraController = CameraController(
+      (() async => (await camera.availableCameras()).firstWhere(
+            (c) => c.lensDirection == camera.CameraLensDirection.back,
+          ))(),
+      camera.ResolutionPreset.max,
+    );
+
     WidgetsBinding.instance.addObserver(this);
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive) {
-      cameraController?.dispose();
-      cameraInitialization = null;
-    } else if (state == AppLifecycleState.resumed && cameraController != null) {
-      setState(() {
-        cameraController = CameraController(
-          cameraController!.description,
-          cameraController!.resolutionPreset,
-          enableAudio: false,
-        );
-        cameraInitialization = cameraController!.initialize();
-      });
-    }
-  }
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      cameraController.didChangeAppLifecycleState(state);
 
   @override
   void dispose() {
@@ -247,7 +239,7 @@ class CompassState extends State<Compass>
     for (final subscription in broadcastSubscriptions) {
       subscription.cancel();
     }
-    cameraController?.dispose();
+    cameraController.dispose();
     // This needs to happen after the subscription cancellations or the ticker
     // provider mixin will complain about leaks.
     super.dispose();
@@ -351,24 +343,9 @@ class CompassState extends State<Compass>
                   const arThreshold = .5;
 
                   if (decomposition.planarDeviation > arThreshold) {
-                    cameraInitialization ??= () async {
-                      cameraController = CameraController(
-                        await cameraDescription,
-                        ResolutionPreset.max,
-                        enableAudio: false,
-                      );
-                      if (mounted &&
-                          WidgetsBinding.instance.lifecycleState ==
-                              AppLifecycleState.resumed) {
-                        await cameraController!.initialize();
-                      }
-                    }();
-
-                    cameraController
-                        ?.resumePreview()
-                        .then((_) => setState(() {}));
+                    cameraController.start();
                   } else {
-                    cameraController?.pausePreview().ignore();
+                    cameraController.stop();
                   }
 
                   return Stack(
@@ -377,21 +354,23 @@ class CompassState extends State<Compass>
                       Opacity(
                         opacity: const Interval(arThreshold, 1)
                             .transform(decomposition.planarDeviation),
-                        child: FutureBuilder(
-                          future: cameraInitialization,
-                          builder: (context, initialized) {
-                            if (initialized.connectionState ==
-                                    ConnectionState.done &&
-                                cameraController!.value.isInitialized) {
+                        child: ValueListenableBuilder(
+                          valueListenable: cameraController,
+                          builder: (context, cameraController, _) {
+                            if (cameraController == null) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            } else {
                               // CameraPreview uses an AspectRatio, which bases
                               // its layout on max size and cannot acheive a
                               // "cover" effect.
-                              var size = cameraController!.value.previewSize!;
+                              var size = cameraController.value.previewSize!;
                               if (const [
                                 DeviceOrientation.portraitUp,
                                 DeviceOrientation.portraitDown
                               ].contains(
-                                cameraController!.value.deviceOrientation,
+                                cameraController.value.deviceOrientation,
                               )) {
                                 size = size.flipped;
                               }
@@ -401,12 +380,8 @@ class CompassState extends State<Compass>
                                 child: SizedBox(
                                   width: size.width,
                                   height: size.height,
-                                  child: CameraPreview(cameraController!),
+                                  child: camera.CameraPreview(cameraController),
                                 ),
-                              );
-                            } else {
-                              return const Center(
-                                child: CircularProgressIndicator(),
                               );
                             }
                           },
