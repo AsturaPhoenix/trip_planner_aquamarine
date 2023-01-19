@@ -40,60 +40,7 @@ void initializeLogger() => Logger.root.onRecord.listen(
       ),
     );
 
-void main() async {
-  initializeLogger();
-
-  final prefetch = TripPlanner.initAsyncGlobals();
-
-  initializeTimeZones();
-
-  final httpClientFactory = RetryOnDemand(
-    () => TripPlannerHttpClient.resolveFromRedirect(
-      kIsWeb
-          ? Uri(path: '/trip_planner/')
-          : Uri.parse('https://www.bask.org/trip_planner/'),
-    ),
-  );
-
-  await Hive.initFlutter();
-  BlobCache.registerAdapters();
-  TripPlannerClient.registerAdapters();
-
-  final stationCache = CacheBox.tryOpen<Station>('StationCache');
-  final tideGraphCache = BlobCache.open('TideGraphCache');
-  final tileCache = BlobCache.open('TileCache');
-
-  final softExpiry = (Instant.now() - const Duration(days: 180)).value;
-  tideGraphCache.then(
-    (cache) => cache.evict(
-      (blobs, metadata) =>
-          // approx. 5 MB @ 20 kB ea.
-          blobs > 250 || blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
-    ),
-  );
-  tileCache.then(
-    (cache) => cache.evict(
-      (blobs, metadata) =>
-          // approx. 50 MB @ 100 kB ea.
-          blobs > 500 || blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
-    ),
-  );
-
-  await prefetch;
-
-  runApp(
-    TripPlanner(
-      tripPlannerClient: TripPlannerClient(
-        await stationCache,
-        await tideGraphCache,
-        httpClientFactory.get,
-        TimeZone.forId('America/Los_Angeles'),
-      ),
-      wmsClient: http.Client(),
-      tileCache: await tileCache,
-    ),
-  );
-}
+void main() async => runApp(await TripPlanner.main());
 
 class TripPlanner extends StatefulWidget {
   /// Loads global prerequisites. This method may be called multiple timesd in
@@ -103,6 +50,61 @@ class TripPlanner extends StatefulWidget {
         SharedPreferences.getInstance()
             .then((instance) => sharedPreferences = instance)
       ]);
+
+  static Future<TripPlanner> main() async {
+    initializeLogger();
+
+    final prefetch = TripPlanner.initAsyncGlobals();
+
+    initializeTimeZones();
+
+    final httpClientFactory = RetryOnDemand(
+      () => TripPlannerHttpClient.resolveFromRedirect(
+        kIsWeb
+            ? Uri(path: '/trip_planner/')
+            : Uri.parse('https://www.bask.org/trip_planner/'),
+      ),
+    );
+
+    await Hive.initFlutter();
+    BlobCache.registerAdapters();
+    TripPlannerClient.registerAdapters();
+
+    final stationCache = CacheBox.tryOpen<Station>('StationCache');
+    final tideGraphCache = BlobCache.open('TideGraphCache');
+    final tileCache = BlobCache.open('TileCache');
+
+    final softExpiry = (Instant.now() - const Duration(days: 180)).value;
+    tideGraphCache.then(
+      (cache) => cache.evict(
+        (blobs, metadata) =>
+            // approx. 5 MB @ 20 kB ea.
+            blobs > 250 ||
+            blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
+      ),
+    );
+    tileCache.then(
+      (cache) => cache.evict(
+        (blobs, metadata) =>
+            // approx. 50 MB @ 100 kB ea.
+            blobs > 500 ||
+            blobs > 50 && metadata.lastAccess.isBefore(softExpiry),
+      ),
+    );
+
+    await prefetch;
+
+    return TripPlanner(
+      tripPlannerClient: TripPlannerClient(
+        await stationCache,
+        await tideGraphCache,
+        httpClientFactory.get,
+        TimeZone.forId('America/Los_Angeles'),
+      ),
+      wmsClient: http.Client(),
+      tileCache: await tileCache,
+    );
+  }
 
   const TripPlanner({
     super.key,

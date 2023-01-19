@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geomag/geomag.dart';
-import 'package:motion_sensors/motion_sensors.dart';
+import 'package:motion_sensors/motion_sensors.dart' as platform;
 import 'package:vector_math/vector_math_64.dart';
 
 import '../util/angle.dart';
 import '../util/optional.dart';
 import '../util/value_stream.dart';
+
+platform.MotionSensors motionSensors = platform.motionSensors;
 
 Future<void> prefetchCapabilities() async {
   WidgetsFlutterBinding.ensureInitialized();

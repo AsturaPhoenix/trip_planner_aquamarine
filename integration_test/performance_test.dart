@@ -116,7 +116,7 @@ class WebPerformanceMonitor {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Tile overlay performance test', (tester) async {
+  testWidgets('tile overlay performance test', (tester) async {
     final mapControllerCompleter = Completer<GoogleMapController>();
     final onCameraIdleController = StreamController<void>.broadcast();
 

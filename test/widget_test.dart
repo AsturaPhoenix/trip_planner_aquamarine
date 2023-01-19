@@ -68,13 +68,12 @@ void main() {
   late TripPlannerClient tripPlannerClient;
   late MockClient wmsClient;
 
-  setUp(() async {
+  setUp(() {
     PermissionHandlerPlatform.instance =
         permissionHandler = MockPermissionHandlerPlatform();
     GeolocatorPlatform.instance = geolocator = MockGeolocatorPlatform();
 
     SharedPreferences.setMockInitialValues({});
-    await TripPlanner.initAsyncGlobals();
 
     tripPlannerHttpClient = MockTripPlannerHttpClient();
     stationCache = FakeBox();
@@ -91,13 +90,15 @@ void main() {
     wmsClient = MockClient();
   });
 
+  setUp(TripPlanner.initAsyncGlobals);
+
   TripPlanner buildTripPlanner() => TripPlanner(
         tripPlannerClient: tripPlannerClient,
         wmsClient: wmsClient,
         tileCache: tileCache,
       );
 
-  testWidgets('Smoke test', (tester) async {
+  testWidgets('smoke test', (tester) async {
     await tester.pumpWidget(buildTripPlanner());
     expect(find.byType(GoogleMap), findsOneWidget);
   });
@@ -119,8 +120,7 @@ void main() {
     when(
       permissionHandler.requestPermissions([Permission.locationWhenInUse]),
     ).thenAnswer(
-      (realInvocation) async =>
-          {Permission.locationWhenInUse: PermissionStatus.granted},
+      (_) async => {Permission.locationWhenInUse: PermissionStatus.granted},
     );
     when(
       geolocator.getPositionStream(
@@ -131,23 +131,24 @@ void main() {
     return position;
   }
 
-  group('With stations and tide graphs', () {
+  group('with stations and tide graphs', () {
     setUp(() {
       withStations().complete(testStations);
       withTideGraphs();
     });
 
-    testWidgets('Initializes without location permission', (tester) async {
+    testWidgets('initializes without location permission', (tester) async {
       await tester.pumpWidget(buildTripPlanner());
       await tester.flushAsync();
       await tester.pumpAndSettle();
       expect(find.byType(TidePanel), findsOneWidget);
-      // We need to flush the scheduled _onPanelChanged or the test will complain.
-      // There isn't a great way to dispose this timer. flutter/flutter PR 116422
+      // We need to flush the scheduled _onPanelChanged or the test will
+      // complain. There isn't a great way to dispose this timer.
+      // flutter/flutter PR 116422
       await tester.pump(Duration.zero);
     });
 
-    testWidgets("Doesn't try to flip station z-indices after disposed",
+    testWidgets("doesn't try to flip station z-indices after disposed",
         (tester) async {
       await tester.pumpWidget(buildTripPlanner());
       await tester.flushAsync();
@@ -158,7 +159,7 @@ void main() {
       await tester.pump(Duration.zero);
     });
 
-    testWidgets('Default station priority', (tester) async {
+    testWidgets('default station priority', (tester) async {
       await tester.pumpWidget(buildTripPlanner());
       await tester.flushAsync();
       await tester.pumpAndSettle();
@@ -176,7 +177,7 @@ void main() {
       );
     });
 
-    testWidgets('Flips station z-indices when details panel is selected',
+    testWidgets('flips station z-indices when details panel is selected',
         (tester) async {
       await tester.pumpWidget(buildTripPlanner());
       await tester.flushAsync();
@@ -198,7 +199,7 @@ void main() {
       );
     });
 
-    testWidgets('Waits for location fix to initialize', (tester) async {
+    testWidgets('waits for location fix to initialize', (tester) async {
       final position = withLocation();
 
       await tester.pumpWidget(buildTripPlanner());
@@ -217,7 +218,7 @@ void main() {
     });
   });
 
-  testWidgets('Initializes after location then stations', (tester) async {
+  testWidgets('initializes after location then stations', (tester) async {
     final position = withLocation();
     final stations = withStations();
     withTideGraphs();

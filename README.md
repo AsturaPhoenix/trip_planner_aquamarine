@@ -26,11 +26,45 @@ In `.vscode`, create a `settings.json` file with a configuration value for `maps
 }
 ```
 
-This will be injected into Android and iOS builds. For web, you'll need to live without an API key for debug or edit the generated `index.html` after build for now.
+This will be injected into Android and iOS builds. For web, you'll need to live without an API key for debug or edit the generated `index.html` after build for now. For integration tests, you'll need to set a MAPS_API_KEY environment variable.
 
 ### CORS
 
 For local web, you'll need a local trip planner at `http://localhost/trip_planner/` with `Header set Access-Control-Allow-Origin *` to serve resources that would otherwise be CORS restricted.
+
+## Testing
+
+### Unit/widget tests
+
+Unit/widget tests may be run from the IDE or the command line.
+
+```
+flutter test
+```
+
+### Integration tests
+
+To test with Google Maps, a `MAPS_API_KEY` environment variable must be set.
+
+*Windows PowerShell*
+
+```
+$env:MAPS_API_KEY = "..."
+```
+
+To run the tests,
+
+```
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/integration_test.dart
+```
+
+### Performance tests
+
+https://docs.flutter.dev/testing/integration-tests#running-in-a-browser
+
+```
+flutter drive -d chrome --driver test_driver/integration_test.dart --target integration_test/performance_test.dart --profile
+```
 
 ## Building
 

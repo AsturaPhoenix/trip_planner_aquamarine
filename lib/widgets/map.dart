@@ -390,6 +390,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         // with a trainwreck of onCameraMove events, for which we want to
         // compare with the previous camera position to determine whether to
         // unlock.
+        if (!mounted) return;
         setState(() => this.cameraPosition = cameraPosition);
       },
     );
@@ -487,14 +488,14 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
-    super.dispose();
-    mapAnimation.ticker.stop(canceled: true);
+    mapAnimation.dispose();
     trackingSubscription?.cancel();
     gmap?.dispose();
     gmap = null;
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
     }
+    super.dispose();
   }
 
   @override
