@@ -114,9 +114,7 @@ class AnimationCoordinator<State, Delta> {
   bool get isActive => ticker.isActive;
   final animations = Queue<_Animation<Delta>>();
 
-  void dispose() {
-    ticker.dispose();
-  }
+  void dispose() => ticker.dispose();
 
   void _start() {
     ticker.start();

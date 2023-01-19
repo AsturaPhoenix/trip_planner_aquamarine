@@ -13,7 +13,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
-import '../test/util/test_cache.dart';
+import '../test/util/cache.dart';
 
 class FakeWmsClient extends Fake implements http.Client {
   final random = Random();

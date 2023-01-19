@@ -1,3 +1,4 @@
+const kDatapointsXml = r'''
 <!-- $Id: datapoints.xml,v 1.105 2022/12/16 21:36:40 wp_us7xtt Exp $ -->
 <stations>
 <station station_type='current' subtype='Reference' cid='1' title='San Francisco Bay entrance (outside) (depth 19 ft), California Current' source='harmonics-dwf-20210110-free.tcd' zone='530' noaa_id='SFB1201_26'>
@@ -11325,3 +11326,4 @@
   ]]></details>
 </station>
 </stations>
+''';

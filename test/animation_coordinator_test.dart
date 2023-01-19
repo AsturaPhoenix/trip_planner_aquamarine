@@ -65,6 +65,7 @@ void main() {
       setState: (value) => state = value,
       clock: () => t,
     );
+    addTearDown(() => animator.dispose());
 
     const epsilon = .0001;
 

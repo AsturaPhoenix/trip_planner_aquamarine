@@ -46,7 +46,7 @@ extension Upsample<T> on Stream<T> {
       onResume: () => subscription.resume(),
       onCancel: () {
         subscription.cancel();
-        blender.ticker.dispose();
+        blender.dispose();
       },
     );
 

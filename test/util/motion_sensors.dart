@@ -11,7 +11,9 @@ class FakeMotionSensorsDriver {
 }
 
 class FakeMotionSensors extends Fake implements MotionSensors {
-  final driver = FakeMotionSensorsDriver();
+  FakeMotionSensors([FakeMotionSensorsDriver? driver])
+      : driver = driver ?? FakeMotionSensorsDriver();
+  final FakeMotionSensorsDriver driver;
 
   @override
   isAbsoluteOrientationAvailable() =>
