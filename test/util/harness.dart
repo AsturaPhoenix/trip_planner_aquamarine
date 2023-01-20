@@ -70,6 +70,9 @@ class TripPlannerHarness {
           .complete(isAbsoluteOrientationAvailable);
     }
 
+    when(wmsClient.get(any))
+        .thenAnswer((_) => Completer<http.Response>().future);
+
     await TripPlanner.initAsyncGlobals();
   }
 

@@ -15,7 +15,10 @@ extension TesterAsync on WidgetTester {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final end = binding.clock.fromNowBy(timeout);
-    while (finder.evaluate().isEmpty && binding.clock.now().isBefore(end)) {
+    while (finder.evaluate().isEmpty) {
+      if (!binding.clock.now().isBefore(end)) {
+        throw TimeoutException('waitFor timed out');
+      }
       await pump(interval);
     }
   }
@@ -25,9 +28,13 @@ extension TesterAsync on WidgetTester {
     Duration interval = kFrame,
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    var end = binding.clock.fromNowBy(timeout);
-    future.then((_) => end = binding.clock.now());
-    while (binding.clock.now().isBefore(end)) {
+    final end = binding.clock.fromNowBy(timeout);
+    var pending = true;
+    future.then((_) => pending = false);
+    while (pending) {
+      if (!binding.clock.now().isBefore(end)) {
+        throw TimeoutException('pumpUntil timed out');
+      }
       await pump(interval);
     }
   }
