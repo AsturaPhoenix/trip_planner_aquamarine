@@ -10,6 +10,7 @@ import 'package:permission_handler_platform_interface/permission_handler_platfor
 import 'package:trip_planner_aquamarine/widgets/tide_panel.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import '../test/data/datapoints.xml.dart';
 import '../test/util/async.dart';
 import '../test/util/harness.dart';
 
@@ -33,7 +34,7 @@ void main() {
   /// to do) to test against its idiosyncrasies.
   patrolTest('permissions requests and app lifecycles', nativeAutomation: true,
       ($) async {
-    harness.withStations().complete(TripPlannerHarness.testStations);
+    harness.withStations().complete(kDatapointsXml);
     harness.withTideGraphs();
     final position = harness.withLocation();
     final orientation = harness.withOrientation();

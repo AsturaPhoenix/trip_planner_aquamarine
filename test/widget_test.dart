@@ -6,6 +6,7 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 import 'package:trip_planner_aquamarine/widgets/tide_panel.dart';
 
+import 'data/datapoints.xml.dart';
 import 'util/harness.dart';
 
 extension on WidgetTester {
@@ -28,7 +29,7 @@ void main() {
 
   group('with stations and tide graphs', () {
     setUp(() {
-      harness.withStations().complete(TripPlannerHarness.testStations);
+      harness.withStations().complete(kDatapointsXml);
       harness.withTideGraphs();
     });
 
@@ -123,7 +124,7 @@ void main() {
     await tester.flushAsync();
     await tester.pumpAndSettle();
 
-    stations.complete(TripPlannerHarness.testStations);
+    stations.complete(kDatapointsXml);
     await tester.pumpAndSettle();
     expect(find.byType(TidePanel), findsOneWidget);
 

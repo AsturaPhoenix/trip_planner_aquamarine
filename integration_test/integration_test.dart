@@ -10,6 +10,7 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import '../test/data/datapoints.xml.dart';
 import '../test/util/async.dart';
 import '../test/util/harness.dart';
 
@@ -24,7 +25,7 @@ class MapHarness extends StatelessWidget {
           body: Map(
             client: harness.wmsClient,
             tileCache: harness.tileCache,
-            stations: TripPlannerHarness.testStations,
+            stations: kDatapointsXml,
             selectedStation: selectedStation,
           ),
         ),
@@ -128,7 +129,7 @@ void main() {
       await tester.pumpWidget(
         MapHarness(
           harness: harness,
-          selectedStation: TripPlannerHarness.testStations.values
+          selectedStation: kDatapointsXml.values
               .firstWhere((station) => station.type == StationType.nogo),
         ),
       );

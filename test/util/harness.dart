@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 import 'package:http/http.dart' as http;
@@ -16,7 +15,6 @@ import 'package:trip_planner_aquamarine/platform/orientation.dart'
     as orientation;
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
-import '../data/datapoints.xml.dart';
 import '../data/empty.png.dart';
 import 'async.dart';
 import 'cache.dart';
@@ -42,8 +40,6 @@ class TripPlannerHarness {
     speedAccuracy: 0.0,
   );
 
-  static final testStations = parseStations(kDatapointsXml);
-  static final testImage = const Base64Decoder().convert(kEmptyPng);
   static final timeZone = TimeZone.forId('America/Los_Angeles');
 
   static void setUpAll() {
@@ -120,7 +116,7 @@ class TripPlannerHarness {
 
   void withTideGraphs() =>
       when(tripPlannerHttpClient.getTideGraph(any, any, any, any, any))
-          .thenAnswer((_) async => testImage);
+          .thenAnswer((_) async => kEmptyPng);
 
   StreamController<OrientationEvent> withOrientation() {
     motionSensors.screenOrientation.seed(ScreenOrientationEvent(0));

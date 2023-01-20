@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 import 'package:trip_planner_aquamarine/platform/compositor.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
+import 'data/empty.png.dart';
 import 'util/cache.dart';
 @GenerateNiceMocks([MockSpec<http.Client>()])
 import 'wms_tile_provider_test.mocks.dart';
@@ -67,10 +68,7 @@ void main() {
   // decode can flake under load, so don't cache failed decodes.
   test('does not deduplicate failed decode attempts', () async {
     when(mockHttpClient.get(any)).thenAnswer(
-      (_) async => http.Response.bytes(
-        File('test/data/empty.png').readAsBytesSync(),
-        HttpStatus.ok,
-      ),
+      (_) async => http.Response.bytes(kEmptyPng, HttpStatus.ok),
     );
 
     final actualDecode = CompositorImage.decode;
