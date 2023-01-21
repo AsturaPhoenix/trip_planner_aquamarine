@@ -39,7 +39,7 @@ dependencies:
   async: ^2.10.0
   camera:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/camera/camera
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   collection: ^1.17.0
@@ -51,7 +51,7 @@ dependencies:
   flutter_html: ^3.0.0-alpha.6
   flutter_html_table:
     git:
-      url: git@github.com:AsturaPhoenix/flutter_html.git
+      url: https://github.com/AsturaPhoenix/flutter_html.git
       path: packages/flutter_html_table
       ref: 0e84bd20cbf43c9c523231b4d4bf39439d758408
   flutter_svg: ^1.1.6
@@ -59,12 +59,12 @@ dependencies:
   geomag: ^0.2.1
   google_maps_flutter:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   google_maps_flutter_web:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter_web
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   gpx: ^2.2.1
@@ -73,13 +73,13 @@ dependencies:
   http: ^0.13.5
   joda:
     git:
-      url: git@github.com:AsturaPhoenix/joda_time.git
+      url: https://github.com/AsturaPhoenix/joda_time.git
       ref: 7bf639a31f1552ae623d470f84fca66770424e9d
   json_annotation: ^4.7.0
   logging: ^1.1.0
   motion_sensors:
     git:
-      url: git@github.com:AsturaPhoenix/motion_sensors.git
+      url: https://github.com/AsturaPhoenix/motion_sensors.git
       ref: 97c13355834017ec9ebf6e1188d2f3a05c6e4c28
   path: ^1.8.2
   permission_handler: ^10.2.0
@@ -100,17 +100,17 @@ dependency_overrides:
       ref: e1a4dba770da9bc3cf9f858bac6837083f8b9059
   google_maps_flutter_android:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter_android
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   google_maps_flutter_ios:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter_ios
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
   google_maps_flutter_platform_interface:
     git:
-      url: git@github.com:AsturaPhoenix/flutter-plugins.git
+      url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/google_maps_flutter/google_maps_flutter_platform_interface
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
 
@@ -128,7 +128,7 @@ dev_dependencies:
   json_serializable: ^6.5.4
   mockito:
     git:
-      url: git@github.com:AsturaPhoenix/mockito.git
+      url: https://github.com/AsturaPhoenix/mockito.git
       ref: 9d36e917de6d4bc004abda2ee2b54f9b31ab4fb2
   patrol: ^0.10.8
   permission_handler_platform_interface: ^3.9.0

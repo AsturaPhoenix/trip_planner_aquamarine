@@ -1,0 +1,41 @@
+name: Pull request
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  FLUTTER_GIT_URL: https://github.com/AsturaPhoenix/flutter
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trip_planner_aquamarine
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+        with:
+          path: trip_planner_aquamarine
+      - name: Check out Flutter
+        uses: actions/checkout@v3
+        with:
+          repository: AsturaPhoenix/flutter
+          ref: rosswang
+          path: flutter
+          fetch-depth: 0 # to fetch tags to determine the Flutter version
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> $GITHUB_PATH
+      - name: Install Flutter dependencies
+        run: flutter doctor -v
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+      - name: pub get project dependencies
+        run: flutter pub get
+      - name: Analyze project source
+        run: flutter analyze --fatal-infos
+      - name: Unit and widget tests
+        run: flutter test
