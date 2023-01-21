@@ -70,8 +70,7 @@ final canonicalOrientation = CombinedValueStream(
 final ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
 
 class CachingGeoMag {
-  // These tolerances are semi arbitrary.
-  static const latitudeTolerance = 1.0, longitudeTolerance = 1.0;
+  static const degreesTolerance = .001;
   static const feetPerMeter = 3.28084;
 
   CachingGeoMag([GeoMag? geomag]) : _geomag = geomag ?? GeoMag();
@@ -88,8 +87,8 @@ class CachingGeoMag {
     if (latitude != null &&
         longitude != null &&
         (_geomagneticCorrection == null ||
-            (latitude - _referenceLatitude!).abs() > latitudeTolerance ||
-            (longitude - _referenceLongitude!).abs() > longitudeTolerance)) {
+            (latitude - _referenceLatitude!).abs() > degreesTolerance ||
+            (longitude - _referenceLongitude!).abs() > degreesTolerance)) {
       _referenceLatitude = latitude;
       _referenceLongitude = longitude;
       _geomagneticCorrection =
