@@ -4,6 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 const Duration kFrame = Duration(microseconds: 100000 ~/ 6);
 
+/// The emulator in CI can be extremely slow, even with hardware acceleration.
+/// It can take upwards of 10s just for Maps to load. Maybe a minute for the
+/// permissions dialog to show up.
+const kDefaultTimeout = Duration(minutes: 2);
+
 extension TestExtensions<T> on StreamController<T> {
   void seed(T value) => onListen = () => add(value);
 }
@@ -12,12 +17,12 @@ extension TesterAsync on WidgetTester {
   Future<void> waitFor(
     Finder finder, {
     Duration interval = kFrame,
-    Duration timeout = const Duration(seconds: 10),
+    Duration timeout = kDefaultTimeout,
   }) async {
     final end = binding.clock.fromNowBy(timeout);
     while (finder.evaluate().isEmpty) {
       if (!binding.clock.now().isBefore(end)) {
-        throw TimeoutException('waitFor timed out');
+        throw TimeoutException('waitFor $finder timed out after $timeout');
       }
       await pump(interval);
     }
@@ -26,7 +31,7 @@ extension TesterAsync on WidgetTester {
   Future<void> pumpUntil(
     Future future, {
     Duration interval = kFrame,
-    Duration timeout = const Duration(seconds: 10),
+    Duration timeout = kDefaultTimeout,
   }) async {
     final end = binding.clock.fromNowBy(timeout);
     var pending = true;

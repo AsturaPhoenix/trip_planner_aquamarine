@@ -330,6 +330,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   // For the most part this isn't called for moveCamera, but there are cases
   // where it is.
   void updateCameraPosition(CameraPosition newPosition) {
+    if (!mounted) return;
+
     // A full screen-space mapping uses the message channel and can interleave
     // with animation frames and produce an invalid result, so take advantage of
     // the Mercator projection and compute it here.

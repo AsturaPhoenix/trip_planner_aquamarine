@@ -57,6 +57,13 @@ void main() {
         ),
       );
 
+      // Even after the controller is ready, the map may not respond to touch
+      // events. (Also, in some cases on emulator the map refuses to ever load.)
+      // Wait until the map requests a tile to continue.
+      await tester.pumpUntil(
+        untilCalled(harness.wmsClient.get(any)).timeout(kDefaultTimeout),
+      );
+
       var finder =
           find.widgetWithImage(TextButton, PrecachedAsset.locationNorth.image);
       await tester.waitFor(finder);
@@ -72,7 +79,7 @@ void main() {
       await tester.drag(find.byType(GoogleMap), const Offset(64, 0));
 
       finder = find.widgetWithImage(TextButton, PrecachedAsset.compass.image);
-      await tester.pumpAndSettle();
+      await tester.waitFor(finder);
       await tester.tap(finder);
 
       finder = find.widgetWithImage(
@@ -95,30 +102,35 @@ void main() {
     testWidgets('fits nogo zone from free orientation', (tester) async {
       await tester.pumpWidget(MapHarness(harness: harness));
 
+      // Even after the controller is ready, the map may not respond to touch
+      // events. (Also, in some cases on emulator the map refuses to ever load.)
+      // Wait until the map requests a tile to continue.
+      await tester.pumpUntil(
+        untilCalled(harness.wmsClient.get(any)).timeout(kDefaultTimeout),
+      );
+
       // The controls show up once the map controller is ready.
       await tester.waitFor(
         find.widgetWithIcon(TextButton, Icons.location_searching),
       );
-
-      // Even after the controller is ready, the map may not respond to touch
-      // events. (Also, in some cases on emulator the map refuses to ever load.)
-      // Wait until the map requests a tile to continue.
-      await untilCalled(harness.wmsClient.get(any))
-          .timeout(const Duration(seconds: 10));
       await tester.pumpAndSettle();
 
-      final center = tester.getCenter(find.byType(GoogleMap));
-      final pointers = [
-        await tester.startGesture(pointer: 0, center - const Offset(-64, 0)),
-        await tester.startGesture(pointer: 1, center - const Offset(64, 0))
-      ];
-      for (int i = 0; i < 16; ++i) {
-        await pointers[0].moveBy(const Offset(0, -4));
-        await pointers[1].moveBy(const Offset(0, 4));
-        await tester.pump(kFrame);
-      }
-      for (final pointer in pointers) {
-        await pointer.up();
+      // Do the gesture twice in case the map isn't responseive yet to decrease
+      // the likelihood of a flake.
+      for (int i = 0; i < 2; ++i) {
+        final center = tester.getCenter(find.byType(GoogleMap));
+        final pointers = [
+          await tester.startGesture(pointer: 0, center - const Offset(-64, 0)),
+          await tester.startGesture(pointer: 1, center - const Offset(64, 0))
+        ];
+        for (int i = 0; i < 16; ++i) {
+          await pointers[0].moveBy(const Offset(0, -4));
+          await pointers[1].moveBy(const Offset(0, 4));
+          await tester.pump(kFrame);
+        }
+        for (final pointer in pointers) {
+          await pointer.up();
+        }
       }
 
       expect(
