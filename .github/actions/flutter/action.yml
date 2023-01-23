@@ -1,0 +1,50 @@
+name: Flutter
+description: Flutter checkout and PATH setup
+runs:
+  using: composite
+  steps:
+    - name: ENV
+      run: echo "FLUTTER_GIT_URL=https://github.com/AsturaPhoenix/flutter" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Hash
+      id: ls-remote
+      run: echo "hash=`git ls-remote $FLUTTER_GIT_URL rosswang | cut -f1`" >> $GITHUB_OUTPUT
+      shell: bash
+    - name: Flutter checkout restore
+      uses: actions/cache/restore@v3
+      id: checkout-cache
+      with:
+        path: flutter
+        key: flutter@${{ steps.ls-remote.outputs.hash }}
+    - name: Checkout
+      if: steps.checkout-cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v3
+      with:
+        repository: AsturaPhoenix/flutter
+        ref: ${{ steps.ls-remote.outputs.hash }}
+        path: flutter
+        fetch-depth: 0 # to fetch tags to determine the Flutter version
+    - name: Flutter checkout save
+      if: steps.checkout-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: flutter
+        key: ${{ steps.checkout-cache.outputs.cache-primary-key }}
+
+    - name: Flutter/pub cache
+      uses: actions/cache@v3
+      id: pub-cache
+      with:
+        path: |
+          flutter/bin/cache
+          ~/.pub-cache
+        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-${{ github.sha }}
+        restore-keys: |
+          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-
+          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-
+          pub-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: PATH
+      run: '{ echo "$GITHUB_WORKSPACE/flutter/bin"; echo "$HOME/.pub-cache/bin"; } >> $GITHUB_PATH'
+      shell: bash

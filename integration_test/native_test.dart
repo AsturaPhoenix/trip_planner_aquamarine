@@ -32,15 +32,21 @@ void main() {
   /// camera library rather than through PermissionHandlerPlatform, and anyway
   /// we need the camera actually serving data (which it needs real permission
   /// to do) to test against its idiosyncrasies.
-  patrolTest('permissions requests and app lifecycles', nativeAutomation: true,
-      ($) async {
+  patrolTest('permissions requests and app lifecycles',
+      config: const PatrolTesterConfig(
+        existsTimeout: kDefaultTimeout,
+        visibleTimeout: kDefaultTimeout,
+        settleTimeout: kDefaultTimeout,
+      ),
+      nativeAutomation: true, ($) async {
     harness.withStations().complete(kDatapointsXml);
     harness.withTideGraphs();
     final position = harness.withLocation();
     final orientation = harness.withOrientation();
 
-    await $.pumpWidgetAndSettle(harness.buildTripPlanner());
-    await $.native.grantPermissionOnlyThisTime();
+    await $.pumpWidget(harness.buildTripPlanner());
+    await $.tester.pumpUntil($.native.isPermissionDialogVisible());
+    await $.native.grantPermissionWhenInUse();
     position.add(TripPlannerHarness.horseshoeBayParkingLot);
     await $.waitUntilVisible(find.byType(TidePanel));
 
@@ -51,7 +57,7 @@ void main() {
       OrientationEvent(Quaternion.euler(-pi / 4, -pi / 2, 0)..conjugate()),
     );
     await $.tester.pumpUntil($.native.isPermissionDialogVisible());
-    await $.native.grantPermissionOnlyThisTime();
+    await $.native.grantPermissionWhenInUse();
     await $.pumpAndSettle();
 
     expect(find.byType(CameraPreview), findsOneWidget);

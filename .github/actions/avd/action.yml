@@ -1,0 +1,45 @@
+name: AVD
+description: AVD setup
+inputs:
+  profile:
+    description: Hardware profile
+    required: true
+  api-level:
+    description: Android API level
+    required: true
+  arch:
+    description: Architecture
+    required: true
+  target:
+    description: Target image
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: AVD cache restore
+      uses: actions/cache/restore@v3
+      id: avd-cache
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/adb*
+        key: avd-${{ inputs.profile }}-${{ inputs.api-level }}-${{ inputs.arch }}-${{ inputs.target }}
+    - name: Create AVD and generate snapshot for caching
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        profile: ${{ inputs.profile }}
+        api-level: ${{ inputs.api-level }}
+        arch: ${{ inputs.arch }}
+        target: ${{ inputs.target }}
+        force-avd-creation: false
+        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+        script: echo "Generated AVD snapshot for caching."
+    - name: AVD cache save
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/adb*
+        key: ${{ steps.avd-cache.outputs.cache-primary-key }}
