@@ -1,12 +1,15 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:trip_planner_aquamarine/main.dart';
 
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 import 'package:trip_planner_aquamarine/widgets/tide_panel.dart';
 
 import 'data/datapoints.xml.dart';
+import 'util/async.dart';
+import 'util/geolocator.dart';
 import 'util/harness.dart';
 
 extension on WidgetTester {
@@ -110,6 +113,23 @@ void main() {
 
       // We need to flush the scheduled _onPanelChanged or the test will complain.
       // There isn't a great way to dispose this timer. flutter/flutter PR 116422
+      await tester.pump(Duration.zero);
+    });
+
+    testWidgets("doesn't initialze station to unselectable station",
+        (tester) async {
+      final unselectableStation = kDatapointsXml.values
+          .firstWhere((station) => !Map.showMarkerTypes.contains(station.type));
+      harness.withLocation().seed(testPosition(unselectableStation.marker));
+
+      await tester.pumpWidget(harness.buildTripPlanner());
+      await tester.flushAsync();
+      await tester.pumpAndSettle();
+
+      final TripPlannerState state = tester.state(find.byType(TripPlanner));
+      expect(
+          state.selectedStation?.type, predicate(Map.showMarkerTypes.contains));
+
       await tester.pump(Duration.zero);
     });
   });
