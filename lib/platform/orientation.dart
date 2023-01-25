@@ -12,23 +12,13 @@ import '../util/angle.dart';
 import '../util/optional.dart';
 import '../util/value_stream.dart';
 
-platform.MotionSensors motionSensors = platform.motionSensors;
+Future<void> prefetchCapabilities() =>
+    PlatformOrientation._instance.prefetchCapabilities();
+bool get isOrientationAvailable =>
+    PlatformOrientation._instance.isOrientationAvailable;
 
-Future<void> prefetchCapabilities() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    _isOrientationAvailable =
-        await motionSensors.isAbsoluteOrientationAvailable();
-  } on MissingPluginException {
-    _isOrientationAvailable = false;
-  }
-}
-
-bool get isOrientationAvailable => _isOrientationAvailable;
-bool _isOrientationAvailable = false;
-
-set updateInterval(Duration interval) =>
-    motionSensors.absoluteOrientationUpdateInterval = interval.inMicroseconds;
+set updateInterval(Duration interval) => PlatformOrientation._instance
+    .motionSensors.absoluteOrientationUpdateInterval = interval.inMicroseconds;
 
 extension QuaternionTransform on Quaternion {
   Matrix4 asTransform() => Matrix4.identity()..setRotation(asRotationMatrix());
@@ -46,28 +36,11 @@ Quaternion calculateCanonicalOrientation(
 ) =>
     q * Quaternion.axisAngle(screenOrientationAxis, screenOrientation.radians);
 
-// Motion sensors don't re-emit their most recent value on resubscribe, so we
-// need to cache the screen orientation ourselves so that we can unsubscribe
-// from the orientation sensors when not in use. Otherwise, we won't be able to
-// compute orientation until the next screen rotation. Don't cache the
-// orientation itself as that will be quite stale, will refresh quickly, and
-// we'll be caching the computed canonical orientation anyway.
-final screenOrientation = ValueStream.fromStream(
-  motionSensors.screenOrientation
-      .map((screenOrientation) => Degrees(screenOrientation.angle)),
-);
-
-final canonicalOrientation = CombinedValueStream(
-  ValueStream.fromStream(
-    motionSensors.absoluteOrientation.map(
-      (orientation) => orientation.quaternion,
-    ),
-  ),
-  screenOrientation,
-  calculateCanonicalOrientation,
-);
-
-final ValueStream<Angle> bearing = canonicalOrientation.map((q) => -yaw(q));
+ValueStream<Angle> get screenOrientation =>
+    PlatformOrientation._instance.screenOrientation;
+ValueStream<Quaternion> get canonicalOrientation =>
+    PlatformOrientation._instance.canonicalOrientation;
+ValueStream<Angle> get bearing => PlatformOrientation._instance.bearing;
 
 class CachingGeoMag {
   static const degreesTolerance = .001;
@@ -112,13 +85,62 @@ const _accuracyApproximations = [
   Degrees(15), // high
 ];
 
-final ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
-  motionSensors.absoluteOrientation
-      .map((event) => event.accuracy)
-      .distinct()
-      .map(
-        (accuracy) => (accuracy ?? 0) >= 0
-            ? Optional(accuracy).map(Radians.new)
-            : _accuracyApproximations[-accuracy!.toInt() - 1],
+ValueStream<Angle?> get accuracy => PlatformOrientation._instance.accuracy;
+
+class PlatformOrientation {
+  static PlatformOrientation _instance = PlatformOrientation();
+  static void reset([platform.MotionSensors? motionSensors]) =>
+      _instance = PlatformOrientation(motionSensors);
+
+  PlatformOrientation([platform.MotionSensors? motionSensors])
+      : motionSensors = motionSensors ?? platform.motionSensors;
+  final platform.MotionSensors motionSensors;
+
+  Future<void> prefetchCapabilities() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    try {
+      _isOrientationAvailable =
+          await motionSensors.isAbsoluteOrientationAvailable();
+    } on MissingPluginException {
+      _isOrientationAvailable = false;
+    }
+  }
+
+  bool get isOrientationAvailable => _isOrientationAvailable;
+  bool _isOrientationAvailable = false;
+
+  // Motion sensors don't re-emit their most recent value on resubscribe, so we
+  // need to cache the screen orientation ourselves so that we can unsubscribe
+  // from the orientation sensors when not in use. Otherwise, we won't be able
+  // to compute orientation until the next screen rotation. Don't cache the
+  // orientation itself as that will be quite stale, will refresh quickly, and
+  // we'll be caching the computed canonical orientation anyway.
+  late final screenOrientation = ValueStream.fromStream(
+    motionSensors.screenOrientation
+        .map((screenOrientation) => Degrees(screenOrientation.angle)),
+  );
+
+  late final canonicalOrientation = CombinedValueStream(
+    ValueStream.fromStream(
+      motionSensors.absoluteOrientation.map(
+        (orientation) => orientation.quaternion,
       ),
-);
+    ),
+    screenOrientation,
+    calculateCanonicalOrientation,
+  );
+
+  late final ValueStream<Angle> bearing =
+      canonicalOrientation.map((q) => -yaw(q));
+
+  late final ValueStream<Angle?> accuracy = ValueStream.fromStream<Angle?>(
+    motionSensors.absoluteOrientation
+        .map((event) => event.accuracy)
+        .distinct()
+        .map(
+          (accuracy) => (accuracy ?? 0) >= 0
+              ? Optional(accuracy).map(Radians.new)
+              : _accuracyApproximations[-accuracy!.toInt() - 1],
+        ),
+  );
+}

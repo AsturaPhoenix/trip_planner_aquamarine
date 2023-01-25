@@ -52,16 +52,10 @@ To test with Google Maps, a `MAPS_API_KEY` environment variable must be set.
 $env:MAPS_API_KEY = "..."
 ```
 
-To run the integration tests,
+Integration tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli).
 
 ```
-flutter drive --driver=test_driver/integration_test.dart --target=integration_test/integration_test.dart
-```
-
-Native tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli).
-
-```
-patrol drive -t integration_test/native_test.dart
+patrol drive -t integration_test/integration_test.dart
 ```
 
 ### Performance tests

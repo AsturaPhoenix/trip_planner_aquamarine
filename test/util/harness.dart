@@ -9,8 +9,11 @@ import 'package:motion_sensors/motion_sensors.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:test/test.dart';
 import 'package:timezone/data/latest_10y.dart';
 import 'package:trip_planner_aquamarine/main.dart';
+import 'package:trip_planner_aquamarine/platform/location.dart';
 import 'package:trip_planner_aquamarine/platform/orientation.dart'
     as orientation;
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -52,18 +55,29 @@ class TripPlannerHarness {
     bool isAbsoluteOrientationAvailable = false,
   }) async {
     if (!useReal.contains(SharedPreferences)) {
+      final old = SharedPreferencesStorePlatform.instance;
       SharedPreferences.setMockInitialValues({});
+      addTearDown(() => SharedPreferencesStorePlatform.instance = old);
     }
     if (!useReal.contains(PermissionHandlerPlatform)) {
+      final old = PermissionHandlerPlatform.instance;
       PermissionHandlerPlatform.instance = permissionHandler;
+      addTearDown(() => PermissionHandlerPlatform.instance = old);
     }
     if (!useReal.contains(GeolocatorPlatform)) {
+      final old = GeolocatorPlatform.instance;
       GeolocatorPlatform.instance = geolocator;
+      PlatformLocation.reset();
+      addTearDown(() {
+        GeolocatorPlatform.instance = old;
+        PlatformLocation.reset();
+      });
     }
     if (!useReal.contains(MotionSensors)) {
-      orientation.motionSensors = FakeMotionSensors(motionSensors);
+      orientation.PlatformOrientation.reset(FakeMotionSensors(motionSensors));
       motionSensors.isAbsoluteOrientationAvailable
           .complete(isAbsoluteOrientationAvailable);
+      addTearDown(() => orientation.PlatformOrientation.reset());
     }
 
     when(wmsClient.get(any))

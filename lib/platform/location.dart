@@ -12,72 +12,92 @@ import '../util/value_stream.dart';
 final bool canRequestLocation =
     !kIsWeb || Uri.base.scheme == 'https' || Uri.base.host == 'localhost';
 
-Future<bool> requestPermission() => _permissionRequest.fetch(
-      () async {
-        final wasEnabled = isEnabled.value;
-        if (kIsWeb) {
-          _isEnabled.add(true);
-        } else {
-          _permissionStatus.add(await Permission.locationWhenInUse.request());
-          _isEnabled.add(permissionStatus.value!.isGranted);
-        }
+Future<bool> requestPermission() =>
+    PlatformLocation._instance.requestPermission();
+InitializedValueStream<bool> get isEnabled =>
+    PlatformLocation._instance.isEnabled;
+ValueStream<PermissionStatus> get permissionStatus =>
+    PlatformLocation._instance.permissionStatus;
+Stream<Position?> get requestedPosition =>
+    PlatformLocation._instance.requestedPosition;
+ValueStream<Position?> get passivePosition =>
+    PlatformLocation._instance.passivePosition;
 
-        if (_passivePosition.streamController.hasListener &&
-            wasEnabled != isEnabled.value) {
-          if (isEnabled.value) {
-            _subscribePassivePosition();
+class PlatformLocation {
+  static PlatformLocation _instance = PlatformLocation();
+
+  @visibleForTesting
+  static void reset() => _instance = PlatformLocation();
+
+  Future<bool> requestPermission() => _permissionRequest.fetch(
+        () async {
+          final wasEnabled = isEnabled.value;
+          if (kIsWeb) {
+            _isEnabled.add(true);
           } else {
-            _passivePositionSubscription!.cancel();
-            _passivePosition.add(null);
+            _permissionStatus.add(await Permission.locationWhenInUse.request());
+            _isEnabled.add(permissionStatus.value!.isGranted);
           }
-        }
-        return isEnabled.value;
-      },
-    );
-final _permissionRequest = AsyncCache<bool>.ephemeral();
 
-final isEnabled = _isEnabled.valueStream;
-final _isEnabled =
-    InitializedValueStreamController<bool>(StreamController.broadcast(), false);
-final permissionStatus = _permissionStatus.valueStream;
-final _permissionStatus =
-    ValueStreamController<PermissionStatus>(StreamController.broadcast());
-
-final Stream<Position?> requestedPosition = Stream.multi(
-  (controller) async {
-    try {
-      return controller.addStream(
-        await requestPermission()
-            ? passivePosition.seededStream
-                .skipWhile((position) => position == null)
-            : passivePosition.seededStream,
+          if (_passivePosition.streamController.hasListener &&
+              wasEnabled != isEnabled.value) {
+            if (isEnabled.value) {
+              _subscribePassivePosition();
+            } else {
+              _passivePositionSubscription!.cancel();
+              _passivePosition.add(null);
+            }
+          }
+          return isEnabled.value;
+        },
       );
-    } catch (e, s) {
-      controller.addError(e, s);
-    }
-  },
-);
+  final _permissionRequest = AsyncCache<bool>.ephemeral();
 
-final passivePosition =
-    _passivePosition.valueStream.transform((s, _) => s.refCount());
+  late final isEnabled = _isEnabled.valueStream;
+  final _isEnabled = InitializedValueStreamController<bool>(
+    StreamController.broadcast(),
+    false,
+  );
+  late final permissionStatus = _permissionStatus.valueStream;
+  final _permissionStatus =
+      ValueStreamController<PermissionStatus>(StreamController.broadcast());
 
-StreamSubscription? _passivePositionSubscription;
-final _passivePosition = ValueStreamController<Position?>(
-  StreamController.broadcast(
-    onListen: () {
-      if (isEnabled.value) {
-        _subscribePassivePosition();
+  late final Stream<Position?> requestedPosition = Stream.multi(
+    (controller) async {
+      try {
+        return controller.addStream(
+          await requestPermission()
+              ? passivePosition.seededStream
+                  .skipWhile((position) => position == null)
+              : passivePosition.seededStream,
+        );
+      } catch (e, s) {
+        controller.addError(e, s);
       }
     },
-    onCancel: () {
-      if (isEnabled.value) {
-        _passivePositionSubscription!.cancel();
-      }
-    },
-  ),
-);
+  );
 
-void _subscribePassivePosition() {
-  _passivePositionSubscription =
-      Geolocator.getPositionStream().listen(_passivePosition.add);
+  late final passivePosition =
+      _passivePosition.valueStream.transform((s, _) => s.refCount());
+
+  StreamSubscription? _passivePositionSubscription;
+  late final _passivePosition = ValueStreamController<Position?>(
+    StreamController.broadcast(
+      onListen: () {
+        if (isEnabled.value) {
+          _subscribePassivePosition();
+        }
+      },
+      onCancel: () {
+        if (isEnabled.value) {
+          _passivePositionSubscription!.cancel();
+        }
+      },
+    ),
+  );
+
+  void _subscribePassivePosition() {
+    _passivePositionSubscription =
+        Geolocator.getPositionStream().listen(_passivePosition.add);
+  }
 }
