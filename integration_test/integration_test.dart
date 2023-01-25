@@ -25,7 +25,7 @@ class MapHarness extends StatelessWidget {
           body: Map(
             client: harness.wmsClient,
             tileCache: harness.tileCache,
-            stations: kDatapointsXml,
+            stations: kDatapoints,
             selectedStation: selectedStation,
           ),
         ),
@@ -141,7 +141,7 @@ void main() {
       await tester.pumpWidget(
         MapHarness(
           harness: harness,
-          selectedStation: kDatapointsXml.values
+          selectedStation: kDatapoints.values
               .firstWhere((station) => station.type == StationType.nogo),
         ),
       );

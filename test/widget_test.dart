@@ -32,7 +32,7 @@ void main() {
 
   group('with stations and tide graphs', () {
     setUp(() {
-      harness.withStations().complete(kDatapointsXml);
+      harness.withStations().complete(kDatapoints);
       harness.withTideGraphs();
     });
 
@@ -118,7 +118,7 @@ void main() {
 
     testWidgets("doesn't initialze station to unselectable station",
         (tester) async {
-      final unselectableStation = kDatapointsXml.values
+      final unselectableStation = kDatapoints.values
           .firstWhere((station) => !Map.showMarkerTypes.contains(station.type));
       harness.withLocation().seed(testPosition(unselectableStation.marker));
 
@@ -144,7 +144,7 @@ void main() {
     await tester.flushAsync();
     await tester.pumpAndSettle();
 
-    stations.complete(kDatapointsXml);
+    stations.complete(kDatapoints);
     await tester.pumpAndSettle();
     expect(find.byType(TidePanel), findsOneWidget);
 
