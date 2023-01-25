@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -211,7 +212,11 @@ class TripPlannerHttpClient {
       throw response;
     }
 
-    return parseStations(response.body);
+    /// The server may omit character encoding for XML, which should default to
+    /// UTF-8 or 16 rather than latin1 as in the default RFC 2616 for
+    /// Response.body. Since we control the data source, go ahead and hard-code
+    /// UTF-8.
+    return parseStations(const Utf8Decoder().convert(response.bodyBytes));
   }
 
   late final tidesUrl = baseUrl.resolve('tides.php');

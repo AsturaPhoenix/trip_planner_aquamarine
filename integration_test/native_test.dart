@@ -39,7 +39,7 @@ void main() {
         settleTimeout: kDefaultTimeout,
       ),
       nativeAutomation: true, ($) async {
-    harness.withStations().complete(kDatapointsXml);
+    harness.withStations().complete(kDatapoints);
     harness.withTideGraphs();
     final position = harness.withLocation();
     final orientation = harness.withOrientation();
