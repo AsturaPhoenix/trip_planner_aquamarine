@@ -53,36 +53,6 @@ jobs:
           name: integration_test_apk
           path: trip_planner_aquamarine/build/app/outputs/flutter-apk/app-debug.apk
 
-  build-native-test:
-    name: Build native test APK
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: trip_planner_aquamarine
-
-    steps:
-      - name: Check out repo
-        uses: actions/checkout@v3
-        with:
-          path: trip_planner_aquamarine
-      - name: Set up Flutter
-        uses: ./trip_planner_aquamarine/.github/actions/flutter
-
-      - name: Gradle cache
-        uses: gradle/gradle-build-action@v2
-        with:
-          cache-read-only: false # Better support for pull requests. (Keep build-integration-test with the default as these will cache mostly the same artifacts.)
-
-      - name: Build native test apk
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: flutter build apk -t integration_test/native_test.dart --debug -v
-      - name: Upload native test apk
-        uses: actions/upload-artifact@v3
-        with:
-          name: native_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk/app-debug.apk
-
   integration-test:
     runs-on: macos-latest
     needs: build-integration-test
@@ -113,6 +83,7 @@ jobs:
           arch: ${{ matrix.arch }}
           target: ${{ matrix.target }}
 
+      - run: flutter pub get
       - run: dart pub global activate patrol_cli
 
       - name: Download integration test apk
@@ -130,54 +101,10 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: trip_planner_aquamarine
-          script: flutter drive --driver=test_driver/integration_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk -v
-
-  native-test:
-    runs-on: macos-latest
-    needs: build-native-test
-    defaults:
-      run:
-        working-directory: trip_planner_aquamarine
-
-    strategy:
-      matrix:
-        profile: [pixel_3a]
-        api-level: [29]
-        arch: [x86_64]
-        target: [google_apis]
-
-    steps:
-      - name: Check out repo
-        uses: actions/checkout@v3
+          script: patrol drive -t integration_test/integration_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk -v
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v3
         with:
-          path: trip_planner_aquamarine
-      - name: Set up Flutter
-        uses: ./trip_planner_aquamarine/.github/actions/flutter
-
-      - name: Set up emulator
-        uses: ./trip_planner_aquamarine/.github/actions/avd
-        with:
-          profile: ${{ matrix.profile }}
-          api-level: ${{ matrix.api-level }}
-          arch: ${{ matrix.arch }}
-          target: ${{ matrix.target }}
-
-      - run: flutter pub get
-      - run: dart pub global activate patrol_cli
-
-      - name: Download native test apk
-        uses: actions/download-artifact@v3
-        with:
-          name: native_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk
-      - name: Native tests
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          profile: ${{ matrix.profile }}
-          api-level: ${{ matrix.api-level }}
-          arch: ${{ matrix.arch }}
-          target: ${{ matrix.target }}
-          force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          working-directory: trip_planner_aquamarine
-          script: patrol drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk -v
+          name: Failure screenshots
+          path: trip_planner_aquamarine/ci_screenshots
