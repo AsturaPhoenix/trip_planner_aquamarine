@@ -26,8 +26,7 @@ void main() {
   test('datapoints http unicode', () async {
     final client = MockClient();
     when(client.get(Uri.parse('datapoints.xml'))).thenAnswer((_) async =>
-        http.Response.bytes(
-            const Utf8Encoder().convert(kDatapointsXml), HttpStatus.ok));
+        http.Response.bytes(utf8.encode(kDatapointsXml), HttpStatus.ok));
 
     final datapoints =
         await TripPlannerHttpClient(client, Uri()).getDatapoints();
