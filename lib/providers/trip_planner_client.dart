@@ -216,7 +216,7 @@ class TripPlannerHttpClient {
     /// UTF-8 or 16 rather than latin1 as in the default RFC 2616 for
     /// Response.body. Since we control the data source, go ahead and hard-code
     /// UTF-8.
-    return parseStations(const Utf8Decoder().convert(response.bodyBytes));
+    return parseStations(utf8.decode(response.bodyBytes));
   }
 
   late final tidesUrl = baseUrl.resolve('tides.php');
