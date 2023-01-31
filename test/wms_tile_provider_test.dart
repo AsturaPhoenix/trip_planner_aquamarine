@@ -38,8 +38,9 @@ void main() {
         .thenAnswer((_) => Completer<http.Response>().future);
 
     const locator = TileLocator(0, Point(0, 0), 0);
-    testTileProvider.getImage(locator);
-    testTileProvider.getImage(locator);
+    testTileProvider
+      ..getImage(locator)
+      ..getImage(locator);
 
     verify(mockHttpClient.get(any));
     verifyNoMoreInteractions(mockHttpClient);

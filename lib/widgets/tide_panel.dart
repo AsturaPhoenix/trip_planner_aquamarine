@@ -217,13 +217,11 @@ class GraphTimeWindow extends Equatable {
   /// [Resolvers.fallBackLater] is used since xtide ends up shifting the graph
   /// start by an hour anyway; combined with the [t] adjustment for [12AM-1AM),
   /// this creates a continuous mapping.
-  GraphTimeWindow operator +(Period period) {
-    return copyWith(
-      t0: t0.add(period),
-      t: t.add(period, fallBack: days == 1 ? Resolvers.fallBackLater : null),
-      correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
-    );
-  }
+  GraphTimeWindow operator +(Period period) => copyWith(
+        t0: t0.add(period),
+        t: t.add(period, fallBack: days == 1 ? Resolvers.fallBackLater : null),
+        correctionPolicy: TimeWindowCorrectionPolicy.preserveBounds,
+      );
 }
 
 class TidePanel extends StatefulWidget {
@@ -541,7 +539,7 @@ class TideGraphState extends State<TideGraph> {
 
   @override
   Widget build(BuildContext context) {
-    int gridDivisions = widget.timeWindow.days == 7 ? 14 : 24;
+    final int gridDivisions = widget.timeWindow.days == 7 ? 14 : 24;
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -579,7 +577,7 @@ class TideGraphState extends State<TideGraph> {
                 value: widget.timeWindow.t.millisecondsSinceEpoch.toDouble(),
                 min: widget.timeWindow.t0.millisecondsSinceEpoch.toDouble(),
                 max: widget.timeWindow.tf.millisecondsSinceEpoch.toDouble(),
-                onChanged: (double value) => widget.onTimeChanged?.call(
+                onChanged: (value) => widget.onTimeChanged?.call(
                   Instant.fromMillisecondsSinceEpoch(
                     // Limit this to an exclusive upper bound for more intuitive
                     // behavior. There's no functional problem if we let the

@@ -24,7 +24,7 @@ void main() {
     expect(await val1.future, event1);
 
     val1 = Completer();
-    var val2 = Completer<Object>();
+    final val2 = Completer<Object>();
     final sub2 = dest.listen((event) => val2.complete(event));
 
     final event2 = Object();

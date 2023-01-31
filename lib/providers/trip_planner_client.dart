@@ -81,8 +81,9 @@ class TripPlannerClient {
   static final log = Logger('TripPlannerClient');
 
   static void registerAdapters() {
-    Hive.registerAdapter(StationAdapter());
-    Hive.registerAdapter(LatLngAdapter());
+    Hive
+      ..registerAdapter(StationAdapter())
+      ..registerAdapter(LatLngAdapter());
   }
 
   TripPlannerClient(

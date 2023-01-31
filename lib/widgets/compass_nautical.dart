@@ -53,7 +53,7 @@ class NauticalCompass extends StatelessWidget {
           builder: (context, constraints) {
             final radius = min(constraints.maxWidth, constraints.maxHeight) / 2;
 
-            int compactness = sizeTiers.indexWhere(
+            final int compactness = sizeTiers.indexWhere(
                   (threshold) => radius >= threshold,
                 ) %
                 (sizeTiers.length + 1);

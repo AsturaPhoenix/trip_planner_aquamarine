@@ -85,7 +85,7 @@ Future<void> watchTiles(int minCount) {
 
   scan();
 
-  return completer.future.whenComplete(() => observer.disconnect());
+  return completer.future.whenComplete(observer.disconnect);
 }
 
 /// Uses timeouts to probe whether web animations are happening smoothly.

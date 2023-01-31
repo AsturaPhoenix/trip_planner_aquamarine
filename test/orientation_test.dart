@@ -77,7 +77,7 @@ void main() {
     final cachingGeomag = CachingGeoMag(mockGeomag);
 
     var testLocation = Map.initialCameraPosition.target;
-    var geomagResult = FakeGeoMagResult();
+    final geomagResult = FakeGeoMagResult();
     when(mockGeomag.calculate(testLocation.latitude, testLocation.longitude))
         .thenReturn(geomagResult);
     expect(cachingGeomag.get(testLocation.latitude, testLocation.longitude),

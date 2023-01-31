@@ -29,7 +29,7 @@ extension Upsample<T> on Stream<T> {
           tickerProvider: tickerProvider,
           initialState: initialState,
           stateSpace: stateSpace,
-          setState: (state) => controller.add(state),
+          setState: controller.add,
           clock: () => clock().difference(start),
         );
 

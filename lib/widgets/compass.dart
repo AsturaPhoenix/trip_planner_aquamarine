@@ -815,15 +815,13 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                 builder: (context, distanceSystem, _) => StreamBuilder(
                   initialData: bearing.value,
                   stream: bearing.stream,
-                  builder: (context, bearing) {
-                    return Text(
-                      formatHeading(
-                        waypoint!.marker.toHeading(position.data!.toLatLng()),
-                        bearing.data,
-                        distanceSystem,
-                      ),
-                    );
-                  },
+                  builder: (context, bearing) => Text(
+                    formatHeading(
+                      waypoint!.marker.toHeading(position.data!.toLatLng()),
+                      bearing.data,
+                      distanceSystem,
+                    ),
+                  ),
                 ),
               )
           ],
