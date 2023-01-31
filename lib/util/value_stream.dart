@@ -164,7 +164,11 @@ extension RefCount<T> on Stream<T> {
   Stream<T> refCount() {
     StreamSubscription? subscription;
     final controller = StreamController<T>.broadcast();
-    controller.onListen = () => subscription = listen(controller.add);
+    controller.onListen = () => subscription = listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
     controller.onCancel = () => subscription!.cancel();
     return controller.stream;
   }
