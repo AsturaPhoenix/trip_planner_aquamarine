@@ -2,6 +2,15 @@ import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
+/// A column that lays outs its children by giving them constraints based on the
+/// remaining size in the layout as calculated between iterative layout passes.
+/// Layout pass 0 is based on this widget's constraints.
+///
+/// To specify a layout pass or to adjust the allotted size constraint, wrap the
+/// child in an [IterativeFlexible].
+///
+/// Once all the sizing passes are complete, all children are positioned in
+/// sequence.
 class IterativeColumn extends StatelessWidget {
   IterativeColumn({super.key, required List<Widget> children}) {
     for (int i = 0; i < children.length; ++i) {
@@ -34,11 +43,11 @@ class IterativeFlexible extends StatelessWidget {
   const IterativeFlexible({
     super.key,
     required this.pass,
-    required this.size,
+    this.size,
     required this.child,
   });
   final int pass;
-  final SizeAllocatorFunction size;
+  final SizeAllocatorFunction? size;
   final Widget child;
 
   @override
@@ -48,7 +57,7 @@ class IterativeFlexible extends StatelessWidget {
 class _SizeAllocator extends Equatable {
   const _SizeAllocator(this.childIndex, this.size);
   final int childIndex;
-  final SizeAllocatorFunction size;
+  final SizeAllocatorFunction? size;
 
   @override
   get props => [childIndex, size];
@@ -80,7 +89,7 @@ class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
         final layout = layoutChild(
           sizeAllocator.childIndex,
           baseConstraints.copyWith(
-            maxHeight: sizeAllocator.size(availableSize),
+            maxHeight: sizeAllocator.size?.call(availableSize) ?? availableSize,
           ),
         );
         passSize += layout.height;
