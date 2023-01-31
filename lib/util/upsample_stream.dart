@@ -33,14 +33,20 @@ extension Upsample<T> on Stream<T> {
           clock: () => clock().difference(start),
         );
 
-        subscription = listen((event) {
-          final t = clock();
-          final period = lastEventTime == null
-              ? maxPeriod
-              : min(t.difference(lastEventTime!), maxPeriod);
-          blender.add(event, period, blendAnimationCurve);
-          lastEventTime = t;
-        });
+        subscription = listen(
+          (event) {
+            final t = clock();
+            final period = lastEventTime == null
+                ? maxPeriod
+                : min(t.difference(lastEventTime!), maxPeriod);
+            blender.add(event, period, blendAnimationCurve);
+            lastEventTime = t;
+          },
+          onDone: () async {
+            await blender.flush();
+            await controller.close();
+          },
+        );
       },
       onPause: () => subscription.pause(),
       onResume: () => subscription.resume(),

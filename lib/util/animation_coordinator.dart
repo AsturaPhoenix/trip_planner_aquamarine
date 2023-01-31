@@ -106,6 +106,7 @@ class AnimationCoordinator<State, Delta> {
   // and end with an incorrect offset that suspends animation.
   Duration Function()? clock;
 
+  TickerFuture? _tickerFuture;
   State get target => _target;
   State _basis, _target;
   Duration? get t => clock?.call() ?? _tickerTime;
@@ -117,9 +118,13 @@ class AnimationCoordinator<State, Delta> {
   void dispose() => ticker.dispose();
 
   void _start() {
-    ticker.start();
+    _tickerFuture = ticker.start();
     _tickerTime = Duration.zero;
   }
+
+  /// Returns a future that completes when pending animations are complete, or
+  /// if the coordinator is disposed.
+  Future<void> flush() async => await _tickerFuture?.orCancel;
 
   Future<bool> addDelta(
     Delta delta, [

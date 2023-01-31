@@ -28,6 +28,7 @@ linter:
   # producing the lint.
   rules:
     cancel_subscriptions: true
+    close_sinks: true
     directives_ordering: true
     prefer_relative_imports: true
     prefer_single_quotes: true

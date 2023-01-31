@@ -16,8 +16,6 @@ class FakeGeoMagResult extends Fake implements GeoMagResult {
 }
 
 void main() {
-  setUp(() {});
-
   test('caching geomag caches at an appropriate resolution', () {
     const maxAllowedVariation = 1 / 60;
 
