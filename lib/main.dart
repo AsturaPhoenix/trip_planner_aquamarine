@@ -187,7 +187,7 @@ class TripPlannerState extends State<TripPlanner> {
 
   @override
   void initState() {
-    super.initState;
+    super.initState();
     updateClient();
 
     final cancel = StreamCloser<Position?>();
