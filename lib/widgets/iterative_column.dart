@@ -1,5 +1,4 @@
 import 'package:collection/collection.dart';
-import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
 /// A column that lays outs its children by giving them constraints based on the
@@ -18,10 +17,10 @@ class IterativeColumn extends StatelessWidget {
       if (children[i] is IterativeFlexible) {
         final flexible = children[i] as IterativeFlexible;
         while (_layoutDelegate.layoutPasses.length <= flexible.pass) {
-          _layoutDelegate.layoutPasses.add([]);
+          _layoutDelegate.layoutPasses.add({});
         }
         _layoutDelegate
-          ..layoutPasses[flexible.pass].add(_SizeAllocator(i, flexible.size))
+          ..layoutPasses[flexible.pass][i] = flexible.sizeAllocator
           ..flexIndices.add(i);
       }
     }
@@ -37,34 +36,25 @@ class IterativeColumn extends StatelessWidget {
       );
 }
 
-typedef SizeAllocatorFunction = double Function(double availableSize);
+typedef SizeAllocator = double Function(double availableSize);
 
 class IterativeFlexible extends StatelessWidget {
   const IterativeFlexible({
     super.key,
     required this.pass,
-    this.size,
+    this.sizeAllocator,
     required this.child,
   });
   final int pass;
-  final SizeAllocatorFunction? size;
+  final SizeAllocator? sizeAllocator;
   final Widget child;
 
   @override
   Widget build(BuildContext context) => child;
 }
 
-class _SizeAllocator extends Equatable {
-  const _SizeAllocator(this.childIndex, this.size);
-  final int childIndex;
-  final SizeAllocatorFunction? size;
-
-  @override
-  get props => [childIndex, size];
-}
-
 class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
-  final layoutPasses = <List<_SizeAllocator>>[[]];
+  final layoutPasses = [<int, SizeAllocator?>{}];
   final flexIndices = <int>{};
 
   @override
@@ -85,15 +75,16 @@ class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
     }
 
     for (final pass in layoutPasses) {
-      for (final sizeAllocator in pass) {
+      for (final sizeAllocator in pass.entries) {
         final layout = layoutChild(
-          sizeAllocator.childIndex,
+          sizeAllocator.key,
           baseConstraints.copyWith(
-            maxHeight: sizeAllocator.size?.call(availableSize) ?? availableSize,
+            maxHeight:
+                sizeAllocator.value?.call(availableSize) ?? availableSize,
           ),
         );
         passSize += layout.height;
-        layouts[sizeAllocator.childIndex] = layout;
+        layouts[sizeAllocator.key] = layout;
       }
       availableSize -= passSize;
       passSize = 0.0;
