@@ -27,7 +27,9 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
+    cancel_subscriptions: true
     directives_ordering: true
     prefer_relative_imports: true
     prefer_single_quotes: true
     require_trailing_commas: true
+    unnecessary_statements: true
