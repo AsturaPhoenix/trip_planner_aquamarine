@@ -130,7 +130,7 @@ dev_dependencies:
   mockito:
     git:
       url: https://github.com/AsturaPhoenix/mockito.git
-      ref: 9d36e917de6d4bc004abda2ee2b54f9b31ab4fb2
+      ref: ebdba4062441b0a367abb793dd230f43ddaa8370
   patrol: ^0.10.8
   permission_handler_platform_interface: ^3.9.0
   plugin_platform_interface: ^2.1.3
