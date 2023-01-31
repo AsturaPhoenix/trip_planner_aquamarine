@@ -330,7 +330,7 @@ class PlotPanelState extends State<PlotPanel>
               const SizedBox(height: 8.0),
               IterativeFlexible(
                 pass: 1,
-                size: (availableSize) => _maxSpeed != null
+                sizeAllocator: (availableSize) => _maxSpeed != null
                     ? min(max(availableSize - 128, 56), availableSize)
                     : availableSize,
                 child: Material(
@@ -393,7 +393,7 @@ class PlotPanelState extends State<PlotPanel>
                 : [
                     IterativeFlexible(
                       pass: 2,
-                      size: (availableSize) => min(128, availableSize),
+                      sizeAllocator: (availableSize) => min(128, availableSize),
                       child: ValueListenableBuilder(
                         valueListenable: widget.distanceSystem,
                         builder: (context, distanceSystem, _) =>
