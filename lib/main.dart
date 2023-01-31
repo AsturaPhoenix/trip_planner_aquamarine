@@ -367,6 +367,7 @@ class TripPlannerState extends State<TripPlanner> {
                                     setState(() => selectedStation = station),
                               ),
                               if (hasModal)
+                                // This constructor is not const on web.
                                 // ignore: prefer_const_constructors
                                 PointerInterceptor(
                                   child: const SizedBox.expand(),
