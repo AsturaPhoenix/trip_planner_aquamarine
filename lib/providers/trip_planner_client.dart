@@ -11,10 +11,11 @@ import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
-import 'package:trip_planner_aquamarine/persistence/blob_cache.dart';
-import 'package:trip_planner_aquamarine/persistence/tide_graph_cache.dart';
-import 'package:trip_planner_aquamarine/util/optional.dart';
 import 'package:xml/xml.dart';
+
+import '../persistence/blob_cache.dart';
+import '../persistence/tide_graph_cache.dart';
+import '../util/optional.dart';
 
 class _RedirectInfo implements RedirectInfo {
   _RedirectInfo({

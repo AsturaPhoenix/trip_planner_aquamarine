@@ -1,5 +1,6 @@
 import 'package:joda/time.dart';
-import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
+
+import '../providers/trip_planner_client.dart';
 
 class TideGraphKey {
   TideGraphKey(this.stationId, this.begin, this.days);

@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:hive/hive.dart';
 import 'package:logging/logging.dart';
-import 'package:trip_planner_aquamarine/persistence/cache_box.dart';
+
+import 'cache_box.dart';
 
 part 'blob_cache.g.dart';
 
