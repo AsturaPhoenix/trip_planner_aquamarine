@@ -1,6 +1,16 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
+class IterativeColumn extends IterativeFlex {
+  IterativeColumn({super.key, required super.children})
+      : super(direction: Axis.vertical);
+}
+
+class IterativeRow extends IterativeFlex {
+  IterativeRow({super.key, required super.children})
+      : super(direction: Axis.horizontal);
+}
+
 /// A column that lays outs its children by giving them constraints based on the
 /// remaining size in the layout as calculated between iterative layout passes.
 /// Layout pass 0 is based on this widget's constraints.
@@ -10,8 +20,12 @@ import 'package:flutter/material.dart';
 ///
 /// Once all the sizing passes are complete, all children are positioned in
 /// sequence.
-class IterativeColumn extends StatelessWidget {
-  IterativeColumn({super.key, required List<Widget> children}) {
+class IterativeFlex extends StatelessWidget {
+  IterativeFlex({
+    super.key,
+    required this.direction,
+    required List<Widget> children,
+  }) {
     for (int i = 0; i < children.length; ++i) {
       _wrappedChildren.add(LayoutId(id: i, child: children[i]));
       if (children[i] is IterativeFlexible) {
@@ -26,8 +40,10 @@ class IterativeColumn extends StatelessWidget {
     }
   }
   final _wrappedChildren = <Widget>[];
-  final _IterativeColumnLayoutDelegate _layoutDelegate =
-      _IterativeColumnLayoutDelegate();
+  late final _IterativeColumnLayoutDelegate _layoutDelegate =
+      _IterativeColumnLayoutDelegate(direction);
+
+  final Axis direction;
 
   @override
   Widget build(BuildContext context) => CustomMultiChildLayout(
@@ -54,13 +70,32 @@ class IterativeFlexible extends StatelessWidget {
 }
 
 class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
+  _IterativeColumnLayoutDelegate(this.direction);
+
+  final Axis direction;
   final layoutPasses = [<int, SizeAllocator?>{}];
   final flexIndices = <int>{};
+
+  Offset offset({required double main, required double cross}) =>
+      direction == Axis.vertical ? Offset(cross, main) : Offset(main, cross);
+
+  double main(Size size) =>
+      direction == Axis.vertical ? size.height : size.width;
+  double cross(Size size) =>
+      direction == Axis.vertical ? size.width : size.height;
+
+  BoxConstraints constrain(
+    BoxConstraints baseConstraints,
+    double availableSize,
+  ) =>
+      direction == Axis.vertical
+          ? baseConstraints.copyWith(maxHeight: availableSize)
+          : baseConstraints.copyWith(maxWidth: availableSize);
 
   @override
   void performLayout(Size size) {
     final baseConstraints = BoxConstraints.loose(size);
-    var availableSize = size.height;
+    var availableSize = main(size);
 
     var passSize = 0.0;
     final layouts = <Size>[];
@@ -69,7 +104,7 @@ class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
         layouts.add(Size.zero);
       } else {
         final layout = layoutChild(i, baseConstraints);
-        passSize += layout.height;
+        passSize += main(layout);
         layouts.add(layout);
       }
     }
@@ -78,22 +113,25 @@ class _IterativeColumnLayoutDelegate extends MultiChildLayoutDelegate {
       for (final sizeAllocator in pass.entries) {
         final layout = layoutChild(
           sizeAllocator.key,
-          baseConstraints.copyWith(
-            maxHeight:
-                sizeAllocator.value?.call(availableSize) ?? availableSize,
+          constrain(
+            baseConstraints,
+            sizeAllocator.value?.call(availableSize) ?? availableSize,
           ),
         );
-        passSize += layout.height;
+        passSize += main(layout);
         layouts[sizeAllocator.key] = layout;
       }
       availableSize -= passSize;
       passSize = 0.0;
     }
 
-    var y = 0.0;
+    var position = 0.0;
     for (int i = 0; hasChild(i); ++i) {
-      positionChild(i, Offset((size.width - layouts[i].width) / 2, y));
-      y += layouts[i].height;
+      positionChild(
+        i,
+        offset(main: position, cross: (cross(size) - cross(layouts[i])) / 2),
+      );
+      position += main(layouts[i]);
     }
   }
 

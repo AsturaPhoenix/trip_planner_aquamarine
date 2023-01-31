@@ -15,7 +15,7 @@ import 'package:uuid/uuid.dart';
 
 import '../util/distance.dart';
 import 'color_picker.dart';
-import 'iterative_column.dart';
+import 'iterative_flex.dart';
 
 const _uuid = Uuid();
 
