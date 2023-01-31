@@ -28,7 +28,7 @@ void main() {
         ),
       );
 
-  testWidgets('shifts window when date is picked', (WidgetTester tester) async {
+  testWidgets('shifts window when date is picked', (tester) async {
     await tester.pumpWidget(
       buildTestHarness(
         testWindow(
@@ -54,7 +54,7 @@ void main() {
     );
   });
 
-  testWidgets('preserves offset around fall back', (WidgetTester tester) async {
+  testWidgets('preserves offset around fall back', (tester) async {
     await tester.pumpWidget(
       buildTestHarness(
         testWindow(
@@ -77,8 +77,7 @@ void main() {
     );
   });
 
-  testWidgets('preserves offset around spring forward',
-      (WidgetTester tester) async {
+  testWidgets('preserves offset around spring forward', (tester) async {
     await tester.pumpWidget(
       buildTestHarness(
         testWindow(

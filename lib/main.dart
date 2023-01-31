@@ -281,10 +281,7 @@ class TripPlannerState extends State<TripPlanner> {
           ),
         ),
         home: LayoutBuilder(
-          builder: (context, constraints) => (
-            BuildContext context,
-            BoxConstraints constraints,
-          ) {
+          builder: (context, constraints) {
             const double selectedStationBarMinWidth = 480,
                 titleAreaPadding = 164,
                 selectedStationBarMinPadding = 16;
@@ -372,10 +369,7 @@ class TripPlannerState extends State<TripPlanner> {
                               if (hasModal)
                                 // ignore: prefer_const_constructors
                                 PointerInterceptor(
-                                  child: const SizedBox(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                  ),
+                                  child: const SizedBox.expand(),
                                 )
                             ],
                           ),
@@ -399,10 +393,7 @@ class TripPlannerState extends State<TripPlanner> {
                 ],
               ),
             );
-          }(
-            context,
-            constraints,
-          ),
+          },
         ),
       );
 }
@@ -565,7 +556,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   void didUpdateWidget(covariant _Panel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.tabs.length != oldWidget.tabs.length) {
-      int delta = widget.tabs.length - oldWidget.tabs.length;
+      final int delta = widget.tabs.length - oldWidget.tabs.length;
       final oldTab = oldWidget.tabs[tabController.index];
 
       tabController.dispose();
@@ -645,17 +636,18 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
               ],
             ),
           ),
-          widget.horizontal
-              ? Expanded(child: viewport)
-              : LayoutBuilder(
-                  builder: (context, boxConstraints) => SizedBox(
-                    height: TidePanel.estimateHeight(
-                      context,
-                      boxConstraints.maxWidth,
-                    ),
-                    child: viewport,
-                  ),
+          if (widget.horizontal)
+            Expanded(child: viewport)
+          else
+            LayoutBuilder(
+              builder: (context, boxConstraints) => SizedBox(
+                height: TidePanel.estimateHeight(
+                  context,
+                  boxConstraints.maxWidth,
                 ),
+                child: viewport,
+              ),
+            ),
         ],
       ),
     );

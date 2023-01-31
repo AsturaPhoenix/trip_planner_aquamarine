@@ -77,7 +77,7 @@ class TripPlannerHarness {
       orientation.PlatformOrientation.reset(FakeMotionSensors(motionSensors));
       motionSensors.isAbsoluteOrientationAvailable
           .complete(isAbsoluteOrientationAvailable);
-      addTearDown(() => orientation.PlatformOrientation.reset());
+      addTearDown(orientation.PlatformOrientation.reset);
     }
 
     when(wmsClient.get(any))

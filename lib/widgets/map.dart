@@ -1063,11 +1063,9 @@ class _HoverButtonState extends State<_HoverButton> {
   bool hover = false;
 
   @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onHover: (value) => setState(() => hover = value),
-      onPressed: widget.onPressed,
-      child: widget.childBuilder(context, hover),
-    );
-  }
+  Widget build(BuildContext context) => TextButton(
+        onHover: (value) => setState(() => hover = value),
+        onPressed: widget.onPressed,
+        child: widget.childBuilder(context, hover),
+      );
 }
