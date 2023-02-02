@@ -6,6 +6,7 @@ import 'dart:developer' as debug;
 import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive_flutter/adapters.dart';
@@ -25,6 +26,7 @@ import 'util/distance.dart';
 import 'util/optional.dart';
 import 'widgets/compass.dart';
 import 'widgets/details_panel.dart';
+import 'widgets/iterative_flex.dart';
 import 'widgets/map.dart';
 import 'widgets/plot_panel.dart';
 import 'widgets/tide_panel.dart';
@@ -143,6 +145,8 @@ class TripPlannerState extends State<TripPlanner> {
     }
     return nearestStation;
   }
+
+  final _mapKey = GlobalKey(), _panelKey = GlobalKey();
 
   Station? selectedStation;
   late GraphTimeWindow timeWindow =
@@ -301,6 +305,28 @@ class TripPlannerState extends State<TripPlanner> {
 
             const title = Text('BASK Trip Planner');
 
+            final mapPanel = Stack(
+              key: _mapKey,
+              children: [
+                Map(
+                  client: widget.wmsClient,
+                  tileCache: widget.tileCache,
+                  stations: stations,
+                  selectedStation: selectedStation,
+                  tracks: tracks,
+                  stationPriority: stationPriority,
+                  onStationSelected: (station) =>
+                      setState(() => selectedStation = station),
+                ),
+                if (hasModal)
+                  // This constructor is not const on web.
+                  // ignore: prefer_const_constructors
+                  PointerInterceptor(
+                    child: const SizedBox.expand(),
+                  )
+              ],
+            );
+
             return Scaffold(
               appBar: AppBar(
                 title: Row(
@@ -349,47 +375,95 @@ class TripPlannerState extends State<TripPlanner> {
                       blendEdges: false,
                     ),
                   Expanded(
-                    child: Flex(
-                      direction: horizontal ? Axis.horizontal : Axis.vertical,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: Stack(
+                    child: horizontal
+                        ? Row(
                             children: [
-                              Map(
-                                client: widget.wmsClient,
-                                tileCache: widget.tileCache,
-                                stations: stations,
-                                selectedStation: selectedStation,
-                                tracks: tracks,
-                                stationPriority: stationPriority,
-                                onStationSelected: (station) =>
-                                    setState(() => selectedStation = station),
-                              ),
-                              if (hasModal)
-                                // This constructor is not const on web.
-                                // ignore: prefer_const_constructors
-                                PointerInterceptor(
-                                  child: const SizedBox.expand(),
-                                )
-                            ],
-                          ),
-                        ),
-                        if (selectedStation != null)
-                          SizedBox(
-                            width: horizontal
-                                ? min(
+                              Expanded(child: mapPanel),
+                              if (selectedStation != null)
+                                SizedBox(
+                                  width: min(
                                     constraints.maxWidth / 2,
                                     TidePanel.defaultGraphWidth,
-                                  )
-                                : constraints.maxWidth,
-                            child: _Panel(
-                              tripPlanner: this,
-                              horizontal: horizontal,
-                            ),
+                                  ),
+                                  child:
+                                      _Panel(key: _panelKey, tripPlanner: this),
+                                ),
+                            ],
+                          )
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              final defaultPanelHeight = min(
+                                _Panel.estimateHeight(
+                                  context,
+                                  constraints.maxWidth,
+                                ),
+                                constraints.maxHeight,
+                              );
+
+                              final minMapHeight =
+                                  constraints.maxHeight - defaultPanelHeight;
+
+                              final defaultPosition =
+                                  defaultPanelHeight / constraints.maxHeight;
+                              final minimizedPosition =
+                                  _Panel.tabBarHeight / constraints.maxHeight;
+
+                              return IterativeColumn(
+                                children: [
+                                  IterativeFlexible(
+                                    pass: 1,
+                                    child: Viewport(
+                                      offset: ViewportOffset.zero(),
+                                      slivers: [
+                                        SliverFillRemaining(
+                                          hasScrollBody: false,
+                                          child: SizedBox(
+                                            height: minMapHeight,
+                                            child: mapPanel,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (selectedStation != null)
+                                    PointerInterceptor(
+                                      child: DraggableScrollableSheet(
+                                        initialChildSize: defaultPosition,
+                                        minChildSize: minimizedPosition,
+                                        snap: true,
+                                        snapSizes: [defaultPosition],
+                                        expand: false,
+                                        builder: (context, scrollController) =>
+                                            CustomScrollView(
+                                          controller: scrollController,
+                                          scrollBehavior:
+                                              ScrollConfiguration.of(context)
+                                                  .copyWith(scrollbars: false),
+                                          slivers: [
+                                            SliverFillRemaining(
+                                              // Allow the SizedBox to act as a
+                                              // sort of min height beyond which
+                                              // to clip the panel while also
+                                              // allowing it to expand.
+                                              hasScrollBody: false,
+                                              child: SizedBox(
+                                                height: defaultPanelHeight,
+                                                child: _Panel(
+                                                  key: _panelKey,
+                                                  tripPlanner: this,
+                                                  scrollController:
+                                                      scrollController,
+                                                ),
+                                              ),
+                                            )
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                ],
+                              );
+                            },
                           ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -461,7 +535,11 @@ class _SelectedStationBar extends StatelessWidget {
 }
 
 class _Panel extends StatefulWidget {
-  _Panel({required this.tripPlanner, required this.horizontal})
+  static const tabBarHeight = 26.0;
+  static double estimateHeight(BuildContext context, double maxWidth) =>
+      tabBarHeight + TidePanel.estimateHeight(context, maxWidth);
+
+  _Panel({super.key, required this.tripPlanner, this.scrollController})
       : selectedStation = tripPlanner.selectedStation!,
         tabs = [
           if (tripPlanner.tideCurrentStation != null) TidePanel,
@@ -470,7 +548,7 @@ class _Panel extends StatefulWidget {
         ];
 
   final TripPlannerState tripPlanner;
-  final bool horizontal;
+  final ScrollController? scrollController;
 
   // Cache a copy of the selected station so we know when it changes. This
   // supports changing the panel to the details panel if a nogo station is
@@ -488,11 +566,10 @@ class _Panel extends StatefulWidget {
 
 class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   late TabController tabController;
-  final tabBarViewKey = GlobalKey(),
-      // This is needed to persist plot panel state between states with
-      // different available tabs, such as between station selections with and
-      // without tide/current information.
-      plotPanelKey = GlobalKey();
+  // This is needed to persist plot panel state between states with different
+  // available tabs, such as between station selections with and without
+  // tide/current information.
+  final plotPanelKey = GlobalKey();
 
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
@@ -590,35 +667,6 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final viewport = TabBarView(
-      key: tabBarViewKey,
-      controller: tabController,
-      children: [
-        if (tripPlanner.tideCurrentStation != null)
-          TidePanel(
-            client: tripPlanner.widget.tripPlannerClient,
-            station: tripPlanner.tideCurrentStation!,
-            timeWindow: tripPlanner.timeWindow,
-            onTimeWindowChanged: (timeWindow) =>
-                tripPlanner.setState(() => tripPlanner.timeWindow = timeWindow),
-            onModal: _onModal,
-          ),
-        DetailsPanel(
-          client: tripPlanner.widget.tripPlannerClient,
-          station: widget.selectedStation,
-        ),
-        PlotPanel(
-          key: plotPanelKey,
-          timeZone: tripPlanner.timeWindow.t.timeZone,
-          distanceSystem: tripPlanner.distanceSystem,
-          tracks: tripPlanner.tracks,
-          onTracksChanged: (tracks) =>
-              tripPlanner.setState(() => tripPlanner.tracks = tracks),
-          onModal: _onModal,
-        ),
-      ],
-    );
-
     return Material(
       color: theme.colorScheme.background,
       elevation: 1,
@@ -637,18 +685,36 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
               ],
             ),
           ),
-          if (widget.horizontal)
-            Expanded(child: viewport)
-          else
-            LayoutBuilder(
-              builder: (context, boxConstraints) => SizedBox(
-                height: TidePanel.estimateHeight(
-                  context,
-                  boxConstraints.maxWidth,
+          Expanded(
+            child: TabBarView(
+              controller: tabController,
+              children: [
+                if (tripPlanner.tideCurrentStation != null)
+                  TidePanel(
+                    client: tripPlanner.widget.tripPlannerClient,
+                    station: tripPlanner.tideCurrentStation!,
+                    timeWindow: tripPlanner.timeWindow,
+                    onTimeWindowChanged: (timeWindow) => tripPlanner
+                        .setState(() => tripPlanner.timeWindow = timeWindow),
+                    onModal: _onModal,
+                  ),
+                DetailsPanel(
+                  client: tripPlanner.widget.tripPlannerClient,
+                  station: widget.selectedStation,
+                  scrollController: widget.scrollController,
                 ),
-                child: viewport,
-              ),
+                PlotPanel(
+                  key: plotPanelKey,
+                  timeZone: tripPlanner.timeWindow.t.timeZone,
+                  distanceSystem: tripPlanner.distanceSystem,
+                  tracks: tripPlanner.tracks,
+                  onTracksChanged: (tracks) =>
+                      tripPlanner.setState(() => tripPlanner.tracks = tracks),
+                  onModal: _onModal,
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );

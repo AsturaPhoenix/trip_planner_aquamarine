@@ -10,6 +10,7 @@ import 'package:logging/logging.dart';
 
 import '../providers/trip_planner_client.dart';
 import '../util/optional.dart';
+import '../util/subordinate_scroll_controller.dart';
 
 class GridSwatch {
   const GridSwatch({
@@ -224,7 +225,7 @@ class GraphTimeWindow extends Equatable {
       );
 }
 
-class TidePanel extends StatefulWidget {
+class TidePanel extends StatefulWidget implements ScrollControllerProvider {
   static const double defaultGraphWidth = 455, defaultGraphHeight = 231;
 
   // TODO: It might be nice to use a layout dryrun, but right now it looks like
@@ -254,6 +255,7 @@ class TidePanel extends StatefulWidget {
     this.graphWidth = defaultGraphWidth,
     this.graphHeight = defaultGraphHeight,
     OverlaySwatch? overlaySwatch,
+    this.scrollController,
     this.onTimeWindowChanged,
     this.onModal,
   }) : overlaySwatch =
@@ -264,6 +266,8 @@ class TidePanel extends StatefulWidget {
   final GraphTimeWindow timeWindow;
   final double graphWidth, graphHeight;
   final OverlaySwatch overlaySwatch;
+  @override
+  final ScrollController? scrollController;
   final void Function(GraphTimeWindow timeWindow)? onTimeWindowChanged;
   final void Function(bool modal)? onModal;
 
@@ -271,7 +275,8 @@ class TidePanel extends StatefulWidget {
   State<StatefulWidget> createState() => TidePanelState();
 }
 
-class TidePanelState extends State<TidePanel> {
+class TidePanelState extends State<TidePanel>
+    with SubordinateScrollControllerStateMixin {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
