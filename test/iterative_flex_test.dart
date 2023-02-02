@@ -49,5 +49,14 @@ void main() {
       expect(tester.renderObject(find.byType(SizedBox).at(0)).constraints,
           BoxConstraints.loose(const Size(1, 1)));
     });
+
+    testWidgets('pass 0 omitted', (tester) async {
+      await tester.pumpWidget(IterativeColumn(children: const [
+        IterativeFlexible(pass: 1, child: SizedBox.expand())
+      ]));
+
+      expect(tester.getSize(find.byType(SizedBox)),
+          tester.getSize(find.byType(IterativeColumn)));
+    });
   });
 }

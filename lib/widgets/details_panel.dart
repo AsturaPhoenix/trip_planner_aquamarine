@@ -6,22 +6,26 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/trip_planner_client.dart';
 import '../util/optional.dart';
+import '../util/subordinate_scroll_controller.dart';
 
-class DetailsPanel extends StatefulWidget {
+class DetailsPanel extends StatefulWidget implements ScrollControllerProvider {
   const DetailsPanel({
     super.key,
     required this.client,
     required this.station,
+    this.scrollController,
   });
   final TripPlannerClient client;
   final Station station;
+  @override
+  final ScrollController? scrollController;
 
   @override
   State<DetailsPanel> createState() => DetailsPanelState();
 }
 
 class DetailsPanelState extends State<DetailsPanel>
-    with AutomaticKeepAliveClientMixin<DetailsPanel> {
+    with AutomaticKeepAliveClientMixin, SubordinateScrollControllerStateMixin {
   void onLinkTap(String? url, _, __, ____) =>
       // TODO: error indicator and/or change rendering if we can't launch
       Optional(url).map((url) => launchUrl(Uri.parse(url)));
@@ -41,6 +45,7 @@ class DetailsPanelState extends State<DetailsPanel>
 
     return LayoutBuilder(
       builder: (context, boxConstraints) => SingleChildScrollView(
+        controller: scrollController,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: boxConstraints.minHeight),
           child: Padding(
