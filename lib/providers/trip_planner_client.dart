@@ -530,14 +530,14 @@ class TripPlannerImage extends ImageProvider<TripPlannerImageKey> {
       SynchronousFuture(TripPlannerImageKey(relative));
 
   @override
-  ImageStreamCompleter loadBuffer(
+  ImageStreamCompleter loadImage(
     TripPlannerImageKey key,
-    DecoderBufferCallback decode,
+    ImageDecoderCallback decode,
   ) {
     final completer = DelegatingImageStreamCompleter();
     base.then((base) {
       final net = NetworkImage(base.resolveUri(relative).toString());
-      completer.delegate = net.loadBuffer(net, decode);
+      completer.delegate = net.loadImage(net, decode);
     });
     return completer;
   }
