@@ -43,21 +43,16 @@ class DetailsPanelState extends State<DetailsPanel>
       TargetPlatform.windows
     }.contains(defaultTargetPlatform);
 
-    return LayoutBuilder(
-      builder: (context, boxConstraints) => SingleChildScrollView(
-        controller: scrollController,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: boxConstraints.minHeight),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(4, 4, hasScrollbar ? 8 : 4, 4),
-            child: (widget.station.type.isTideCurrent
-                ? TideCurrentDetails.new
-                : PoiDetails.new)(
-              client: widget.client,
-              station: widget.station,
-              onLinkTap: onLinkTap,
-            ),
-          ),
+    return SingleChildScrollView(
+      controller: scrollController,
+      child: Padding(
+        padding: EdgeInsets.only(right: hasScrollbar ? 8.0 : 0.0),
+        child: (widget.station.type.isTideCurrent
+            ? TideCurrentDetails.new
+            : PoiDetails.new)(
+          client: widget.client,
+          station: widget.station,
+          onLinkTap: onLinkTap,
         ),
       ),
     );
