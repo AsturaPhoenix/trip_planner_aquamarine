@@ -1,4 +1,6 @@
-import 'package:flutter/widgets.dart';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trip_planner_aquamarine/main.dart';
@@ -131,6 +133,64 @@ void main() {
           state.selectedStation?.type, predicate(Map.showMarkerTypes.contains));
 
       await tester.pump(Duration.zero);
+    });
+
+    group('in portrait layout', () {
+      setUp(() {
+        final window = TestWidgetsFlutterBinding.instance.window;
+        window.physicalSizeTestValue =
+            const Size(600, 800) * window.devicePixelRatio;
+      });
+
+      group('can collapse the bottom sheet', () {
+        testWidgets('by dragging a tab', (tester) async {
+          await tester.pumpWidget(harness.buildTripPlanner());
+          await tester.flushAsync();
+          await tester.pumpAndSettle();
+
+          await tester.fling(
+              find.byType(Tab).at(1), const Offset(0, 128), 1000);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(TidePanel).hitTestable(), findsNothing);
+        });
+
+        testWidgets('by dragging the content panel', (tester) async {
+          await tester.pumpWidget(harness.buildTripPlanner());
+          await tester.flushAsync();
+          await tester.pumpAndSettle();
+
+          await tester.fling(
+              find.byType(TidePanel), const Offset(0, 128), 1000);
+          await tester.pumpAndSettle();
+
+          expect(find.byType(TidePanel).hitTestable(), findsNothing);
+        });
+
+        // The content panel is kept no smaller than a minimum size and clipped
+        // to achieve a graceful collapse effect while allowing for responsive
+        // sizing when there's not enough vertical space, but this means we need
+        // to take special care that the whole panel (including tabs) doesn't
+        // become scrollable since it's in a DraggableScrollableSheet.
+        testWidgets("but doesn't scroll the bottom sheet content",
+            (tester) async {
+          await tester.pumpWidget(harness.buildTripPlanner());
+          await tester.flushAsync();
+          await tester.pumpAndSettle();
+
+          final tab = find.byType(Tab).at(1);
+
+          await tester.fling(tab, const Offset(0, 128), 1000);
+          await tester.pumpAndSettle();
+
+          final pointer = TestPointer(1, PointerDeviceKind.mouse);
+          await tester.sendEventToBinding(pointer.hover(tester.getCenter(tab)));
+          await tester.sendEventToBinding(pointer.scroll(const Offset(0, 128)));
+          await tester.pumpAndSettle();
+
+          expect(tab.hitTestable(), findsOneWidget);
+        });
+      });
     });
   });
 
