@@ -43,14 +43,9 @@ class SubordinateScrollController extends ScrollController {
     super.detach(position);
   }
 
-  @override
-  void dispose() {
-    for (final position in positions) {
-      parent.detach(position);
-    }
-
-    super.dispose();
-  }
+  // Don't detach positions from the parent on dispose as that remains the
+  // Scrollable's responsibility. Related, Scrollable tends to detach positions
+  // in didUpdateWidget, which may actually happen after this was disposed.
 }
 
 abstract class ScrollControllerProvider extends StatefulWidget {
