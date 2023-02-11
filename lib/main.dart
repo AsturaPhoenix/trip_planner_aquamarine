@@ -249,228 +249,230 @@ class TripPlannerState extends State<TripPlanner> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'BASK Trip Planner',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xffbbccff),
-            background: const Color(0xffbbccff),
-            secondary: const Color(0xff8899cc),
-            tertiary: const Color(0xffaa0000),
+  Widget build(BuildContext context) {
+    final mapPanel = Stack(
+      key: _mapKey,
+      children: [
+        Map(
+          client: widget.wmsClient,
+          tileCache: widget.tileCache,
+          stations: stations,
+          selectedStation: selectedStation,
+          tracks: tracks,
+          stationPriority: stationPriority,
+          onStationSelected: (station) =>
+              setState(() => selectedStation = station),
+        ),
+        if (hasModal)
+          // This constructor is not const on web.
+          // ignore: prefer_const_constructors
+          PointerInterceptor(
+            child: const SizedBox.expand(),
+          )
+      ],
+    );
+
+    return MaterialApp(
+      title: 'BASK Trip Planner',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xffbbccff),
+          background: const Color(0xffbbccff),
+          secondary: const Color(0xff8899cc),
+          tertiary: const Color(0xffaa0000),
+        ),
+        scrollbarTheme: ScrollbarThemeData(
+          thumbColor: MaterialStateProperty.resolveWith(
+            (states) => states.isEmpty ? const Color(0x38000000) : null,
           ),
-          scrollbarTheme: ScrollbarThemeData(
-            thumbColor: MaterialStateProperty.resolveWith(
-              (states) => states.isEmpty ? const Color(0x38000000) : null,
+          thumbVisibility: const MaterialStatePropertyAll(true),
+        ),
+        tabBarTheme: const TabBarTheme(
+          indicator: BoxDecoration(
+            color: Color(0x40ffffff),
+            border: Border(
+              bottom: BorderSide(width: 2, color: Color(0x40000000)),
             ),
-            thumbVisibility: const MaterialStatePropertyAll(true),
           ),
-          tabBarTheme: const TabBarTheme(
-            indicator: BoxDecoration(
-              color: Color(0x40ffffff),
-              border: Border(
-                bottom: BorderSide(width: 2, color: Color(0x40000000)),
-              ),
-            ),
-            labelColor: Colors.black,
-            labelPadding: EdgeInsets.all(4),
-            labelStyle: TextStyle(fontWeight: FontWeight.bold),
-            unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          radioTheme: RadioThemeData(
-            fillColor: MaterialStateProperty.resolveWith(
-              (states) => states.contains(MaterialState.selected)
-                  ? const Color(0xb0000000)
-                  : null,
-            ),
+          labelColor: Colors.black,
+          labelPadding: EdgeInsets.all(4),
+          labelStyle: TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        radioTheme: RadioThemeData(
+          fillColor: MaterialStateProperty.resolveWith(
+            (states) => states.contains(MaterialState.selected)
+                ? const Color(0xb0000000)
+                : null,
           ),
         ),
-        home: LayoutBuilder(
-          builder: (context, constraints) {
-            const double selectedStationBarMinWidth = 480,
-                titleAreaPadding = 164,
-                selectedStationBarMinPadding = 16;
-            final centeredInlineStationBar = constraints.maxWidth >=
-                selectedStationBarMinWidth +
-                    2 *
-                        (_SelectedStationBar.blendedHorizontalPadding +
-                            selectedStationBarMinPadding +
-                            titleAreaPadding);
-            final inlineStationBar = constraints.maxWidth >=
-                selectedStationBarMinWidth +
-                    2 *
-                        (_SelectedStationBar.blendedHorizontalPadding +
-                            selectedStationBarMinPadding) +
-                    titleAreaPadding;
-            final horizontal = constraints.maxWidth >= constraints.maxHeight;
+      ),
+      home: LayoutBuilder(
+        builder: (context, constraints) {
+          const double selectedStationBarMinWidth = 480,
+              titleAreaPadding = 164,
+              selectedStationBarMinPadding = 16;
+          final centeredInlineStationBar = constraints.maxWidth >=
+              selectedStationBarMinWidth +
+                  2 *
+                      (_SelectedStationBar.blendedHorizontalPadding +
+                          selectedStationBarMinPadding +
+                          titleAreaPadding);
+          final inlineStationBar = constraints.maxWidth >=
+              selectedStationBarMinWidth +
+                  2 *
+                      (_SelectedStationBar.blendedHorizontalPadding +
+                          selectedStationBarMinPadding) +
+                  titleAreaPadding;
+          final horizontal = constraints.maxWidth >= constraints.maxHeight;
 
-            const title = Text('BASK Trip Planner');
+          const title = Text('BASK Trip Planner');
 
-            final mapPanel = Stack(
-              key: _mapKey,
-              children: [
-                Map(
-                  client: widget.wmsClient,
-                  tileCache: widget.tileCache,
-                  stations: stations,
-                  selectedStation: selectedStation,
-                  tracks: tracks,
-                  stationPriority: stationPriority,
-                  onStationSelected: (station) =>
-                      setState(() => selectedStation = station),
-                ),
-                if (hasModal)
-                  // This constructor is not const on web.
-                  // ignore: prefer_const_constructors
-                  PointerInterceptor(
-                    child: const SizedBox.expand(),
+          return Scaffold(
+            appBar: AppBar(
+              title: Row(
+                children: [
+                  title,
+                  if (selectedStation != null && inlineStationBar)
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: selectedStationBarMinPadding,
+                        ),
+                        child: _SelectedStationBar(
+                          selectedStation!,
+                          blendEdges: true,
+                        ),
+                      ),
+                    ),
+                  if (centeredInlineStationBar)
+                    const Opacity(opacity: 0, child: title),
+                ],
+              ),
+              actions: [
+                if (orientation.isOrientationAvailable)
+                  IconButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        allowSnapshotting: false,
+                        builder: (context) => Compass(
+                          waypoint: selectedStation,
+                          distanceSystem: distanceSystem,
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.explore),
+                    tooltip: 'Compass',
                   )
               ],
-            );
-
-            return Scaffold(
-              appBar: AppBar(
-                title: Row(
-                  children: [
-                    title,
-                    if (selectedStation != null && inlineStationBar)
-                      Expanded(
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: selectedStationBarMinPadding,
-                          ),
-                          child: _SelectedStationBar(
-                            selectedStation!,
-                            blendEdges: true,
-                          ),
-                        ),
-                      ),
-                    if (centeredInlineStationBar)
-                      const Opacity(opacity: 0, child: title),
-                  ],
-                ),
-                actions: [
-                  if (orientation.isOrientationAvailable)
-                    IconButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          allowSnapshotting: false,
-                          builder: (context) => Compass(
-                            waypoint: selectedStation,
-                            distanceSystem: distanceSystem,
-                          ),
-                        ),
-                      ),
-                      icon: const Icon(Icons.explore),
-                      tooltip: 'Compass',
-                    )
-                ],
-              ),
-              body: Column(
-                children: [
-                  if (selectedStation != null && !inlineStationBar)
-                    _SelectedStationBar(
-                      selectedStation!,
-                      blendEdges: false,
-                    ),
-                  Expanded(
-                    child: horizontal
-                        ? Row(
-                            children: [
-                              Expanded(child: mapPanel),
-                              if (selectedStation != null)
-                                SizedBox(
-                                  width: min(
-                                    constraints.maxWidth / 2,
-                                    TidePanel.defaultGraphWidth,
-                                  ),
-                                  child:
-                                      _Panel(key: _panelKey, tripPlanner: this),
+            ),
+            body: Column(
+              children: [
+                if (selectedStation != null && !inlineStationBar)
+                  _SelectedStationBar(
+                    selectedStation!,
+                    blendEdges: false,
+                  ),
+                Expanded(
+                  child: horizontal
+                      ? Row(
+                          children: [
+                            Expanded(child: mapPanel),
+                            if (selectedStation != null)
+                              SizedBox(
+                                width: min(
+                                  constraints.maxWidth / 2,
+                                  TidePanel.defaultGraphWidth,
                                 ),
-                            ],
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              final defaultPanelHeight = min(
-                                _Panel.estimateHeight(
-                                  context,
-                                  constraints.maxWidth,
-                                ),
-                                constraints.maxHeight,
-                              );
+                                child:
+                                    _Panel(key: _panelKey, tripPlanner: this),
+                              ),
+                          ],
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final defaultPanelHeight = min(
+                              _Panel.estimateHeight(
+                                context,
+                                constraints.maxWidth,
+                              ),
+                              constraints.maxHeight,
+                            );
 
-                              final minMapHeight =
-                                  constraints.maxHeight - defaultPanelHeight;
+                            final minMapHeight =
+                                constraints.maxHeight - defaultPanelHeight;
 
-                              final defaultPosition =
-                                  defaultPanelHeight / constraints.maxHeight;
-                              final minimizedPosition =
-                                  _Panel.tabBarHeight / constraints.maxHeight;
+                            final defaultPosition =
+                                defaultPanelHeight / constraints.maxHeight;
+                            final minimizedPosition =
+                                _Panel.tabBarHeight / constraints.maxHeight;
 
-                              return IterativeColumn(
-                                children: [
-                                  IterativeFlexible(
-                                    pass: 1,
-                                    child: Viewport(
-                                      offset: ViewportOffset.zero(),
-                                      slivers: [
-                                        SliverFillRemaining(
-                                          hasScrollBody: false,
-                                          child: SizedBox(
-                                            height: minMapHeight,
-                                            child: mapPanel,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (selectedStation != null)
-                                    PointerInterceptor(
-                                      child: DraggableScrollableSheet(
-                                        initialChildSize: defaultPosition,
-                                        minChildSize: minimizedPosition,
-                                        snap: true,
-                                        snapSizes: [defaultPosition],
-                                        expand: false,
-                                        builder: (context, scrollController) =>
-                                            CustomScrollView(
-                                          controller: scrollController,
-                                          scrollBehavior:
-                                              ScrollConfiguration.of(context)
-                                                  .copyWith(scrollbars: false),
-                                          slivers: [
-                                            SliverFillRemaining(
-                                              // Allow the SizedBox to act as a
-                                              // sort of min height beyond which
-                                              // to clip the panel while also
-                                              // allowing it to expand.
-                                              hasScrollBody: false,
-                                              child: SizedBox(
-                                                height: defaultPanelHeight,
-                                                child: _Panel(
-                                                  key: _panelKey,
-                                                  tripPlanner: this,
-                                                  scrollController:
-                                                      scrollController,
-                                                ),
-                                              ),
-                                            )
-                                          ],
+                            return IterativeColumn(
+                              children: [
+                                IterativeFlexible(
+                                  pass: 1,
+                                  child: Viewport(
+                                    offset: ViewportOffset.zero(),
+                                    slivers: [
+                                      SliverFillRemaining(
+                                        hasScrollBody: false,
+                                        child: SizedBox(
+                                          height: minMapHeight,
+                                          child: mapPanel,
                                         ),
                                       ),
-                                    )
-                                ],
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      );
+                                    ],
+                                  ),
+                                ),
+                                if (selectedStation != null)
+                                  PointerInterceptor(
+                                    child: DraggableScrollableSheet(
+                                      initialChildSize: defaultPosition,
+                                      minChildSize: minimizedPosition,
+                                      snap: true,
+                                      snapSizes: [defaultPosition],
+                                      expand: false,
+                                      builder: (context, scrollController) =>
+                                          CustomScrollView(
+                                        controller: scrollController,
+                                        scrollBehavior:
+                                            ScrollConfiguration.of(context)
+                                                .copyWith(scrollbars: false),
+                                        slivers: [
+                                          SliverFillRemaining(
+                                            // Allow the SizedBox to act as a
+                                            // sort of min height beyond which
+                                            // to clip the panel while also
+                                            // allowing it to expand.
+                                            hasScrollBody: false,
+                                            child: SizedBox(
+                                              height: defaultPanelHeight,
+                                              child: _Panel(
+                                                key: _panelKey,
+                                                tripPlanner: this,
+                                                scrollController:
+                                                    scrollController,
+                                              ),
+                                            ),
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _SelectedStationBar extends StatelessWidget {
