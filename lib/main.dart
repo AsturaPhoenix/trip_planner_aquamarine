@@ -295,7 +295,6 @@ class TripPlannerState extends State<TripPlanner> {
             ),
           ),
           labelColor: Colors.black,
-          labelPadding: EdgeInsets.all(4),
           labelStyle: TextStyle(fontWeight: FontWeight.bold),
           unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
         ),
@@ -437,6 +436,16 @@ class TripPlannerState extends State<TripPlanner> {
                                       builder: (context, scrollController) =>
                                           CustomScrollView(
                                         controller: scrollController,
+                                        // We need to disable scrolling
+                                        // explicitly since we're telling the
+                                        // sliver below to stay at least as
+                                        // large as the estimated tide graph
+                                        // height. Otherwise, when the sheet is
+                                        // collapsed, other scroll methods such
+                                        // as mouse wheel can scroll the sheet
+                                        // content without expanding the sheet.
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
                                         scrollBehavior:
                                             ScrollConfiguration.of(context)
                                                 .copyWith(scrollbars: false),
@@ -537,7 +546,7 @@ class _SelectedStationBar extends StatelessWidget {
 }
 
 class _Panel extends StatefulWidget {
-  static const tabBarHeight = 26.0;
+  static const tabBarHeight = 48.0;
   static double estimateHeight(BuildContext context, double maxWidth) =>
       tabBarHeight + TidePanel.estimateHeight(context, maxWidth);
 
@@ -681,9 +690,10 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
             child: TabBar(
               controller: tabController,
               tabs: [
-                if (tripPlanner.tideCurrentStation != null) const Text('Tides'),
-                const Text('Details'),
-                const Text('Plot'),
+                if (tripPlanner.tideCurrentStation != null)
+                  const Tab(text: 'Tides'),
+                const Tab(text: 'Details'),
+                const Tab(text: 'Plot'),
               ],
             ),
           ),
