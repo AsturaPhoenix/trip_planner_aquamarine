@@ -55,30 +55,41 @@ abstract class ScrollControllerProvider extends StatefulWidget {
 
 mixin SubordinateScrollControllerStateMixin<T extends ScrollControllerProvider>
     on State<T> {
-  ScrollController? scrollController;
+  ScrollController? get scrollController => _scrollController;
+  ScrollController? _scrollController;
+
+  @protected
+  ScrollController? wrapScrollController(ScrollController? controller) =>
+      controller == null ? null : SubordinateScrollController(controller);
 
   @override
   void initState() {
     super.initState();
-    if (widget.scrollController != null) {
-      scrollController = SubordinateScrollController(widget.scrollController!);
-    }
+    _scrollController = wrapScrollController(widget.scrollController);
   }
 
   @override
   void didUpdateWidget(T oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.scrollController != oldWidget.scrollController) {
-      scrollController?.dispose();
-      scrollController = widget.scrollController == null
-          ? null
-          : SubordinateScrollController(widget.scrollController!);
+      _scrollController?.dispose();
+      _scrollController = wrapScrollController(widget.scrollController);
     }
   }
 
   @override
   void dispose() {
-    scrollController?.dispose();
+    _scrollController?.dispose();
     super.dispose();
   }
+}
+
+mixin WithFallback<T extends ScrollControllerProvider>
+    on SubordinateScrollControllerStateMixin<T> {
+  @override
+  ScrollController get scrollController => super.scrollController!;
+
+  @override
+  ScrollController wrapScrollController(ScrollController? controller) =>
+      super.wrapScrollController(controller) ?? ScrollController();
 }

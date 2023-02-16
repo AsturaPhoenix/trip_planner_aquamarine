@@ -726,6 +726,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
                   timeZone: tripPlanner.timeWindow.t.timeZone,
                   distanceSystem: tripPlanner.distanceSystem,
                   tracks: tripPlanner.tracks,
+                  scrollController: widget.scrollController,
                   onTracksChanged: (tracks) =>
                       tripPlanner.setState(() => tripPlanner.tracks = tracks),
                   onModal: _onModal,

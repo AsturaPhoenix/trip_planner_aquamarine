@@ -14,6 +14,7 @@ import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
 import '../util/distance.dart';
+import '../util/subordinate_scroll_controller.dart';
 import 'color_picker.dart';
 import 'iterative_flex.dart';
 
@@ -113,13 +114,14 @@ class Track {
       );
 }
 
-class PlotPanel extends StatefulWidget {
+class PlotPanel extends StatefulWidget implements ScrollControllerProvider {
   PlotPanel({
     super.key,
     this.t,
     required this.timeZone,
     required this.distanceSystem,
     this.tracks = const [],
+    this.scrollController,
     required this.onTracksChanged,
     this.onModal,
   });
@@ -127,6 +129,8 @@ class PlotPanel extends StatefulWidget {
   final TimeZone timeZone;
   final ValueNotifier<DistanceSystem> distanceSystem;
   final List<Track> tracks;
+  @override
+  final ScrollController? scrollController;
   final void Function(List<Track>) onTracksChanged;
   final void Function(bool modal)? onModal;
 
@@ -137,8 +141,10 @@ class PlotPanel extends StatefulWidget {
 }
 
 class PlotPanelState extends State<PlotPanel>
-    with AutomaticKeepAliveClientMixin<PlotPanel> {
-  final scrollController = ScrollController();
+    with
+        AutomaticKeepAliveClientMixin<PlotPanel>,
+        SubordinateScrollControllerStateMixin,
+        WithFallback {
   int? selectionStart;
   var _speeds = <Segment, List<TimeSeries<Speed>>>{};
   Speed? _maxSpeed;
