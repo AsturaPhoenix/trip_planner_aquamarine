@@ -78,7 +78,7 @@ void main() {
       );
     });
 
-    testWidgets('flips station z-indices when details panel is selected',
+    testWidgets('flips station z-indices when certain panels are selected',
         (tester) async {
       await tester.pumpWidget(harness.buildTripPlanner());
       await tester.flushAsync();
@@ -88,8 +88,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      final stationPriority =
+      var stationPriority =
           tester.widget<Map>(find.byType(Map)).stationPriority;
+
       expect(
         stationPriority(StationType.destination),
         greaterThan(stationPriority(StationType.current)),
@@ -98,6 +99,39 @@ void main() {
         stationPriority(StationType.current),
         greaterThan(stationPriority(StationType.nogo)),
       );
+
+      // Don't bother flipping when the Plot panel is selected.
+      await tester.tap(find.text('Plot'));
+      await tester.pumpAndSettle();
+      await tester.pump(Duration.zero);
+
+      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
+          stationPriority);
+
+      await tester.tap(find.text('Tides'));
+      await tester.pumpAndSettle();
+      await tester.pump(Duration.zero);
+
+      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
+          isNot(stationPriority));
+      stationPriority = tester.widget<Map>(find.byType(Map)).stationPriority;
+
+      expect(
+        stationPriority(StationType.current),
+        greaterThan(stationPriority(StationType.destination)),
+      );
+      expect(
+        stationPriority(StationType.destination),
+        greaterThan(stationPriority(StationType.nogo)),
+      );
+
+      // Again, don't bother flipping when the Plot panel is selected.
+      await tester.tap(find.text('Plot'));
+      await tester.pumpAndSettle();
+      await tester.pump(Duration.zero);
+
+      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
+          stationPriority);
     });
 
     testWidgets('waits for location fix to initialize', (tester) async {

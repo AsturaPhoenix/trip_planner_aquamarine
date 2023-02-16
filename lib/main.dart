@@ -585,6 +585,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
   Object? _panelChangedToken;
+  List<Set<StationType>>? _stationTypePriorities;
 
   void _onPanelChanged() {
     // Flipping marker z indices is relatively expensive, so defer while
@@ -602,21 +603,26 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
       () {
         if (_panelChangedToken != token) return;
 
-        final priorities = widget.tabs[tabController.index] == DetailsPanel
-            ? const [
-                {StationType.launch, StationType.destination},
-                {StationType.tide, StationType.current},
-              ]
-            : const [
-                {StationType.tide, StationType.current},
-                {StationType.launch, StationType.destination},
-              ];
-        tripPlanner.setState(
-          () => tripPlanner.stationPriority = (type) =>
-              priorities.length -
-              priorities.indexWhere((set) => set.contains(type)) %
-                  (priorities.length + 1),
-        );
+        final priorities = const {
+          TidePanel: [
+            {StationType.tide, StationType.current},
+            {StationType.launch, StationType.destination},
+          ],
+          DetailsPanel: [
+            {StationType.launch, StationType.destination},
+            {StationType.tide, StationType.current},
+          ],
+        }[widget.tabs[tabController.index]];
+
+        if (priorities != null && priorities != _stationTypePriorities) {
+          _stationTypePriorities = priorities;
+          tripPlanner.setState(
+            () => tripPlanner.stationPriority = (type) =>
+                priorities.length -
+                priorities.indexWhere((set) => set.contains(type)) %
+                    (priorities.length + 1),
+          );
+        }
       },
       Priority.animation - 1,
     );
