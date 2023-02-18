@@ -6,7 +6,6 @@ import 'dart:developer' as debug;
 import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive_flutter/adapters.dart';
@@ -412,17 +411,17 @@ class TripPlannerState extends State<TripPlanner> {
                               children: [
                                 IterativeFlexible(
                                   pass: 1,
-                                  child: Viewport(
-                                    offset: ViewportOffset.zero(),
-                                    slivers: [
-                                      SliverFillRemaining(
-                                        hasScrollBody: false,
-                                        child: SizedBox(
-                                          height: minMapHeight,
-                                          child: mapPanel,
-                                        ),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) =>
+                                        OverflowBox(
+                                      alignment: Alignment.topLeft,
+                                      minHeight: minMapHeight,
+                                      maxHeight: max(
+                                        minMapHeight,
+                                        constraints.maxHeight,
                                       ),
-                                    ],
+                                      child: mapPanel,
+                                    ),
                                   ),
                                 ),
                                 if (selectedStation != null)

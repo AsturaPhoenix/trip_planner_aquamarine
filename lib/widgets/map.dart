@@ -492,7 +492,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   void dispose() {
     mapAnimation.dispose();
     trackingSubscription?.cancel();
-    gmap?.dispose();
+    // We mustn't dispose of the maps controller because the widget will do this
+    // for us and dispose isn't idempotent on all platforms.
     gmap = null;
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();

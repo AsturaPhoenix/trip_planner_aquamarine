@@ -7,6 +7,8 @@ import 'dart:async' as _i5;
 import 'dart:convert' as _i8;
 import 'dart:typed_data' as _i6;
 
+import 'package:file_picker/src/file_picker.dart' as _i13;
+import 'package:file_picker/src/file_picker_result.dart' as _i14;
 import 'package:geolocator_platform_interface/src/enums/enums.dart' as _i12;
 import 'package:geolocator_platform_interface/src/geolocator_platform_interface.dart'
     as _i11;
@@ -743,4 +745,98 @@ class MockGeolocatorPlatform extends _i1.Mock
         returnValue: 0.0,
         returnValueForMissingStub: 0.0,
       ) as double);
+}
+
+/// A class which mocks [FilePicker].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockFilePicker extends _i1.Mock
+    with _i9.MockPlatformInterfaceMixin
+    implements _i13.FilePicker {
+  @override
+  _i5.Future<_i14.FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    _i13.FileType? type = _i13.FileType.any,
+    List<String>? allowedExtensions,
+    dynamic Function(_i13.FilePickerStatus)? onFileLoading,
+    bool? allowCompression = true,
+    bool? allowMultiple = false,
+    bool? withData = false,
+    bool? withReadStream = false,
+    bool? lockParentWindow = false,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #pickFiles,
+          [],
+          {
+            #dialogTitle: dialogTitle,
+            #initialDirectory: initialDirectory,
+            #type: type,
+            #allowedExtensions: allowedExtensions,
+            #onFileLoading: onFileLoading,
+            #allowCompression: allowCompression,
+            #allowMultiple: allowMultiple,
+            #withData: withData,
+            #withReadStream: withReadStream,
+            #lockParentWindow: lockParentWindow,
+          },
+        ),
+        returnValue: _i5.Future<_i14.FilePickerResult?>.value(),
+        returnValueForMissingStub: _i5.Future<_i14.FilePickerResult?>.value(),
+      ) as _i5.Future<_i14.FilePickerResult?>);
+  @override
+  _i5.Future<bool?> clearTemporaryFiles() => (super.noSuchMethod(
+        Invocation.method(
+          #clearTemporaryFiles,
+          [],
+        ),
+        returnValue: _i5.Future<bool?>.value(),
+        returnValueForMissingStub: _i5.Future<bool?>.value(),
+      ) as _i5.Future<bool?>);
+  @override
+  _i5.Future<String?> getDirectoryPath({
+    String? dialogTitle,
+    bool? lockParentWindow = false,
+    String? initialDirectory,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getDirectoryPath,
+          [],
+          {
+            #dialogTitle: dialogTitle,
+            #lockParentWindow: lockParentWindow,
+            #initialDirectory: initialDirectory,
+          },
+        ),
+        returnValue: _i5.Future<String?>.value(),
+        returnValueForMissingStub: _i5.Future<String?>.value(),
+      ) as _i5.Future<String?>);
+  @override
+  _i5.Future<String?> saveFile({
+    String? dialogTitle,
+    String? fileName,
+    String? initialDirectory,
+    _i13.FileType? type = _i13.FileType.any,
+    List<String>? allowedExtensions,
+    bool? lockParentWindow = false,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveFile,
+          [],
+          {
+            #dialogTitle: dialogTitle,
+            #fileName: fileName,
+            #initialDirectory: initialDirectory,
+            #type: type,
+            #allowedExtensions: allowedExtensions,
+            #lockParentWindow: lockParentWindow,
+          },
+        ),
+        returnValue: _i5.Future<String?>.value(),
+        returnValueForMissingStub: _i5.Future<String?>.value(),
+      ) as _i5.Future<String?>);
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
@@ -26,6 +27,7 @@ import 'cache.dart';
   MockSpec<http.Client>(),
   MockSpec<PermissionHandlerPlatform>(mixingIn: [MockPlatformInterfaceMixin]),
   MockSpec<GeolocatorPlatform>(mixingIn: [MockPlatformInterfaceMixin]),
+  MockSpec<FilePicker>(mixingIn: [MockPlatformInterfaceMixin]),
 ])
 import 'harness.mocks.dart';
 import 'mockito.dart';
@@ -79,6 +81,11 @@ class TripPlannerHarness {
           .complete(isAbsoluteOrientationAvailable);
       addTearDown(orientation.PlatformOrientation.reset);
     }
+    if (!useReal.contains(FilePicker)) {
+      final old = FilePicker.platform;
+      FilePicker.platform = filePicker;
+      addTearDown(() => FilePicker.platform = old);
+    }
 
     when(wmsClient.get(any))
         .thenAnswer((_) => Completer<http.Response>().future);
@@ -89,6 +96,7 @@ class TripPlannerHarness {
   final permissionHandler = MockPermissionHandlerPlatform();
   final geolocator = MockGeolocatorPlatform();
   final motionSensors = FakeMotionSensorsDriver();
+  final filePicker = MockFilePicker();
 
   final stationCache = FakeBox<Station>();
   final tideGraphCache = FakeBlobCache(), tileCache = FakeBlobCache();
