@@ -11,6 +11,8 @@ If `pub get` fails with "filename too long", you may need to set `git config --s
 Flutter itself needs to be forked to address a couple issues:
 * https://github.com/flutter/flutter/issues/116212
 * https://github.com/flutter/flutter/issues/82016
+* https://github.com/flutter/flutter/issues/119966
+* https://github.com/flutter/flutter/issues/102469
 
 Fixes are at `git@github.com:AsturaPhoenix/flutter.git`, branch: `rosswang`.
 
@@ -52,10 +54,16 @@ To test with Google Maps, a `MAPS_API_KEY` environment variable must be set.
 $env:MAPS_API_KEY = "..."
 ```
 
-Integration tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli).
+To run the integration tests,
 
 ```
-patrol drive -t integration_test/integration_test.dart
+flutter drive --driver=test_driver/integration_test.dart --target=integration_test/integration_test.dart
+```
+
+Native tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli).
+
+```
+patrol drive -t integration_test/native_test.dart
 ```
 
 ### Performance tests

@@ -14,6 +14,10 @@ extension TestExtensions<T> on StreamController<T> {
 }
 
 extension TesterAsync on WidgetTester {
+  /// For some reason, nontrivial streams tend to require real asyncs. There are
+  /// numerous possible related issues, e.g. dart-lang/sdk#40131
+  Future<void> flushAsync() async => runAsync(() async {});
+
   Future<void> waitFor(
     Finder finder, {
     Duration interval = kFrame,

@@ -14,12 +14,6 @@ import 'util/async.dart';
 import 'util/geolocator.dart';
 import 'util/harness.dart';
 
-extension on WidgetTester {
-  /// For some reason, nontrivial streams tend to require real asyncs. There are
-  /// numerous possible related issues, e.g. dart-lang/sdk#40131
-  Future<void> flushAsync() async => runAsync(() async {});
-}
-
 void main() {
   late TripPlannerHarness harness;
 
@@ -33,10 +27,9 @@ void main() {
   });
 
   group('with stations and tide graphs', () {
-    setUp(() {
-      harness.withStations().complete(kDatapoints);
-      harness.withTideGraphs();
-    });
+    setUp(() => harness
+      ..withStations().complete(kDatapoints)
+      ..withTideGraphs());
 
     testWidgets('initializes without location permission', (tester) async {
       await tester.pumpWidget(harness.buildTripPlanner());
