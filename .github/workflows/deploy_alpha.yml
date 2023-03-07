@@ -1,0 +1,45 @@
+name: Deploy alpha
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy-alpha:
+    name: Deploy alpha
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trip_planner_aquamarine
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+        with:
+          path: trip_planner_aquamarine
+      - name: Set up Flutter
+        uses: ./trip_planner_aquamarine/.github/actions/flutter
+
+      - run: flutter build web --base-href "/trip_planner_aquamarine/"
+      - name: Inject Maps API key
+        run: perl -i -pe "s/(?<=maps\/api\/js\?key=)[^\"]*/${{ secrets.MAPS_API_KEY }}/" build/web/index.html
+      - name: Package build
+        run: cd build && tar --create -f web.tar.gz web
+
+      - name: Set up SSH
+        run: |
+          mkdir ~/.ssh
+          cd ~/.ssh
+          echo '${{ secrets.ALPHA_KNOWN_HOSTS }}' >> known_hosts
+          echo '${{ secrets.ALPHA_SSH }}' >> id_rsa
+          chmod 600 id_rsa
+
+      - name: Transfer build
+        run: 'scp build/web.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:'
+      - name: Unpack and flip
+        run: |
+          ssh imagipioneer@${{ vars.ALPHA_IP }} '
+            tar -xvf web.tar.gz &&
+            rm -rf trip_planner_aquamarine &&
+            mv web trip_planner_aquamarine &&
+            rm web.tar.gz'

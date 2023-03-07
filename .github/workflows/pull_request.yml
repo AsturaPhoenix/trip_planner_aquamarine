@@ -1,8 +1,8 @@
 name: Pull request
 
 on:
-  pull_request:
-    branches: [ "master" ]
+ pull_request:
+   branches: [master]
 
 jobs:
   linux-tests:

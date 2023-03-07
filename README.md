@@ -83,3 +83,5 @@ flutter build web --base-href "/trip_planner_aquamarine/"
 ```
 
 Remember to add your Google Maps API key to `build/web/index.html`.
+
+CI pushes a release build of the master branch to the alpha server at http://35.233.215.192/trip_planner_aquamarine automatically.
