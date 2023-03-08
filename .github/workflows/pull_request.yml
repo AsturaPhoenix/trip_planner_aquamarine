@@ -132,7 +132,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: trip_planner_aquamarine
-          script: flutter drive --driver=test_driver/integration_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk -v
+          script: flutter drive --driver=test_driver/integration_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
 
   # Separate integration and native tests for more parallelism and to avoid
   # flakes that may happen when the emulator is run twice in succession...
@@ -184,10 +184,4 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: trip_planner_aquamarine
-          script: patrol drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk -v
-      - name: Upload failure screenshots
-        if: failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: Failure screenshots
-          path: trip_planner_aquamarine/ci_screenshots
+          script: patrol drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
