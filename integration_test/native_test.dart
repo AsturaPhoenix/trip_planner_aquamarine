@@ -40,23 +40,16 @@ class MapHarness extends StatelessWidget {
 
 @isTest
 void test(String description, Future<void> Function(PatrolTester) callback) =>
-    patrolTest(description,
-        config: const PatrolTesterConfig(
-          existsTimeout: kDefaultTimeout,
-          visibleTimeout: kDefaultTimeout,
-          settleTimeout: kDefaultTimeout,
-        ),
-        nativeAutomation: true, ($) async {
-      try {
-        await callback($);
-      } on Object {
-        await $.host.takeScreenshot(
-          path: 'ci_screenshots',
-          name: $.tester.testDescription,
-        );
-        rethrow;
-      }
-    });
+    patrolTest(
+      description,
+      config: const PatrolTesterConfig(
+        existsTimeout: kDefaultTimeout,
+        visibleTimeout: kDefaultTimeout,
+        settleTimeout: kDefaultTimeout,
+      ),
+      nativeAutomation: true,
+      callback,
+    );
 
 void main() {
   PatrolBinding.ensureInitialized();
@@ -136,7 +129,7 @@ void main() {
       );
       await $.tester.pumpAndSettle();
 
-      // Do the gesture twice in case the map isn't responseive yet to decrease
+      // Do the gesture twice in case the map isn't responsive yet to decrease
       // the likelihood of a flake.
       for (int i = 0; i < 2; ++i) {
         final center = $.tester.getCenter(find.byType(GoogleMap));
