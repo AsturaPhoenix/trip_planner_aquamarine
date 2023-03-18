@@ -18,32 +18,54 @@ extension TesterAsync on WidgetTester {
   /// numerous possible related issues, e.g. dart-lang/sdk#40131
   Future<void> flushAsync() async => runAsync(() async {});
 
-  Future<void> waitFor(
-    Finder finder, {
+  Future<void> pumpWhile(
+    bool Function() predicate, {
     Duration interval = kFrame,
     Duration timeout = kDefaultTimeout,
+    String diagnostic = 'pumpWhile',
   }) async {
     final end = binding.clock.fromNowBy(timeout);
-    while (finder.evaluate().isEmpty) {
+    while (predicate()) {
       if (!binding.clock.now().isBefore(end)) {
-        throw TimeoutException('waitFor $finder timed out after $timeout');
+        throw TimeoutException('$diagnostic timed out after $timeout');
       }
       await pump(interval);
     }
   }
+
+  Future<void> waitFor(
+    Finder finder, {
+    Duration interval = kFrame,
+    Duration timeout = kDefaultTimeout,
+  }) =>
+      pumpWhile(
+        () => finder.evaluate().isEmpty,
+        interval: interval,
+        timeout: timeout,
+        diagnostic: 'waitFor $finder',
+      );
 
   Future<void> pumpUntil(
     Future future, {
     Duration interval = kFrame,
     Duration timeout = kDefaultTimeout,
   }) async {
-    final end = binding.clock.fromNowBy(timeout);
     var pending = true;
     future.then((_) => pending = false);
-    while (pending) {
-      if (!binding.clock.now().isBefore(end)) {
-        throw TimeoutException('pumpUntil timed out');
-      }
+    await pumpWhile(
+      () => pending,
+      interval: interval,
+      timeout: timeout,
+      diagnostic: 'pumpUntil',
+    );
+  }
+
+  Future<void> pumpFor(
+    Duration duration, {
+    Duration interval = kFrame,
+  }) async {
+    final end = binding.clock.fromNowBy(duration);
+    while (binding.clock.now().isBefore(end)) {
       await pump(interval);
     }
   }
