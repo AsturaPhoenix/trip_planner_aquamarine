@@ -51,6 +51,20 @@ void test(String description, Future<void> Function(PatrolTester) callback) =>
       callback,
     );
 
+// There are a couple cases where we need to wait for a map to settle, but since
+// camera events are processed by native Maps, pumpAndSettle doesn't catch
+// pending updates.
+Future<void> pumpUntilMapSettled(WidgetTester tester) async {
+  final MapState mapState = tester.state(find.byType(Map));
+  CameraPosition cameraPosition = mapState.cameraPosition;
+  await tester.pumpWhile(() => mapState.cameraPosition == cameraPosition);
+  await tester.pumpWhile(() {
+    final settled = cameraPosition == mapState.cameraPosition;
+    cameraPosition = mapState.cameraPosition;
+    return !settled;
+  });
+}
+
 void main() {
   PatrolBinding.ensureInitialized();
 
@@ -86,14 +100,15 @@ void main() {
         TextButton,
         PrecachedAsset.compassDirections.image,
       );
-      await $.tester.pumpAndSettle(); // Allow rotation animation to complete.
+      // Allow rotation animation to complete.
+      await pumpUntilMapSettled($.tester);
       expect(finder, findsOneWidget);
 
       await $.tester.drag(find.byType(GoogleMap), const Offset(64, 0));
-      await $.tester.pumpAndSettle();
+      await pumpUntilMapSettled($.tester);
 
       finder = find.widgetWithImage(TextButton, PrecachedAsset.compass.image);
-      await $.tester.waitFor(finder);
+      expect(finder, findsOneWidget);
       await $.tester.tap(finder);
 
       finder = find.widgetWithImage(
