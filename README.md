@@ -14,7 +14,7 @@ Flutter needs a fork to address a couple issues:
 
 Fixes are at `git@github.com:AsturaPhoenix/flutter.git`, branch: `rosswang`. To use this fork,
 ```
-git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang --depth 1`
+git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang --depth 1
 ```
 (optionally omitting `--depth 1` if you anticipate working on the Flutter fork). Then proceed with the instructions at https://docs.flutter.dev/get-started/install after the analogous `git clone`.
 
