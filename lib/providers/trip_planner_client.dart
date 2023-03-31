@@ -113,14 +113,14 @@ class TripPlannerClient {
       yield {for (final station in stationCache.values) station.id: station};
       needResults = false;
     } else {
-      log.fine('Stations: cache miss.');
+      log.info('Stations: cache miss.');
       needResults = true;
     }
 
     if (httpClientFactory != null) {
       try {
         final stations = await (await httpClientFactory!()).getDatapoints();
-        log.fine('Stations: fetched/refreshed.');
+        log.info('Stations: fetched/refreshed.');
         yield stations;
         stationCache
           ..clear()

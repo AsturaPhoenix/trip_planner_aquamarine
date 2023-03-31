@@ -23,8 +23,11 @@ jobs:
       - run: flutter build web --base-href "/trip_planner_aquamarine/"
       - name: Inject Maps API key
         run: perl -i -pe "s/(?<=maps\/api\/js\?key=)[^\"]*/${{ secrets.MAPS_API_KEY }}/" build/web/index.html
-      - name: Package build
+      - name: Package web build
         run: cd build && tar --create -f web.tar.gz web
+
+      - name: Package server
+        run: tar --create -f server.tar.gz server util
 
       - name: Set up SSH
         run: |
@@ -34,7 +37,7 @@ jobs:
           echo '${{ secrets.ALPHA_SSH }}' >> id_rsa
           chmod 600 id_rsa
 
-      - name: Transfer build
+      - name: Transfer web build
         run: 'scp build/web.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:'
       - name: Unpack and flip
         run: |
@@ -43,3 +46,16 @@ jobs:
             rm -rf trip_planner_aquamarine &&
             mv web trip_planner_aquamarine &&
             rm web.tar.gz'
+
+      - name: Transfer server
+        run: 'scp server.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:aquamarine_server'
+      - name: Unpack and flip
+        run: |
+          ssh imagipioneer@${{ vars.ALPHA_IP }} '
+            cd aquamarine_server &&
+            tar --overwrite -xvf server.tar.gz &&
+            rm server.tar.gz &&
+            cd server &&
+            dart pub get &&
+            killall dart:main.dart &&
+            dart bin/main.dart &'

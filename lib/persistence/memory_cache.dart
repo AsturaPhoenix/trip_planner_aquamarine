@@ -32,4 +32,7 @@ class MemoryCache<K, V extends Object> {
 
   /// Removes the entry for [key] from the cache without calling [onEvict].
   V? remove(K key) => _data.remove(key);
+
+  /// Clears the cache without calling [onEvict];
+  void clear() => _data.clear();
 }

@@ -17,6 +17,7 @@ import 'package:trip_planner_aquamarine/main.dart';
 import 'package:trip_planner_aquamarine/platform/location.dart';
 import 'package:trip_planner_aquamarine/platform/orientation.dart'
     as orientation;
+import 'package:trip_planner_aquamarine/providers/ofs_client.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
 import '../data/empty.png.dart';
@@ -101,7 +102,7 @@ class TripPlannerHarness {
   final stationCache = FakeBox<Station>();
   final tideGraphCache = FakeBlobCache(), tileCache = FakeBlobCache();
   final tripPlannerHttpClient = MockTripPlannerHttpClient();
-  final wmsClient = MockClient();
+  final wmsClient = MockClient(), ofsClient = MockClient();
 
   late final TripPlannerClient tripPlannerClient = TripPlannerClient(
     stationCache,
@@ -114,6 +115,7 @@ class TripPlannerHarness {
         tripPlannerClient: tripPlannerClient,
         wmsClient: wmsClient,
         tileCache: tileCache,
+        ofsClient: OfsClient(client: ofsClient),
       );
 
   StreamController<Position> withLocation() {

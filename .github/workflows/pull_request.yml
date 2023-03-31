@@ -21,7 +21,14 @@ jobs:
         uses: ./trip_planner_aquamarine/.github/actions/flutter
 
       - run: dart format --output=none --set-exit-if-changed .
+
+      # We need to pub get in each subpackage since `flutter analyze` analyzes tests but `pub get` ignores transient dev dependencies.
+      # There also seems to be something additional strange going on.
       - run: flutter pub get
+      - run: flutter pub get -C util
+      - run: flutter pub get -C server
+      - run: flutter pub get -C server/ifc
+
       - run: flutter analyze --fatal-infos
       - run: flutter test
       - uses: nanasess/setup-chromedriver@v1
