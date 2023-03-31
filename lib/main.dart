@@ -20,6 +20,7 @@ import 'persistence/blob_cache.dart';
 import 'persistence/cache_box.dart';
 import 'platform/location.dart' as location;
 import 'platform/orientation.dart' as orientation;
+import 'providers/ofs_client.dart';
 import 'providers/trip_planner_client.dart';
 import 'util/distance.dart';
 import 'util/optional.dart';
@@ -104,6 +105,7 @@ class TripPlanner extends StatefulWidget {
       ),
       wmsClient: http.Client(),
       tileCache: await tileCache,
+      ofsClient: OfsClient(client: http.Client()),
     );
   }
 
@@ -112,11 +114,13 @@ class TripPlanner extends StatefulWidget {
     required this.tripPlannerClient,
     required this.wmsClient,
     required this.tileCache,
+    required this.ofsClient,
   });
 
   final TripPlannerClient tripPlannerClient;
   final http.Client wmsClient;
   final BlobCache tileCache;
+  final OfsClient ofsClient;
 
   @override
   TripPlannerState createState() => TripPlannerState();
@@ -255,9 +259,11 @@ class TripPlannerState extends State<TripPlanner> {
         Map(
           client: widget.wmsClient,
           tileCache: widget.tileCache,
+          ofsClient: widget.ofsClient,
           stations: stations,
           selectedStation: selectedStation,
           tracks: tracks,
+          timeWindow: timeWindow,
           stationPriority: stationPriority,
           onStationSelected: (station) =>
               setState(() => selectedStation = station),

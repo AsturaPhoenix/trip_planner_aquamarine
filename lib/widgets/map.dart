@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:math' as math;
 
+import 'package:aquamarine_server_interface/types.dart' as ifc;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,16 +14,56 @@ import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../persistence/blob_cache.dart';
 import '../platform/location.dart' as location;
 import '../platform/orientation.dart' as orientation;
+import '../providers/ofs_client.dart';
 import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
+import '../util/angle.dart';
 import '../util/animation_coordinator.dart';
-import '../util/latlngbounds.dart';
+import '../util/async_throttle.dart';
 import '../util/optional.dart';
 import 'plot_panel.dart';
+import 'tide_panel.dart';
+
+String b64LatLng(ifc.LatLng latlng) => base64.encode(
+      Uint8List.view(
+        Float32List.fromList([
+          latlng.latitude,
+          latlng.longitude,
+        ]).buffer,
+      ),
+    );
+
+extension on LatLng {
+  ifc.LatLng toIfc() => ifc.LatLng(latitude, longitude);
+}
+
+extension on ifc.LatLng {
+  LatLng toGmaps() => LatLng(latitude, longitude);
+}
+
+extension on LatLngBounds {
+  ifc.LatLngBounds toIfc() => ifc.LatLngBounds(
+        southwest: southwest.toIfc(),
+        northeast: northeast.toIfc(),
+      );
+
+  bool containsBounds(LatLngBounds other) =>
+      toIfc().containsBounds(other.toIfc());
+
+  LatLngBounds pad(double factor) => toIfc().pad(factor).toGmaps();
+}
+
+extension on ifc.LatLngBounds {
+  LatLngBounds toGmaps() => LatLngBounds(
+        southwest: southwest.toGmaps(),
+        northeast: northeast.toGmaps(),
+      );
+}
 
 class Map extends StatefulWidget {
   static const minZoom = 0, maxZoom = 22;
@@ -44,9 +86,11 @@ class Map extends StatefulWidget {
     super.key,
     required this.client,
     required this.tileCache,
+    required this.ofsClient,
     this.stations = const {},
     this.selectedStation,
     this.tracks = const [],
+    required this.timeWindow,
     int Function(StationType type)? stationPriority,
     this.onStationSelected,
   }) : stationPriority =
@@ -54,9 +98,11 @@ class Map extends StatefulWidget {
 
   final http.Client client;
   final BlobCache tileCache;
+  final OfsClient ofsClient;
   final core.Map<StationId, Station> stations;
   final Station? selectedStation;
   final List<Track> tracks;
+  final GraphTimeWindow timeWindow;
 
   final int Function(StationType type) stationPriority;
   final void Function(Station station)? onStationSelected;
@@ -143,17 +189,17 @@ extension on CameraPosition {
   CameraPosition operator +(CameraDelta delta) => CameraPosition(
         bearing: (bearing + delta.bearing) % 360,
         target: LatLng(
-          target.latitude + delta.target.latitude,
-          target.longitude + delta.target.longitude,
+          target.latitude + delta.target.dy,
+          target.longitude + delta.target.dx,
         ),
         zoom: zoom + delta.zoom,
       );
 
   CameraDelta operator -(CameraPosition other) => CameraDelta(
         bearing: (bearing - other.bearing + 180) % 360 - 180,
-        target: LatLng(
-          target.latitude - other.target.latitude,
+        target: Offset(
           target.longitude - other.target.longitude,
+          target.latitude - other.target.latitude,
         ),
         zoom: zoom - other.zoom,
       );
@@ -162,25 +208,22 @@ extension on CameraPosition {
 class CameraDelta {
   CameraDelta({
     this.bearing = 0,
-    this.target = const LatLng(0, 0),
+    this.target = Offset.zero,
     this.zoom = 0,
   });
   final double bearing;
-  final LatLng target;
+  final Offset target;
   final double zoom;
 
   CameraDelta operator +(CameraDelta other) => CameraDelta(
         bearing: bearing + other.bearing,
-        target: LatLng(
-          target.latitude + other.target.latitude,
-          target.longitude + other.target.longitude,
-        ),
+        target: target + other.target,
         zoom: zoom + other.zoom,
       );
 
   CameraDelta operator *(double factor) => CameraDelta(
         bearing: bearing * factor,
-        target: LatLng(target.latitude * factor, target.longitude * factor),
+        target: target * factor,
         zoom: zoom * factor,
       );
 }
@@ -224,12 +267,15 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         }
       });
 
-  Future<_MarkerIcons>? _markerIcons;
+  late Future<_MarkerIcons> _markerIcons;
+  late Future<BitmapDescriptor> _arrowhead;
 
-  late Set<Polyline> _polylines;
+  late Set<Polyline> _trackPolylines;
+  Set<Polyline> _currentPolylines = {};
+  bool showCurrents = false;
 
   void _updateTrackPolylines() {
-    _polylines = {
+    _trackPolylines = {
       for (final track in widget.tracks)
         if (track.selected)
           for (final segment in track.segments)
@@ -241,6 +287,84 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               zIndex: _ZIndex.track,
             )
     };
+  }
+
+  final _currentsThrottle = AsyncThrottle();
+  LatLngBounds? _currentsBounds;
+
+  void _updateCurrentPolylines({bool testBounds = false}) {
+    _currentsThrottle.schedule([
+      () async {
+        if (gmap == null) return;
+        final bounds = await gmap!.getVisibleRegion();
+
+        if (testBounds && (_currentsBounds?.containsBounds(bounds) ?? false)) {
+          return;
+        }
+
+        _currentsBounds = bounds.pad(.125);
+
+        final currents = await widget.ofsClient.getCurrents(
+          timeWindow: widget.timeWindow,
+          bounds: _currentsBounds!.toIfc(),
+          zoom: cameraPosition.zoom,
+        );
+
+        if (currents == null) return;
+
+        final northAspect =
+                math.cos(Degrees(bounds.northeast.latitude).radians),
+            southAspect = math.cos(Degrees(bounds.southwest.latitude).radians);
+        final aspectM = (northAspect - southAspect) /
+            (bounds.northeast.latitude - bounds.southwest.latitude);
+
+        LatLng perturb(ifc.LatLng anchor, Vector2 delta) {
+          final factor = 16 / math.pow(2, cameraPosition.zoom);
+          final aspect = southAspect +
+              (anchor.latitude - bounds.southwest.latitude) * aspectM;
+          return LatLng(
+            anchor.latitude + aspect * factor * delta.y,
+            anchor.longitude + factor * delta.x,
+          );
+        }
+
+        final arrowhead = await _arrowhead;
+
+        if (!mounted || !showCurrents) return;
+
+        setState(() {
+          _currentPolylines = {
+            for (final current in currents)
+              Polyline(
+                polylineId: PolylineId('ofs-${b64LatLng(current.location)}'),
+                points: [
+                  current.location.toGmaps(),
+                  perturb(current.location, current.value),
+                ],
+                endCap: Cap.customCapFromBitmap(arrowhead, refWidth: 4),
+                zIndex: _ZIndex.track,
+                width: 1,
+              )
+          };
+        });
+      }
+    ]);
+  }
+
+  void _setShowCurrents(bool show) {
+    if (show) {
+      setState(() => showCurrents = true);
+      _updateCurrentPolylines();
+      widget.ofsClient.addListener(_updateCurrentPolylines);
+    } else {
+      setState(() {
+        showCurrents = false;
+        _currentsThrottle.clearNext();
+        _currentPolylines = const {};
+        _currentsBounds = null;
+      });
+      widget.ofsClient.removeListener(_updateCurrentPolylines);
+    }
   }
 
   void _fitTracks() {
@@ -266,11 +390,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   }
 
   LatLngBounds? _calculateBounds(Iterable<LatLng> points) {
-    LatLngBounds? bounds;
+    ifc.LatLngBounds? bounds;
     for (final point in points) {
-      bounds = bounds.expand(point);
+      bounds = bounds.expand(point.toIfc());
     }
-    return bounds;
+    return bounds?.toGmaps();
   }
 
   void _animateToBounds(LatLngBounds bounds) {
@@ -359,6 +483,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         cameraPosition = newPosition;
         mapAnimation.override(newPosition);
       });
+    }
+
+    if (showCurrents) {
+      _updateCurrentPolylines(testBounds: true);
     }
   }
 
@@ -449,6 +577,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           location: await location,
         ))();
 
+    _arrowhead = BitmapDescriptor.fromAssetImage(
+      defaultConfiguration,
+      'assets/arrowhead.png',
+    );
+
     final maxOversample =
         2 + (defaultConfiguration.devicePixelRatio?.floor() ?? 1) - 1;
     for (final overlay in chartOverlays) {
@@ -486,6 +619,17 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         _fitTracks();
       }
     }
+
+    if (showCurrents) {
+      if (widget.timeWindow.t != oldWidget.timeWindow.t) {
+        _updateCurrentPolylines();
+      }
+
+      if (widget.ofsClient != oldWidget.ofsClient) {
+        widget.ofsClient.addListener(_updateCurrentPolylines);
+        oldWidget.ofsClient.removeListener(_updateCurrentPolylines);
+      }
+    }
   }
 
   @override
@@ -497,6 +641,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     gmap = null;
     for (final overlay in chartOverlays) {
       overlay.tileProvider.dispose();
+    }
+    _currentsThrottle.dispose();
+    if (showCurrents) {
+      widget.ofsClient.removeListener(_updateCurrentPolylines);
     }
     super.dispose();
   }
@@ -660,7 +808,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                     tileSize: tileSize,
                   ),
                 },
-                polylines: _polylines,
+                polylines: {..._trackPolylines, ..._currentPolylines},
                 polygons: polygons,
                 compassEnabled: false,
                 zoomControlsEnabled: false,
@@ -711,6 +859,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                 lod: chartOverlay.tileProvider.levelOfDetail,
                 maxOversample: chartOverlay.tileProvider.maxOversample,
                 trackingMode: trackingMode,
+                showCurrents: showCurrents,
                 trackLocation: () =>
                     setState(() => trackingMode = TrackingMode.location),
                 trackBearing: () =>
@@ -720,6 +869,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                 zoomIn: () => mapAnimation.addDelta(CameraDelta(zoom: 1)),
                 zoomOut: () => mapAnimation.addDelta(CameraDelta(zoom: -1)),
                 setLod: _setLod,
+                setShowCurrents: _setShowCurrents,
               ),
             ),
           ),
@@ -742,22 +892,26 @@ class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
     required this.cameraPosition,
-    this.lod = 14,
+    required this.lod,
     this.maxOversample = 0,
-    this.trackingMode = TrackingMode.free,
+    required this.trackingMode,
+    required this.showCurrents,
     this.trackLocation,
     this.trackBearing,
     this.resetBearing,
     this.zoomIn,
     this.zoomOut,
     required this.setLod,
+    required this.setShowCurrents,
   });
   final CameraPosition cameraPosition;
   final int lod, maxOversample;
   final TrackingMode trackingMode;
+  final bool showCurrents;
   final void Function()? trackLocation, trackBearing, zoomIn, zoomOut;
   final FutureOr<void> Function()? resetBearing;
   final void Function(int lod) setLod;
+  final void Function(bool show) setShowCurrents;
 
   @override
   Widget build(BuildContext context) {
@@ -792,6 +946,18 @@ class MapControls extends StatelessWidget {
       maxOversample: maxOversample,
       setLod: setLod,
     );
+    final layerControls = MapButtonPanel(
+      children: [
+        Tooltip(
+          message: showCurrents ? 'Hide currents' : 'Show currents',
+          child: TextButton(
+            child:
+                Icon(Icons.waves, color: showCurrents ? null : Colors.black26),
+            onPressed: () => setShowCurrents(!showCurrents),
+          ),
+        )
+      ],
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         const double buttonHeight = 40,
@@ -800,7 +966,7 @@ class MapControls extends StatelessWidget {
             logo = 26,
             notices = kIsWeb ? 14 : 0;
         final wrap = constraints.maxHeight <
-            6 * buttonHeight + 2 * spacing + logo + 3 * divider;
+            7 * buttonHeight + 3 * spacing + logo + 3 * divider;
 
         return Row(
           children: [
@@ -812,7 +978,10 @@ class MapControls extends StatelessWidget {
                   children: [
                     locationControls,
                     zoomControls,
-                    if (!wrap) lodControls
+                    if (!wrap) ...[
+                      lodControls,
+                      layerControls,
+                    ]
                   ].delimit(const SizedBox(height: spacing)),
                 ),
               ),
@@ -823,7 +992,13 @@ class MapControls extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: notices),
                   child: Align(
                     alignment: Alignment.bottomRight,
-                    child: lodControls,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        lodControls,
+                        layerControls,
+                      ].delimit(const SizedBox(height: spacing)),
+                    ),
                   ),
                 ),
               ),

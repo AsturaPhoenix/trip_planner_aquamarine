@@ -9,6 +9,7 @@ import 'package:mockito/mockito.dart';
 import 'package:motion_sensors/motion_sensors.dart';
 import 'package:patrol/patrol.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
+import 'package:trip_planner_aquamarine/providers/ofs_client.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/widgets/compass.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
@@ -31,8 +32,10 @@ class MapHarness extends StatelessWidget {
           body: Map(
             client: harness.wmsClient,
             tileCache: harness.tileCache,
+            ofsClient: OfsClient(client: harness.ofsClient),
             stations: kDatapoints,
             selectedStation: selectedStation,
+            timeWindow: GraphTimeWindow.now(TripPlannerHarness.timeZone),
           ),
         ),
       );
@@ -144,9 +147,12 @@ void main() {
       );
       await $.tester.pumpAndSettle();
 
-      // Do the gesture twice in case the map isn't responsive yet to decrease
-      // the likelihood of a flake.
-      for (int i = 0; i < 2; ++i) {
+      final MapState mapState = $.tester.state(find.byType(Map));
+      final cameraPosition = mapState.cameraPosition;
+
+      // Do the gesture repeatedly in case the map isn't responsive yet to
+      // decrease the likelihood of a flake.
+      while (mapState.cameraPosition == cameraPosition) {
         final center = $.tester.getCenter(find.byType(GoogleMap));
         final pointers = [
           await $.tester

@@ -23,6 +23,12 @@
             "type": "dart",
             "flutterMode": "release",
             "env": { "MAPS_API_KEY": "${config:mapsApiKey}" }
+        },
+        {
+            "name": "aquamarine_server",
+            "type": "dart",
+            "request": "launch",
+            "program": "server/bin/main.dart"
         }
     ]
 }
