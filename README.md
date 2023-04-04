@@ -30,18 +30,6 @@ On Windows, it is recommended to use Flutter from Windows even if using WSL for 
 
 There _may_ be ways to make it work with Flutter on WSL if you're determined enough. Please document them here.
 
-### Configuration
-
-In `.vscode`, create a `settings.json` file with a configuration value for `mapsApiKey`:
-
-```json
-{
-  "mapsApiKey": "..."
-}
-```
-
-This will be injected into Android and iOS builds. For web, you'll need to live without an API key for debug or edit the generated `index.html` after build for now. For integration tests, you'll need to set a MAPS_API_KEY environment variable.
-
 ### Code generation
 
 Mocks and serialization use code generation. If the code needs to be regenerated,
@@ -61,7 +49,7 @@ To run the aggregation server for the current model, under the `server` director
 dart bin/main.dart
 ```
 
-This will start an HTTP server on port 1080. Files will be stored under `server/persistence`, requiring 800 KB for each hour of data.
+This will start an HTTP server on port 1080. Files will be stored under `server/persistence`, requiring 800 KB for each hour of data. The local server is used for web debug and profile builds.
 
 ## Testing
 
@@ -74,14 +62,6 @@ flutter test
 ```
 
 ### Integration tests
-
-To test with Google Maps, a `MAPS_API_KEY` environment variable must be set.
-
-*Windows PowerShell*
-
-```
-$env:MAPS_API_KEY = "..."
-```
 
 To run the integration tests,
 
@@ -99,14 +79,6 @@ dart pub global activate patrol_cli 0.9.3
 patrol drive -t integration_test/native_test.dart
 ```
 
-### Performance tests
-
-https://docs.flutter.dev/testing/integration-tests#running-in-a-browser
-
-```
-flutter drive -d chrome --driver test_driver/integration_test.dart --target integration_test/performance_test.dart --profile
-```
-
 ## Building
 
 For web, a typical build is
@@ -114,8 +86,6 @@ For web, a typical build is
 ```
 flutter build web --base-href "/trip_planner_aquamarine/"
 ```
-
-Remember to add your Google Maps API key to `build/web/index.html`.
 
 CI pushes a release build of the master branch to the alpha server at http://34.83.198.158/trip_planner_aquamarine automatically.
 

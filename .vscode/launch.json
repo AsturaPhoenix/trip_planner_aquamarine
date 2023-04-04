@@ -8,21 +8,18 @@
             "name": "trip_planner_aquamarine",
             "request": "launch",
             "type": "dart",
-            "env": { "MAPS_API_KEY": "${config:mapsApiKey}" }
         },
         {
             "name": "trip_planner_aquamarine (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
-            "env": { "MAPS_API_KEY": "${config:mapsApiKey}" }
         },
         {
             "name": "trip_planner_aquamarine (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
-            "env": { "MAPS_API_KEY": "${config:mapsApiKey}" }
         },
         {
             "name": "aquamarine_server",

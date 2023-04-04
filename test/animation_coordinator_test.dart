@@ -91,4 +91,26 @@ void main() {
     expect(state.axis, vectorCloseTo(Vector3(0, 0, 1), epsilon));
     expect(state.radians, closeTo(pi / 2, epsilon));
   });
+
+  test('set interrupts ongoing animations', () {
+    late double state;
+    final animator = AnimationCoordinator(
+      tickerProvider: tickerProvider,
+      initialState: 0.0,
+      setState: (value) => state = value,
+      clock: () => t,
+    );
+    addTearDown(() => animator.dispose());
+
+    animator.add(1.0, frameTime * 2, Curves.linear);
+    tick();
+    expect(state, .5);
+
+    animator.set(0.0, frameTime * 2, Curves.linear);
+    tick();
+    expect(state, .25);
+    tick();
+    expect(state, 0.0);
+    expect(animator.isActive, false);
+  });
 }

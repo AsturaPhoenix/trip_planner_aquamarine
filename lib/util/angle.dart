@@ -1,7 +1,7 @@
 import 'dart:math';
 
 abstract class Angle {
-  static const zero = Radians(0);
+  static const zero = _Zero();
 
   const Angle();
   double get degrees;
@@ -12,6 +12,30 @@ abstract class Angle {
   Angle operator *(double factor);
   Angle get norm360;
   Angle get norm180;
+
+  @override
+  operator ==(Object other) =>
+      identical(this, other) || other is Angle && radians == other.radians;
+  @override
+  get hashCode => radians.hashCode;
+}
+
+class _Zero extends Angle {
+  const _Zero();
+  @override
+  double get degrees => 0;
+  @override
+  double get radians => 0;
+  @override
+  Angle operator *(double factor) => this;
+  @override
+  Angle operator +(Angle other) => other;
+  @override
+  Angle operator -() => this;
+  @override
+  Angle get norm180 => this;
+  @override
+  Angle get norm360 => this;
 }
 
 class Degrees extends Angle {
@@ -33,6 +57,13 @@ class Degrees extends Angle {
 
   @override
   String toString() => '$degrees°';
+
+  @override
+  // This is just an optimization of super.operator ==. We can't optimize
+  // hashCode the same way since it has to remain consistent.
+  // ignore: hash_and_equals
+  operator ==(Object other) =>
+      identical(this, other) || other is Angle && degrees == other.degrees;
 }
 
 class Radians extends Angle {

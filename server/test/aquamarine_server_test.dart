@@ -7,6 +7,7 @@ import 'package:aquamarine_server/persistence.dart';
 import 'package:aquamarine_server/types.dart';
 import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/types.dart';
+import 'package:latlng/latlng.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';

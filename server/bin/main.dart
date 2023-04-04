@@ -7,6 +7,7 @@ import 'package:aquamarine_server/ofs_client.dart';
 import 'package:aquamarine_server/persistence.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:http/http.dart' as http;
+import 'package:latlng/latlng.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
@@ -44,12 +45,12 @@ Future<void> main() async {
             final json = jsonDecode(parameters['bounds']!);
             bounds = LatLngBounds(
               southwest: LatLng(
-                json['sw'][0] as double,
-                json['sw'][1] as double,
+                (json['sw'][0] as num).toDouble(),
+                (json['sw'][1] as num).toDouble(),
               ),
               northeast: LatLng(
-                json['ne'][0] as double,
-                json['ne'][1] as double,
+                (json['ne'][0] as num).toDouble(),
+                (json['ne'][1] as num).toDouble(),
               ),
             );
           }
@@ -61,7 +62,8 @@ Future<void> main() async {
 
           print('uv: begin: $begin, end: $end, '
               'bounds: $bounds, resolution: $resolution');
-        } on Object {
+        } on Object catch (e) {
+          print(e);
           return Response.badRequest(headers: headers);
         }
 

@@ -1,9 +1,10 @@
-name: aquamarine_util
+name: latlng
 publish_to: none
 environment:
   sdk: '>=2.18.4 <3.0.0'
 
 dependencies:
+  equatable: ^2.0.5
 
 dev_dependencies:
   lints: ^2.0.0

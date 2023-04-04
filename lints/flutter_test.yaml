@@ -1,0 +1,12 @@
+include: flutter.yaml
+
+analyzer:
+  errors:
+    invalid_use_of_protected_member: ignore
+
+linter:
+  rules:
+    avoid_print: false
+    avoid_relative_lib_imports: false
+    close_sinks: false
+    require_trailing_commas: false

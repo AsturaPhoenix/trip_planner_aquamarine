@@ -1,3 +1,1 @@
-linter:
-  rules:
-    avoid_relative_lib_imports: false
+include: ../../../lints/dart_test.yaml

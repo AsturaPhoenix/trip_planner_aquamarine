@@ -1,4 +1,4 @@
-import 'package:aquamarine_server_interface/src/latlng.dart';
+import 'package:latlng/latlng.dart';
 import 'package:test/test.dart';
 
 void main() {

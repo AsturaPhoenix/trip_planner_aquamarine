@@ -1,21 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:core';
 import 'dart:core' as core;
 import 'dart:math' as math;
 
-import 'package:aquamarine_server_interface/types.dart' as ifc;
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart' as fml;
+import 'package:flutter_map/flutter_map.dart' hide LatLngBounds, Polygon;
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../persistence/blob_cache.dart';
 import '../platform/location.dart' as location;
@@ -25,63 +23,67 @@ import '../providers/trip_planner_client.dart';
 import '../providers/wms_tile_provider.dart';
 import '../util/angle.dart';
 import '../util/animation_coordinator.dart';
-import '../util/async_throttle.dart';
+import '../util/controller.dart';
+import '../util/latlng.dart';
 import '../util/optional.dart';
+import 'info_window.dart';
+import 'map_layers/current_layer.dart';
+import 'map_layers/polygon_layer.dart';
 import 'plot_panel.dart';
 import 'tide_panel.dart';
 
-String b64LatLng(ifc.LatLng latlng) => base64.encode(
-      Uint8List.view(
-        Float32List.fromList([
-          latlng.latitude,
-          latlng.longitude,
-        ]).buffer,
-      ),
-    );
+typedef StationFilters = List<bool Function(Station)>;
 
-extension on LatLng {
-  ifc.LatLng toIfc() => ifc.LatLng(latitude, longitude);
+extension StationFiltersExtensions on StationFilters {
+  bool isStationVisible(Station station) => any((filter) => filter(station));
 }
 
-extension on ifc.LatLng {
-  LatLng toGmaps() => LatLng(latitude, longitude);
-}
+enum InfoWindowType { station, currentLocation }
 
-extension on LatLngBounds {
-  ifc.LatLngBounds toIfc() => ifc.LatLngBounds(
-        southwest: southwest.toIfc(),
-        northeast: northeast.toIfc(),
-      );
+class MapController extends Controller {
+  MapController() {
+    selectedStation.addListener(notifyListeners);
+  }
 
-  bool containsBounds(LatLngBounds other) =>
-      toIfc().containsBounds(other.toIfc());
+  // If we migrate more state to the controller, we might be able to get rid of
+  // this.
+  late MapState _map;
 
-  LatLngBounds pad(double factor) => toIfc().pad(factor).toGmaps();
-}
+  final selectedStation = ValueNotifier<Station?>(null);
 
-extension on ifc.LatLngBounds {
-  LatLngBounds toGmaps() => LatLngBounds(
-        southwest: southwest.toGmaps(),
-        northeast: northeast.toGmaps(),
-      );
+  InfoWindowType? _infoWindow;
+
+  @override
+  void dispose() {
+    selectedStation.dispose();
+    super.dispose();
+  }
+
+  void selectStation(Station? station, {bool mayUnlock = true}) => setState(() {
+        selectedStation.value = station;
+
+        if (station == null) {
+          showInfoWindow(null);
+        } else {
+          if (mayUnlock ||
+              _map.trackingMode == TrackingMode.free ||
+              !location.isEnabled.value) {
+            _map.animateToStation(station);
+          }
+
+          showInfoWindow(InfoWindowType.station);
+        }
+      });
+
+  void showInfoWindow(InfoWindowType? infoWindow) =>
+      setState(() => _infoWindow = infoWindow);
 }
 
 class Map extends StatefulWidget {
-  static const minZoom = 0, maxZoom = 22;
-  static const initialCameraPosition = CameraPosition(
-    // Center map on Alcatraz, to show the interesting points around the Bay.
-    target: LatLng(37.8331, -122.4165),
-    zoom: 12,
-  );
-
-  // TODO: make this configurable
-  static const showMarkerTypes = {
-    StationType.tide,
-    StationType.current,
-    StationType.launch,
-    StationType.destination,
-    StationType.nogo,
-  };
+  static const minZoom = 0.0, maxZoom = 22.0;
+  // Center map on Alcatraz, to show the interesting points around the Bay.
+  static const initialCameraPosition =
+      CameraPosition(center: LatLng(37.8331, -122.4165), zoom: 12.0);
 
   Map({
     super.key,
@@ -89,60 +91,25 @@ class Map extends StatefulWidget {
     required this.tileCache,
     required this.ofsClient,
     this.stations = const {},
-    this.selectedStation,
+    this.stationFilters = const [],
     this.tracks = const [],
     required this.timeWindow,
-    int Function(StationType type)? stationPriority,
-    this.onStationSelected,
-  }) : stationPriority =
-            stationPriority ?? ((type) => type.isTideCurrent ? 1 : 0);
+    MapController? controller,
+  }) : controller = controller ?? MapController();
 
   final http.Client client;
   final BlobCache tileCache;
   final OfsClient ofsClient;
+
   final core.Map<StationId, Station> stations;
-  final Station? selectedStation;
+  final StationFilters stationFilters;
   final List<Track> tracks;
   final GraphTimeWindow timeWindow;
 
-  final int Function(StationType type) stationPriority;
-  final void Function(Station station)? onStationSelected;
+  final MapController controller;
 
   @override
   MapState createState() => MapState();
-}
-
-class TileOverlayConfiguration<T extends TileProvider> {
-  final TileOverlayId id;
-  final T tileProvider;
-  TileOverlayConfiguration(String id, this.tileProvider)
-      : id = TileOverlayId(id);
-}
-
-class _MarkerIcons {
-  _MarkerIcons({
-    required this.stations,
-    required this.selected,
-    required this.tcSelected,
-    required this.location,
-  });
-  final core.Map<StationType, BitmapDescriptor> stations;
-
-  /// Halo for the selected location.
-  final BitmapDescriptor selected,
-
-      /// Halo for a nearby tide/current station, when the selected location is
-      /// not tide/current.
-      tcSelected,
-      location;
-}
-
-class _CurrentsViewKey extends Equatable {
-  const _CurrentsViewKey(this.bounds, this.zoom);
-  final LatLngBounds bounds;
-  final double zoom;
-  @override
-  get props => [bounds, zoom];
 }
 
 enum PrecachedAsset {
@@ -150,10 +117,34 @@ enum PrecachedAsset {
   locationReticle(AssetImage('assets/location_reticle.png')),
   locationNorth(AssetImage('assets/location_north.png')),
   compassDirections(AssetImage('assets/compass_directions.png')),
-  compassIndicator(AssetImage('assets/compass_indicator.png'));
+  compassIndicator(AssetImage('assets/compass_indicator.png')),
+  arrowhead(AssetImage('assets/arrowhead.png')),
+
+  selected(AssetImage('assets/markers/sel.png')),
+  tcSelected(AssetImage('assets/markers/tc_sel.png')),
+  location(AssetImage('assets/markers/location.png'));
 
   const PrecachedAsset(this.image);
   final ImageProvider image;
+}
+
+class _MarkerMetrics {
+  static final station =
+          _MarkerMetrics(12, 20, AnchorPos.align(AnchorAlign.top)),
+      selection =
+          _MarkerMetrics(22, 21, AnchorPos.exactly(Anchor(11, .35 * 21))),
+      location = _MarkerMetrics(20, 20, AnchorPos.align(AnchorAlign.center));
+
+  const _MarkerMetrics(this.width, this.height, this.anchorPos);
+
+  final double width, height;
+  final AnchorPos anchorPos;
+
+  Anchor get anchor => Anchor.forPos(anchorPos, width, height);
+  Offset get rotateOrigin {
+    final anchor = this.anchor;
+    return Offset(width - anchor.left, height - anchor.top);
+  }
 }
 
 /// I'm not sure there's an official source, but this seems to be a consensus
@@ -170,70 +161,87 @@ String formatPosition(Position position) {
       '${formatPolar(position.longitude, 'E', 'W')}';
 }
 
-class _ZIndex {
-  static const int nogo = 1, track = 2;
-  static const double selection = 3, currentLocation = 13;
-  static double station(int major, int minor) {
-    assert(0 <= minor && minor < 3);
-    final zIndex = 4.0 + 3 * major + minor;
-    assert(selection < zIndex && zIndex < currentLocation);
-    return zIndex;
-  }
-}
+class CameraPosition extends Equatable {
+  const CameraPosition({
+    required this.center,
+    required this.zoom,
+    this.rotation = Angle.zero,
+  });
+  CameraPosition.of(fml.MapController map)
+      : center = map.center.toSpherical(),
+        zoom = map.zoom,
+        rotation = Degrees(map.rotation);
 
-extension on CameraPosition {
+  final LatLng center;
+  final double zoom;
+  final Angle rotation;
+
+  @override
+  get props => [center, zoom, rotation];
+
   CameraPosition copyWith({
-    double? bearing,
-    LatLng? target,
-    double? tilt,
+    CenterZoom? centerZoom,
+    LatLng? center,
     double? zoom,
+    Angle? rotation,
   }) =>
       CameraPosition(
-        bearing: bearing ?? this.bearing,
-        target: target ?? this.target,
-        tilt: tilt ?? this.tilt,
-        zoom: zoom ?? this.zoom,
+        center: center ?? centerZoom?.center.toSpherical() ?? this.center,
+        zoom: zoom ?? centerZoom?.zoom ?? this.zoom,
+        rotation: rotation ?? this.rotation,
       );
 
-  CameraPosition operator +(CameraDelta delta) => CameraPosition(
-        bearing: (bearing + delta.bearing) % 360,
-        target: LatLng(
-          target.latitude + delta.target.dy,
-          target.longitude + delta.target.dx,
-        ),
-        zoom: zoom + delta.zoom,
-      );
+  CameraPosition operator +(CameraDelta delta) {
+    // flutter_map does optimizations if the rotation is 0, so take advantage of
+    // that if we're close. This also lets us avoid putting a tolerance
+    // elsewhere like on the rotation button.
+    const epsilon = 1e-4;
+    final newRotation = (rotation + delta.rotation).norm180;
+
+    return CameraPosition(
+      center: LatLng(
+        center.latitude + delta.center.dy,
+        center.longitude + delta.center.dx,
+      ),
+      zoom: zoom + delta.zoom,
+      rotation: newRotation.degrees.abs() <= epsilon ? Angle.zero : newRotation,
+    );
+  }
 
   CameraDelta operator -(CameraPosition other) => CameraDelta(
-        bearing: (bearing - other.bearing + 180) % 360 - 180,
-        target: Offset(
-          target.longitude - other.target.longitude,
-          target.latitude - other.target.latitude,
+        center: Offset(
+          center.longitude - other.center.longitude,
+          center.latitude - other.center.latitude,
         ),
         zoom: zoom - other.zoom,
+        rotation: (rotation - other.rotation).norm180,
       );
 }
 
-class CameraDelta {
-  CameraDelta({
-    this.bearing = 0,
-    this.target = Offset.zero,
+class CameraDelta extends Equatable {
+  const CameraDelta({
+    this.center = Offset.zero,
     this.zoom = 0,
+    this.rotation = Angle.zero,
   });
-  final double bearing;
-  final Offset target;
+
+  final Offset center;
   final double zoom;
+  final Angle rotation;
+
+  @override
+  get props => [center, zoom, rotation];
 
   CameraDelta operator +(CameraDelta other) => CameraDelta(
-        bearing: bearing + other.bearing,
-        target: target + other.target,
+        center: center + other.center,
         zoom: zoom + other.zoom,
+        rotation: rotation + other.rotation,
       );
 
   CameraDelta operator *(double factor) => CameraDelta(
-        bearing: bearing * factor,
-        target: target * factor,
+        center: center * factor,
         zoom: zoom * factor,
+        rotation: rotation * factor,
       );
 }
 
@@ -244,140 +252,31 @@ extension on Position {
 class MapState extends State<Map> with SingleTickerProviderStateMixin {
   static final log = Logger('MapState');
 
-  late final chartOverlays = [
-    TileOverlayConfiguration(
-      'nautical',
-      WmsTileProvider(
-        client: widget.client,
-        cache: widget.tileCache,
-        tileType: 'nautical',
-        url: Uri.parse(
-          'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer',
-        ),
-        fetchLod: 2,
-        levelOfDetail: 14,
-        params: WmsParams()
-          ..version = '1.3.0'
-          ..layers = '0,1,2,3,4,5,6,7',
-      ),
-    )
-  ];
-  GoogleMapController? gmap;
-
-  int chartOverlayIndex = 0;
-  TileOverlayConfiguration<WmsTileProvider> get chartOverlay =>
-      chartOverlays[chartOverlayIndex];
+  late final WmsTileProvider chartTileProvider;
+  final chartLayerReset = StreamController<void>();
+  final mapController = fml.MapController();
 
   void _setLod(int lod) => setState(() {
-        for (final overlay in chartOverlays) {
-          overlay.tileProvider.levelOfDetail = lod;
-          // TODO: This does not cancel inflight requests, which can leave stale tiles.
-          gmap!.clearTileCache(overlay.id);
-        }
+        chartTileProvider.levelOfDetail = lod;
+        chartLayerReset.add(null);
       });
 
-  late Future<_MarkerIcons> _markerIcons;
-  late Future<BitmapDescriptor> _arrowhead;
+  late List<Polyline> _trackPolylines;
 
-  late Set<Polyline> _trackPolylines;
-  Set<Polyline> _currentPolylines = {};
   bool showCurrents = false;
 
   void _updateTrackPolylines() {
-    _trackPolylines = {
+    _trackPolylines = [
       for (final track in widget.tracks)
         if (track.selected)
           for (final segment in track.segments)
             Polyline(
-              polylineId: segment.key,
+              key: segment.key,
               color: track.color,
-              points: segment.points,
-              width: 2,
-              zIndex: _ZIndex.track,
+              points: [for (final point in segment.points) point.toFml()],
+              strokeWidth: 2,
             )
-    };
-  }
-
-  final _currentsThrottle = AsyncThrottle();
-  _CurrentsViewKey? _currentsBounds;
-
-  void _updateCurrentPolylines({bool testBounds = false}) {
-    _currentsThrottle.schedule([
-      () async {
-        if (gmap == null) return;
-        final bounds = await gmap!.getVisibleRegion();
-
-        if (testBounds &&
-            _currentsBounds != null &&
-            _currentsBounds!.bounds.containsBounds(bounds) &&
-            (_currentsBounds!.zoom - cameraPosition.zoom).abs() < .1) {
-          return;
-        }
-
-        _currentsBounds =
-            _CurrentsViewKey(bounds.pad(.125), cameraPosition.zoom);
-
-        final currents = await widget.ofsClient.getCurrents(
-          timeWindow: widget.timeWindow,
-          bounds: _currentsBounds!.bounds.toIfc(),
-          zoom: _currentsBounds!.zoom,
-        );
-
-        if (currents == null) return;
-
-        final northAspect =
-                math.cos(Degrees(bounds.northeast.latitude).radians),
-            southAspect = math.cos(Degrees(bounds.southwest.latitude).radians);
-        final aspectM = (northAspect - southAspect) /
-            (bounds.northeast.latitude - bounds.southwest.latitude);
-
-        LatLng perturb(ifc.LatLng anchor, Vector2 delta) {
-          final factor = 16 / math.pow(2, cameraPosition.zoom);
-          final aspect = southAspect +
-              (anchor.latitude - bounds.southwest.latitude) * aspectM;
-          return LatLng(
-            anchor.latitude + aspect * factor * delta.y,
-            anchor.longitude + factor * delta.x,
-          );
-        }
-
-        final arrowhead = await _arrowhead;
-
-        if (!mounted || !showCurrents) return;
-
-        setState(() {
-          _currentPolylines = {
-            for (final current in currents)
-              Polyline(
-                polylineId: PolylineId('ofs-${b64LatLng(current.location)}'),
-                points: [
-                  current.location.toGmaps(),
-                  perturb(current.location, current.value),
-                ],
-                endCap: Cap.customCapFromBitmap(arrowhead, refWidth: 4),
-                zIndex: _ZIndex.track,
-                width: 1,
-              )
-          };
-        });
-      }
-    ]);
-  }
-
-  void _setShowCurrents(bool show) {
-    if (show) {
-      setState(() => showCurrents = true);
-      _updateCurrentPolylines();
-      widget.ofsClient.addListener(_updateCurrentPolylines);
-    } else {
-      setState(() {
-        showCurrents = false;
-        _currentsThrottle.clearNext();
-        _currentPolylines = const {};
-        _currentsBounds = null;
-      });
-      widget.ofsClient.removeListener(_updateCurrentPolylines);
-    }
+    ];
   }
 
   void _fitTracks() {
@@ -388,7 +287,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           .expand((segment) => segment.points),
     );
 
-    if (bounds != null && gmap != null) {
+    if (bounds != null) {
       _animateToBounds(bounds);
     }
   }
@@ -397,24 +296,33 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     final bounds =
         _calculateBounds(station.outlines.expand((outline) => outline));
 
-    if (bounds != null && gmap != null) {
+    if (bounds != null) {
       _animateToBounds(bounds);
     }
   }
 
   LatLngBounds? _calculateBounds(Iterable<LatLng> points) {
-    ifc.LatLngBounds? bounds;
+    LatLngBounds? bounds;
     for (final point in points) {
-      bounds = bounds.expand(point.toIfc());
+      bounds = bounds.expand(point);
     }
-    return bounds?.toGmaps();
+    return bounds;
   }
 
   void _animateToBounds(LatLngBounds bounds) {
     trackingMode = TrackingMode.free;
-    // Cancel any animations in progress.
-    mapAnimation.override(cameraPosition);
-    gmap!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48 + 16));
+
+    // This is broken when the map is rotated.
+    // fleaflet/flutter_map#1342
+    final centerZoom = mapController.centerZoomFitBounds(
+      bounds.toFml(),
+      options: FitBoundsOptions(
+        padding: const EdgeInsets.all(48 + 16),
+        maxZoom: math.max(cameraPosition.zoom, 14),
+      ),
+    );
+
+    mapAnimation.set(cameraPosition.copyWith(centerZoom: centerZoom));
   }
 
   CameraPosition cameraPosition = Map.initialCameraPosition;
@@ -438,8 +346,10 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                 setState(() => trackingMode = TrackingMode.free);
               } else {
                 mapAnimation.add(
-                  mapAnimation.target
-                      .copyWith(target: position.toLatLng(), bearing: 0),
+                  mapAnimation.target.copyWith(
+                    center: position.toLatLng(),
+                    rotation: Angle.zero,
+                  ),
                 );
               }
             },
@@ -453,9 +363,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
             location.requestedPosition,
             orientation.bearing.seededStream.whereNotNull(),
             (position, bearing) => mapAnimation.target.copyWith(
-              target: position?.toLatLng(),
-              bearing: bearing.degrees +
-                  (geomag.getFromPosition(position)?.dec ?? 0),
+              center: position?.toLatLng(),
+              rotation: -bearing -
+                  Degrees(geomag.getFromPosition(position)?.dec ?? 0),
             ),
           ).listen(mapAnimation.add);
           break;
@@ -464,52 +374,51 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     }
   }
 
-  // For the most part this isn't called for moveCamera, but there are cases
-  // where it is.
-  void updateCameraPosition(CameraPosition newPosition) {
-    if (!mounted) return;
+  bool _dragging = false;
 
-    // A full screen-space mapping uses the message channel and can interleave
-    // with animation frames and produce an invalid result, so take advantage of
-    // the Mercator projection and compute it here.
-    Offset toRelativeScreenSpace(LatLng latlng, double zoom) =>
-        Offset(
-          latlng.longitude,
-          -math.log(math.tan((90 + latlng.latitude) * math.pi / 360)),
-        ) *
-        (WmsTileProvider.logicalTileSize * math.pow(2, zoom) / 360);
+  void _onMapEvent(MapEvent event) {
+    if (event is MapEventMoveStart) {
+      setState(() => _dragging = true);
+    } else if (event is MapEventMoveEnd) {
+      setState(() => _dragging = false);
+    }
 
-    const pixelSquaredTolerance = .25;
+    if (event is! MapEventWithMove && event is! MapEventRotate) return;
 
-    final cmpZoom = math.min(newPosition.zoom, cameraPosition.zoom);
-    if ((toRelativeScreenSpace(cameraPosition.target, cmpZoom) -
-                toRelativeScreenSpace(newPosition.target, cmpZoom))
-            .distanceSquared >
-        pixelSquaredTolerance) {
-      setState(() {
+    // TODO(AsturaPhoenix): use "target" properties of the events rather than
+    // comparing against our cached position.
+    final newCameraPosition = CameraPosition.of(mapController);
+
+    final isGesture = !const {
+      MapEventSource.mapController,
+      MapEventSource.fitBounds,
+      MapEventSource.initialization,
+    }.contains(event.source);
+
+    setState(() {
+      if (isGesture &&
+          (cameraPosition.center != newCameraPosition.center ||
+              cameraPosition.rotation != newCameraPosition.rotation)) {
         trackingMode = TrackingMode.free;
-        cameraPosition = newPosition;
-        mapAnimation.override(newPosition);
-      });
-    } else if (!mapAnimation.isActive) {
-      setState(() {
-        cameraPosition = newPosition;
-        mapAnimation.override(newPosition);
-      });
-    }
+        // Don't change the tracking mode if the user somehow managed to evoke a
+        // pure zoom change.
+      }
 
-    if (showCurrents) {
-      _updateCurrentPolylines(testBounds: true);
-    }
+      cameraPosition = newCameraPosition;
+
+      if (event.source != MapEventSource.mapController) {
+        mapAnimation.override(cameraPosition);
+      }
+    });
   }
 
   void animateToStation(Station station) {
     if (station.outlines.isEmpty) {
       if (location.isEnabled.value) {
-        trackingMode = TrackingMode.free;
+        setState(() => trackingMode = TrackingMode.free);
         // Don't unlock tracking if location enablement is still pending.
       }
-      mapAnimation.set(cameraPosition.copyWith(target: station.marker));
+      mapAnimation.set(cameraPosition.copyWith(center: station.marker));
     } else {
       _fitOutlines(station);
     }
@@ -518,6 +427,21 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    widget.controller._map = this;
+
+    chartTileProvider = WmsTileProvider(
+      client: widget.client,
+      cache: widget.tileCache,
+      tileType: 'nautical',
+      url: Uri.parse(
+        'https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer',
+      ),
+      fetchLod: 2,
+      levelOfDetail: 14,
+      params: WmsParams()
+        ..version = '1.3.0'
+        ..layers = '0,1,2,3,4,5,6,7',
+    );
 
     mapAnimation = AnimationCoordinator<CameraPosition, CameraDelta>(
       tickerProvider: this,
@@ -527,15 +451,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         calculateDelta: (after, before) => after - before,
         scaleDelta: (delta, t) => delta * t,
       ),
-      setState: (cameraPosition) async {
-        await gmap?.moveCamera(CameraUpdate.newCameraPosition(cameraPosition));
-        // We need to update this after moveCamera because we may need to deal
-        // with a trainwreck of onCameraMove events, for which we want to
-        // compare with the previous camera position to determine whether to
-        // unlock.
-        if (!mounted) return;
-        setState(() => this.cameraPosition = cameraPosition);
-      },
+      setState: (cameraPosition) => mapController.moveAndRotate(
+        cameraPosition.center.toFml(),
+        cameraPosition.zoom,
+        cameraPosition.rotation.degrees,
+      ),
     );
 
     if (!kIsWeb) {
@@ -543,7 +463,11 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
     }
 
     _updateTrackPolylines();
-    _fitTracks();
+
+    // Requires the map controller to be bound to the widget.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fitTracks();
+    });
   }
 
   @override
@@ -554,73 +478,25 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
       precacheImage(asset.image, context);
     }
 
-    Future<BitmapDescriptor> loadAsset(
-      String type,
-      ImageConfiguration imageConfiguration,
-    ) =>
-        BitmapDescriptor.fromAssetImage(
-          imageConfiguration,
-          'assets/markers/$type.png',
-          mipmaps: false,
-        );
-
-    final defaultConfiguration = createLocalImageConfiguration(context);
-    final stations = [
-      for (final stationType in Map.showMarkerTypes)
-        loadAsset(stationType.name, defaultConfiguration)
-    ];
-
-    final selConfiguration =
-        defaultConfiguration.copyWith(size: const Size(22, 21));
-    final selected = loadAsset('sel', selConfiguration);
-    final tcSelected = loadAsset('tc_sel', selConfiguration);
-
-    final location = BitmapDescriptor.fromAssetImage(
-      defaultConfiguration,
-      'assets/markers/location.png',
-    );
-
-    _markerIcons = (() async => _MarkerIcons(
-          stations: core.Map.fromIterables(
-            Map.showMarkerTypes,
-            await Future.wait(stations),
-          ),
-          selected: await selected,
-          tcSelected: await tcSelected,
-          location: await location,
-        ))();
-
-    _arrowhead = BitmapDescriptor.fromAssetImage(
-      defaultConfiguration,
-      'assets/arrowhead.png',
-    );
-
-    final maxOversample =
-        2 + (defaultConfiguration.devicePixelRatio?.floor() ?? 1) - 1;
-    for (final overlay in chartOverlays) {
-      overlay.tileProvider.maxOversample = maxOversample;
-    }
+    chartTileProvider.maxOversample =
+        2 + (MediaQuery.devicePixelRatioOf(context).floor()) - 1;
   }
 
   @override
   void didUpdateWidget(covariant Map oldWidget) {
     super.didUpdateWidget(oldWidget);
-    for (final overlay in chartOverlays) {
-      overlay.tileProvider.client = widget.client;
-      overlay.tileProvider.cache = widget.tileCache;
-    }
 
-    if (widget.selectedStation != null &&
-        oldWidget.selectedStation == null &&
-        gmap != null &&
-        (trackingMode == TrackingMode.free || !location.isEnabled.value)) {
-      animateToStation(widget.selectedStation!);
+    chartTileProvider.client = widget.client;
+    chartTileProvider.cache = widget.tileCache;
+
+    if (widget.controller != oldWidget.controller) {
+      widget.controller._map = this;
     }
 
     if (widget.tracks != oldWidget.tracks) {
       _updateTrackPolylines();
 
-      Set<String> selectedTrackIds(Iterable<Track> tracks) => {
+      selectedTrackIds(Iterable<Track> tracks) => {
             for (final track in tracks)
               if (track.selected) track.key
           };
@@ -632,217 +508,244 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         _fitTracks();
       }
     }
-
-    if (showCurrents) {
-      if (widget.timeWindow.t != oldWidget.timeWindow.t) {
-        _updateCurrentPolylines();
-      }
-
-      if (widget.ofsClient != oldWidget.ofsClient) {
-        widget.ofsClient.addListener(_updateCurrentPolylines);
-        oldWidget.ofsClient.removeListener(_updateCurrentPolylines);
-      }
-    }
   }
 
   @override
   void dispose() {
     mapAnimation.dispose();
     trackingSubscription?.cancel();
-    // We mustn't dispose of the maps controller because the widget will do this
-    // for us and dispose isn't idempotent on all platforms.
-    gmap = null;
-    for (final overlay in chartOverlays) {
-      overlay.tileProvider.dispose();
-    }
-    _currentsThrottle.dispose();
-    if (showCurrents) {
-      widget.ofsClient.removeListener(_updateCurrentPolylines);
-    }
+    chartLayerReset.close();
+    chartTileProvider.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final tileSize = (MediaQuery.of(context).devicePixelRatio *
-            WmsTileProvider.logicalTileSize)
-        .ceil();
+  Marker _buildInfoWindowMarker(
+    LatLng position,
+    _MarkerMetrics markerMetrics,
+    Widget Function(BuildContext) builder,
+  ) {
+    const maxSize = Size(1024, 768);
 
-    for (final overlay in chartOverlays) {
-      overlay.tileProvider.preferredTileSize = tileSize;
-    }
+    final onAnchor = Anchor.forPos(
+      markerMetrics.anchorPos,
+      markerMetrics.width,
+      markerMetrics.height,
+    );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FutureBuilder(
-          future: _markerIcons,
-          builder: (context, markerIcons) => StreamBuilder(
-            initialData: location.passivePosition.value,
-            stream: location.passivePosition.stream,
-            builder: (context, position) {
-              final markers = <Marker>{};
-              final polygons = <Polygon>{};
+    final anchor = Anchor(
+      (maxSize.width + markerMetrics.width) / 2 - onAnchor.left,
+      onAnchor.top - markerMetrics.height,
+    );
 
-              if (markerIcons.hasData) {
-                if (position.hasData) {
-                  const markerId = MarkerId('current location');
-                  markers.add(
-                    Marker(
-                      markerId: markerId,
-                      anchor: const Offset(.5, .5),
-                      position: position.data!.toLatLng(),
-                      icon: markerIcons.requireData.location,
-                      // TODO: This text does not update while the info window
-                      // is shown.
-                      infoWindow: InfoWindow(
-                        title: formatPosition(position.data!),
-                        onTap: kIsWeb
-                            ? null
-                            : () => gmap!.hideMarkerInfoWindow(markerId),
-                      ),
-                      // Take precedence over other markers.
-                      zIndex: _ZIndex.currentLocation,
-                      consumeTapEvents: true,
-                      onTap: () {
-                        gmap?.showMarkerInfoWindow(markerId);
-                        setState(() => trackingMode = TrackingMode.location);
-                      },
-                    ),
-                  );
-                }
-
-                // tp.js: show_hide_marker
-                bool stationFilter(Station station) =>
-                    Map.showMarkerTypes.contains(station.type) &&
-                    !(station.type.isTideCurrent && station.isLegacy);
-
-                for (final station
-                    in widget.stations.values.where(stationFilter)) {
-                  final markerId = MarkerId(station.id.toString());
-
-                  final icon = markerIcons.requireData.stations[station.type];
-                  if (icon != null) {
-                    // tp.js: create_station
-                    final visualMinor = [
-                          station.isLegacy,
-                          station.isSubordinate
-                        ].indexOf(true) %
-                        3;
-                    final visualMajor = widget.stationPriority(station.type);
-
-                    markers.add(
-                      Marker(
-                        markerId: markerId,
-                        position: station.marker,
-                        alpha: (1 + visualMinor) / 3,
-                        icon: icon,
-                        infoWindow: InfoWindow(
-                          title: station.typedShortTitle,
-                          onTap: kIsWeb
-                              ? null
-                              : () => gmap!.hideMarkerInfoWindow(markerId),
-                        ),
-                        // In tp.js, this is 4 for current stations and 3 for
-                        // everything else. However, on smaller screens we
-                        // should try to keep touch response consistent with
-                        // alpha.
-                        zIndex: _ZIndex.station(visualMajor, visualMinor),
-                        consumeTapEvents: true,
-                        onTap: () {
-                          gmap?.showMarkerInfoWindow(markerId);
-                          animateToStation(station);
-                          widget.onStationSelected?.call(station);
-                        },
-                      ),
-                    );
-                  }
-
-                  for (int i = 0; i < station.outlines.length; ++i) {
-                    polygons.add(
-                      Polygon(
-                        polygonId: PolygonId('${station.id}-$i'),
-                        points: station.outlines[i],
-                        fillColor: const Color(0x40ff0000),
-                        strokeColor: Colors.red,
-                        strokeWidth: 1,
-                        zIndex: _ZIndex.nogo,
-                        consumeTapEvents: true,
-                        onTap: () {
-                          gmap?.showMarkerInfoWindow(markerId);
-                          animateToStation(station);
-                          widget.onStationSelected?.call(station);
-                        },
-                      ),
-                    );
-                  }
-                }
-
-                // tp.js: create_sel_marker
-                void createSelectionMarker(
-                  MarkerId id,
-                  BitmapDescriptor icon,
-                  LatLng? location,
-                ) =>
-                    markers.add(
-                      Marker(
-                        markerId: id,
-                        anchor: const Offset(.5, .65),
-                        icon: icon,
-                        // tp.js: move_sel_marker
-                        position: location ?? const LatLng(0, 0),
-                        visible: location != null,
-                        zIndex: _ZIndex.selection,
-                      ),
-                    );
-
-                createSelectionMarker(
-                  const MarkerId('sel'),
-                  markerIcons.requireData.selected,
-                  widget.selectedStation?.marker,
-                );
-
-                createSelectionMarker(
-                  const MarkerId('tc_sel'),
-                  markerIcons.requireData.tcSelected,
-                  Optional(widget.selectedStation?.tideCurrentStationId)
-                      .map((tcid) => widget.stations[tcid]?.marker),
-                );
-              }
-
-              return GoogleMap(
-                mapType: MapType.normal,
-                initialCameraPosition: Map.initialCameraPosition,
-                markers: markers,
-                tileOverlays: {
-                  TileOverlay(
-                    tileOverlayId: chartOverlay.id,
-                    tileProvider: chartOverlay.tileProvider,
-                    tileSize: tileSize,
-                  ),
-                },
-                polylines: {..._trackPolylines, ..._currentPolylines},
-                polygons: polygons,
-                compassEnabled: false,
-                zoomControlsEnabled: false,
-                onCameraMove: updateCameraPosition,
-                onMapCreated: (controller) async {
-                  setState(() => gmap = controller);
-                  controller.setMapStyle(
-                    await DefaultAssetBundle.of(context)
-                        .loadString('assets/nautical-style.json'),
-                  );
-                  if (widget.selectedStation != null &&
-                      (trackingMode == TrackingMode.free ||
-                          !location.isEnabled.value)) {
-                    animateToStation(widget.selectedStation!);
-                  }
-                },
-              );
-            },
+    return Marker(
+      point: position.toFml(),
+      anchorPos: AnchorPos.exactly(anchor),
+      rotateOrigin:
+          Offset(maxSize.width - anchor.left, maxSize.height - anchor.top),
+      width: maxSize.width,
+      height: maxSize.height,
+      builder: (context) => Align(
+        alignment: Alignment.bottomCenter,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.basic,
+          hitTestBehavior: HitTestBehavior.deferToChild,
+          child: GestureDetector(
+            onTap: () => widget.controller.showInfoWindow(null),
+            child: InfoWindow(
+              strokeColor: Colors.transparent,
+              elevation: 8.0,
+              child: builder(context),
+            ),
           ),
         ),
-        if (gmap != null)
+      ),
+    );
+  }
+
+  // tp.js: create_sel_marker
+  static Marker _buildSelectionMarker(
+    Key key,
+    ImageProvider icon,
+    LatLng location,
+  ) =>
+      Marker(
+        key: key,
+        // tp.js: move_sel_marker
+        point: location.toFml(),
+        anchorPos: _MarkerMetrics.selection.anchorPos,
+        rotateOrigin: _MarkerMetrics.selection.rotateOrigin,
+        width: _MarkerMetrics.selection.width,
+        height: _MarkerMetrics.selection.height,
+        builder: (context) => Image(image: icon),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO(AsturaPhoenix): This costs about 6 ms. We should probably avoid
+    // doing this unnecessarily by making camera position and time window
+    // observable and only updating the pertinent subtrees for those changes
+    // rather than rebuilding the whole widget. We could also cache this on
+    // didUpdateWidget, but then we'd have to make assumptions about stations
+    // and filters being immutable.
+    final stationLayers = _buildStationLayers(
+      stations: widget.stations.values,
+      filters: widget.stationFilters,
+      onTap: (station) {
+        if (widget.controller.selectedStation.value != station ||
+            widget.controller._infoWindow != InfoWindowType.station) {
+          widget.controller.selectStation(station);
+        } else {
+          widget.controller.showInfoWindow(null);
+        }
+      },
+    );
+
+    return MouseRegion(
+      cursor: _dragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+      child: FlutterMap(
+        mapController: mapController,
+        options: MapOptions(
+          center: cameraPosition.center.toFml(),
+          zoom: cameraPosition.zoom,
+          rotation: cameraPosition.rotation.degrees,
+          minZoom: Map.minZoom,
+          maxZoom: Map.maxZoom,
+          enableMultiFingerGestureRace: true,
+          rotationThreshold: 10,
+          onMapEvent: _onMapEvent,
+        ),
+        // ignore: sort_child_properties_last
+        children: [
+          TileLayer(
+            tileProvider: chartTileProvider,
+            reset: chartLayerReset.stream,
+          ),
+          stationLayers.polygonLayer,
+          if (showCurrents)
+            CurrentLayer(
+              arrowhead: PrecachedAsset.arrowhead.image,
+              ofsClient: widget.ofsClient,
+              timeWindow: widget.timeWindow,
+            ),
+          PolylineLayer(
+            polylines: _trackPolylines,
+          ),
+          ListenableBuilder(
+            listenable: widget.controller.selectedStation,
+            builder: (context, _) {
+              final selectedStation = widget.controller.selectedStation.value;
+
+              if (selectedStation != null &&
+                  widget.stationFilters.isStationVisible(selectedStation)) {
+                final tcStation =
+                    widget.stations[selectedStation.tideCurrentStationId];
+
+                return MarkerLayer(
+                  rotate: true,
+                  rotateAlignment: null,
+                  markers: [
+                    _buildSelectionMarker(
+                      const ValueKey('sel'),
+                      PrecachedAsset.selected.image,
+                      selectedStation.marker,
+                    ),
+                    if (tcStation != null &&
+                        widget.stationFilters.isStationVisible(tcStation))
+                      _buildSelectionMarker(
+                        const ValueKey('tc_sel'),
+                        PrecachedAsset.tcSelected.image,
+                        tcStation.marker,
+                      ),
+                  ],
+                );
+              } else {
+                return const MarkerLayer();
+              }
+            },
+          ),
+          ...stationLayers.markerLayers,
+          StreamBuilder(
+            initialData: location.passivePosition.value,
+            stream: location.passivePosition.stream,
+            builder: (context, position) => MarkerLayer(
+              // This layer is exempt from fleaflet/flutter_map #1500 because
+              // the marker anchorPos is its center.
+              rotate: true,
+              markers: [
+                if (position.hasData)
+                  Marker(
+                    point: position.data!.toLatLng().toFml(),
+                    anchorPos: _MarkerMetrics.location.anchorPos,
+                    width: _MarkerMetrics.location.width,
+                    height: _MarkerMetrics.location.height,
+                    builder: (context) => MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      hitTestBehavior: HitTestBehavior.deferToChild,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (widget.controller._infoWindow !=
+                              InfoWindowType.currentLocation) {
+                            widget.controller
+                                .showInfoWindow(InfoWindowType.currentLocation);
+                            setState(
+                              () => trackingMode = TrackingMode.location,
+                            );
+                          } else {
+                            widget.controller.showInfoWindow(null);
+                          }
+                        },
+                        child: Image(image: PrecachedAsset.location.image),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          DefaultTextStyle.merge(
+            style: const TextStyle(fontWeight: FontWeight.bold),
+            child: ListenableBuilder(
+              listenable: widget.controller,
+              builder: (context, _) {
+                switch (widget.controller._infoWindow) {
+                  case InfoWindowType.station:
+                    final selectedStation =
+                        widget.controller.selectedStation.value;
+                    return MarkerLayer(
+                      rotate: true,
+                      rotateAlignment: null,
+                      markers: [
+                        _buildInfoWindowMarker(
+                          selectedStation!.marker,
+                          _MarkerMetrics.station,
+                          (context) => Text(selectedStation.typedShortTitle),
+                        ),
+                      ],
+                    );
+                  case InfoWindowType.currentLocation:
+                    return StreamBuilder(
+                      initialData: location.passivePosition.value,
+                      stream: location.passivePosition.stream,
+                      builder: (context, position) => MarkerLayer(
+                        rotate: true,
+                        rotateAlignment: null,
+                        markers: [
+                          if (position.hasData)
+                            _buildInfoWindowMarker(
+                              position.data!.toLatLng(),
+                              _MarkerMetrics.location,
+                              (context) => Text(formatPosition(position.data!)),
+                            )
+                        ],
+                      ),
+                    );
+                  case null:
+                    return const MarkerLayer();
+                }
+              },
+            ),
+          ),
+        ],
+        nonRotatedChildren: [
           Theme(
             data: ThemeData(
               textButtonTheme: TextButtonThemeData(
@@ -869,24 +772,48 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               padding: const EdgeInsets.all(10),
               child: MapControls(
                 cameraPosition: cameraPosition,
-                lod: chartOverlay.tileProvider.levelOfDetail,
-                maxOversample: chartOverlay.tileProvider.maxOversample,
+                lod: chartTileProvider.levelOfDetail,
+                maxOversample: chartTileProvider.maxOversample,
                 trackingMode: trackingMode,
                 showCurrents: showCurrents,
                 trackLocation: () =>
                     setState(() => trackingMode = TrackingMode.location),
                 trackBearing: () =>
                     setState(() => trackingMode = TrackingMode.bearing),
-                resetBearing: () =>
-                    mapAnimation.set(cameraPosition.copyWith(bearing: 0)),
-                zoomIn: () => mapAnimation.addDelta(CameraDelta(zoom: 1)),
-                zoomOut: () => mapAnimation.addDelta(CameraDelta(zoom: -1)),
+                resetBearing: () => mapAnimation
+                    .set(cameraPosition.copyWith(rotation: Angle.zero)),
+                zoomIn: () => _zoom(1),
+                zoomOut: () => _zoom(-1),
                 setLod: _setLod,
-                setShowCurrents: _setShowCurrents,
+                setShowCurrents: (value) =>
+                    setState(() => showCurrents = value),
               ),
             ),
           ),
-      ],
+          AttributionWidget(
+            attributionBuilder: (context) => MouseRegion(
+              cursor: SystemMouseCursors.basic,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                color: const Color(0xccffffff),
+                child: const Text(
+                  'Chart data © NOAA Office of Coast Survey',
+                  style: TextStyle(fontSize: 10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _zoom(double delta) {
+    mapAnimation.add(
+      cameraPosition.copyWith(
+        zoom:
+            clampDouble(cameraPosition.zoom + delta, Map.minZoom, Map.maxZoom),
+      ),
     );
   }
 }
@@ -976,33 +903,29 @@ class MapControls extends StatelessWidget {
         const double buttonHeight = 40,
             spacing = 10,
             divider = 1,
-            logo = 26,
-            notices = kIsWeb ? 14 : 0;
+            attribution = 14;
         final wrap = constraints.maxHeight <
-            7 * buttonHeight + 3 * spacing + logo + 3 * divider;
+            7 * buttonHeight + 3 * spacing + 3 * divider;
 
         return Row(
           children: [
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: logo),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    locationControls,
-                    zoomControls,
-                    if (!wrap) ...[
-                      lodControls,
-                      layerControls,
-                    ]
-                  ].delimit(const SizedBox(height: spacing)),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  locationControls,
+                  zoomControls,
+                  if (!wrap) ...[
+                    lodControls,
+                    layerControls,
+                  ]
+                ].delimit(const SizedBox(height: spacing)),
               ),
             ),
             if (wrap)
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: notices),
+                  padding: const EdgeInsets.only(bottom: attribution),
                   child: Align(
                     alignment: Alignment.bottomRight,
                     child: Column(
@@ -1027,17 +950,15 @@ class MapButtonPanel extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => PointerInterceptor(
-        child: Card(
-          elevation: 3,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-          child: SizedBox(
-            width: 40,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: children.delimit(const Divider()),
-            ),
+  Widget build(BuildContext context) => Card(
+        elevation: 3,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+        child: SizedBox(
+          width: 40,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: children.delimit(const Divider()),
           ),
         ),
       );
@@ -1070,7 +991,7 @@ class _LocationControlsState extends State<LocationControls> {
 
     switch (widget.trackingMode) {
       case TrackingMode.free:
-        if (widget.cameraPosition.bearing == 0) {
+        if (widget.cameraPosition.rotation == Angle.zero) {
           button = StreamBuilder(
             initialData: location.permissionStatus.value,
             stream: location.permissionStatus.stream,
@@ -1119,7 +1040,7 @@ class _LocationControlsState extends State<LocationControls> {
                       },
                     ),
               child: Transform.rotate(
-                angle: -widget.cameraPosition.bearing * math.pi / 180,
+                angle: widget.cameraPosition.rotation.radians,
                 child: Image(image: PrecachedAsset.compass.image),
               ),
             ),
@@ -1153,7 +1074,7 @@ class _LocationControlsState extends State<LocationControls> {
                   clipBehavior: Clip.hardEdge,
                   child: Transform(
                     transform: Matrix4.translationValues(40.0, 60.0, 0.0)
-                      ..rotateZ(-widget.cameraPosition.bearing * math.pi / 180)
+                      ..rotateZ(widget.cameraPosition.rotation.radians)
                       ..translate(-40.0, -40.0, 0.0),
                     child: Image(image: PrecachedAsset.compassDirections.image),
                   ),
@@ -1257,4 +1178,107 @@ class _HoverButtonState extends State<_HoverButton> {
         onPressed: widget.onPressed,
         child: widget.childBuilder(context, hover),
       );
+}
+
+final _stationIcons = <StationType, ImageProvider>{};
+
+class _StationLayers {
+  _StationLayers({required this.polygonLayer, required this.markerLayers});
+  final Widget polygonLayer;
+  final List<Widget> markerLayers;
+}
+
+class _StationPolygonId extends Equatable {
+  const _StationPolygonId(this.stationId, this.index);
+  final StationId stationId;
+  final int index;
+  @override
+  get props => [stationId, index];
+}
+
+/// Builds the marker and polygon layers for a given station configuration. This
+/// cannot be a single widget as intervening layers may be rendered between
+/// polygons and markers.
+///
+/// [filters]: Station filter functions, in order of precedence. Stations
+/// matched by earlier filters are rendered over stations matched only by later
+/// filters.
+_StationLayers _buildStationLayers({
+  required Iterable<Station> stations,
+  required StationFilters filters,
+  required void Function(Station) onTap,
+}) {
+  final polygons = <Widget>[];
+  final markersForLayer = List.generate(filters.length, (_) => <Marker>[]);
+
+  for (final station in stations) {
+    for (int i = 0; i < filters.length; ++i) {
+      if (filters[i](station)) {
+        final icon = _stationIcons[station.type] ??=
+            AssetImage('assets/markers/${station.type.name}.png');
+
+        // tp.js: create_station
+        final opacity = station.isLegacy
+            ? .3
+            : station.isSubordinate
+                ? .6
+                : 1.0;
+
+        markersForLayer[i].add(
+          Marker(
+            key: ValueKey(station.id),
+            point: station.marker.toFml(),
+            anchorPos: _MarkerMetrics.station.anchorPos,
+            rotateOrigin: _MarkerMetrics.station.rotateOrigin,
+            width: _MarkerMetrics.station.width,
+            height: _MarkerMetrics.station.height,
+            builder: (context) => MouseRegion(
+              cursor: SystemMouseCursors.click,
+              hitTestBehavior: HitTestBehavior.deferToChild,
+              child: GestureDetector(
+                onTap: () => onTap(station),
+                child: Image(
+                  image: icon,
+                  opacity: AlwaysStoppedAnimation(opacity),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        for (int i = 0; i < station.outlines.length; ++i) {
+          polygons.add(
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              hitTestBehavior: HitTestBehavior.deferToChild,
+              child: GestureDetector(
+                onTap: () => onTap(station),
+                child: Polygon(
+                  key: ValueKey(_StationPolygonId(station.id, i)),
+                  vertices: [
+                    for (final point in station.outlines[i]) point.toFml()
+                  ],
+                  style: const PolygonStyle(
+                    fillColor: Color(0x40ff0000),
+                    strokeColor: Colors.red,
+                    strokeWidth: 1,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        break;
+      }
+    }
+  }
+
+  return _StationLayers(
+    polygonLayer: Stack(children: polygons),
+    markerLayers: [
+      for (final markers in markersForLayer.reversed)
+        MarkerLayer(rotate: true, rotateAlignment: null, markers: markers)
+    ],
+  );
 }

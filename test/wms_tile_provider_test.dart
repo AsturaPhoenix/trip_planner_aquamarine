@@ -39,8 +39,8 @@ void main() {
 
     const locator = TileLocator(0, Point(0, 0), 0);
     testTileProvider
-      ..getImage(locator)
-      ..getImage(locator);
+      ..getTileContent(locator)
+      ..getTileContent(locator);
 
     verify(mockHttpClient.get(any));
     verifyNoMoreInteractions(mockHttpClient);
@@ -52,14 +52,14 @@ void main() {
 
     const locator = TileLocator(0, Point(0, 0), 0);
     try {
-      await testTileProvider.getImage(locator);
+      await testTileProvider.getTileContent(locator);
     } on String {
       // expected
     }
     verify(mockHttpClient.get(any));
 
     try {
-      await testTileProvider.getImage(locator);
+      await testTileProvider.getTileContent(locator);
     } on String {
       // expected
     }
@@ -77,7 +77,7 @@ void main() {
 
     const locator = TileLocator(0, Point(0, 0), 0);
     try {
-      await testTileProvider.getImage(locator);
+      await testTileProvider.getTileContent(locator);
     } on String {
       // expected
     }
@@ -85,7 +85,7 @@ void main() {
 
     CompositorImage.decode = actualDecode;
 
-    await testTileProvider.getImage(locator);
+    await testTileProvider.getTileContent(locator);
     // The http call should still be cached.
     verifyNoMoreInteractions(mockHttpClient);
   });

@@ -6,10 +6,10 @@ import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart';
 import 'package:joda/time.dart';
+import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 

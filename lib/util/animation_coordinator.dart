@@ -147,6 +147,8 @@ class AnimationCoordinator<State, Delta> {
     return animation.completer.future;
   }
 
+  /// Adds an animation to any in-progress animations so that once the
+  /// animations have completed, the state is the [target] state.
   Future<bool> add(
     State target, [
     Duration length = defaultAnimationDuration,
@@ -159,6 +161,7 @@ class AnimationCoordinator<State, Delta> {
       // hypersphere from _basis.
       addDelta(stateSpace.calculateDelta(target, _target), length, curve);
 
+  /// Replaces any ongoing animations with an animation to the [target] state.
   Future<bool> set(
     State target, [
     Duration length = defaultAnimationDuration,
@@ -166,6 +169,8 @@ class AnimationCoordinator<State, Delta> {
   ]) {
     if (animations.isEmpty) {
       _start();
+    } else {
+      _basis = _target = _evaluate();
     }
 
     final animation = _Animation(
@@ -183,9 +188,8 @@ class AnimationCoordinator<State, Delta> {
     return animation.completer.future;
   }
 
-  void _onTick(Duration tickerTime) {
-    _tickerTime = tickerTime;
-
+  /// Pops any completed animations and evaluates all in-progress animations.
+  State _evaluate() {
     while (animations.isNotEmpty && t! >= animations.first.end) {
       final animation = animations.removeFirst();
       _basis = stateSpace.applyDelta(_basis, animation.delta);
@@ -193,6 +197,7 @@ class AnimationCoordinator<State, Delta> {
         animation.completer.complete(true);
       }
     }
+
     var state = _basis;
     for (final animation in animations) {
       // We need to apply all animations, including completed animations, in
@@ -206,7 +211,15 @@ class AnimationCoordinator<State, Delta> {
         animation.completer.complete(true);
       }
     }
-    setState?.call(state);
+
+    return state;
+  }
+
+  void _onTick(Duration tickerTime) {
+    _tickerTime = tickerTime;
+
+    setState?.call(_evaluate());
+
     if (animations.isEmpty) {
       ticker.stop();
       _basis = _target;
