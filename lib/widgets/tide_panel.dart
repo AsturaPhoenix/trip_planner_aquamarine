@@ -257,7 +257,6 @@ class TidePanel extends StatefulWidget implements ScrollControllerProvider {
     OverlaySwatch? overlaySwatch,
     this.scrollController,
     this.onTimeWindowChanged,
-    this.onModal,
   }) : overlaySwatch =
             overlaySwatch ?? OverlaySwatch.fromSeed(const Color(0xff999900));
 
@@ -269,7 +268,6 @@ class TidePanel extends StatefulWidget implements ScrollControllerProvider {
   @override
   final ScrollController? scrollController;
   final void Function(GraphTimeWindow timeWindow)? onTimeWindowChanged;
-  final void Function(bool modal)? onModal;
 
   @override
   State<StatefulWidget> createState() => TidePanelState();
@@ -362,7 +360,6 @@ class TidePanelState extends State<TidePanel>
                   child: TimeControls(
                     timeWindow: widget.timeWindow,
                     onWindowChanged: widget.onTimeWindowChanged,
-                    onModal: widget.onModal,
                   ),
                 ),
               ],
@@ -712,12 +709,10 @@ class TimeControls extends StatelessWidget {
     super.key,
     required this.timeWindow,
     this.onWindowChanged,
-    this.onModal,
   });
 
   final GraphTimeWindow timeWindow;
   final void Function(GraphTimeWindow window)? onWindowChanged;
-  final void Function(bool modal)? onModal;
 
   void Function()? _changeTime(int days) => Optional(onWindowChanged)
       .map((f) => () => f(timeWindow + Period(days: days)));
@@ -803,18 +798,12 @@ class TimeControls extends StatelessWidget {
                 (f) => () async {
                   final t = timeWindow.t;
 
-                  onModal?.call(true);
-                  final core.DateTime? date;
-                  try {
-                    date = await showDatePicker(
-                      context: context,
-                      initialDate: t.toCoreFields(),
-                      firstDate: Date(t.year - 8, 1, 1).toCoreFields(),
-                      lastDate: Date(t.year + 10, 1, 0).toCoreFields(),
-                    );
-                  } finally {
-                    onModal?.call(false);
-                  }
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: t.toCoreFields(),
+                    firstDate: Date(t.year - 8, 1, 1).toCoreFields(),
+                    lastDate: Date(t.year + 10, 1, 0).toCoreFields(),
+                  );
 
                   if (date != null) {
                     final delta =
@@ -837,7 +826,6 @@ class TimeControls extends StatelessWidget {
                 daysSelection: timeWindow.days,
                 daysChoices: const [1, 2, 4, 7],
                 onSelected: _changeDays,
-                onModal: onModal,
               ),
             ),
           ],
@@ -862,13 +850,11 @@ class DaysMenuButton extends StatelessWidget {
     required this.daysSelection,
     required this.daysChoices,
     this.onSelected,
-    this.onModal,
   });
   final Color? buttonColor, menuColor, menuSelectionColor, menuTextColor;
   final int daysSelection;
   final List<int> daysChoices;
   final void Function(int days)? onSelected;
-  final void Function(bool)? onModal;
 
   @override
   Widget build(BuildContext context) => MaterialButton(
@@ -882,14 +868,7 @@ class DaysMenuButton extends StatelessWidget {
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: shape,
         onPressed: Optional(onSelected).map(
-          (f) => () async {
-            onModal?.call(true);
-            try {
-              Optional(await showMenu(context)).map(f);
-            } finally {
-              onModal?.call(false);
-            }
-          },
+          (f) => () async => Optional(await showMenu(context)).map(f),
         ),
         child: Text(
           '$daysSelection ${daysSelection == 1 ? 'day' : 'days'}',

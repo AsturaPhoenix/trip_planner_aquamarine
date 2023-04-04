@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:geomag/geomag.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlng/latlng.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
@@ -26,7 +26,7 @@ void main() {
     final geomag = GeoMag();
 
     for (final testLocation in [
-      Map.initialCameraPosition.target,
+      Map.initialCameraPosition.center,
       const LatLng(90, 0),
       const LatLng(-90, 0)
     ]) {
@@ -55,7 +55,7 @@ void main() {
     final mockGeomag = MockGeoMag();
     final cachingGeomag = CachingGeoMag(mockGeomag);
 
-    var testLocation = Map.initialCameraPosition.target;
+    var testLocation = Map.initialCameraPosition.center;
     var geomagResult = FakeGeoMagResult();
     when(mockGeomag.calculate(testLocation.latitude, testLocation.longitude))
         .thenReturn(geomagResult);
@@ -76,7 +76,7 @@ void main() {
     final mockGeomag = MockGeoMag();
     final cachingGeomag = CachingGeoMag(mockGeomag);
 
-    var testLocation = Map.initialCameraPosition.target;
+    var testLocation = Map.initialCameraPosition.center;
     final geomagResult = FakeGeoMagResult();
     when(mockGeomag.calculate(testLocation.latitude, testLocation.longitude))
         .thenReturn(geomagResult);

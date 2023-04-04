@@ -1,7 +1,5 @@
 import 'package:equatable/equatable.dart';
-
-import 'src/latlng.dart';
-export 'src/latlng.dart';
+import 'package:latlng/latlng.dart';
 
 class QuadtreeEntry<T> extends Equatable {
   const QuadtreeEntry(this.location, this.value);

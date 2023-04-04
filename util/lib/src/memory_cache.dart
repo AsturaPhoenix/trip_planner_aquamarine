@@ -1,9 +1,20 @@
+import 'memory_cache_specializations.dart';
+
 /// LRU cache backed by a map.
 class MemoryCache<K, V extends Object> {
   MemoryCache({required this.capacity, this.onEvict});
+  factory MemoryCache.single({void Function(V value)? onEvict}) =>
+      Single(onEvict: onEvict);
+  factory MemoryCache.unbounded() => Unbounded();
+
   final _data = <K, V>{};
   int capacity;
+
+  /// Function called when a value is evicted. Subclasses should ensure that
+  /// eviction is atomic prior to calling this callback.
   void Function(V value)? onEvict;
+
+  bool containsKey(K key) => _data.containsKey(key);
 
   V? operator [](K key) {
     final value = _data.remove(key);
@@ -21,7 +32,7 @@ class MemoryCache<K, V extends Object> {
     }
   }
 
-  /// Removes the entry for [key] from the cache and calls [onEvict] if it wa
+  /// Removes the entry for [key] from the cache and calls [onEvict] if it was
   /// present.
   void evict(K key) {
     final evicted = _data.remove(key);
@@ -31,7 +42,8 @@ class MemoryCache<K, V extends Object> {
   }
 
   /// Removes the entry for [key] from the cache without calling [onEvict].
-  V? remove(K key) => _data.remove(key);
+  V? remove(K key, [V? value]) =>
+      value == null || _data[key] == value ? _data.remove(key) : null;
 
   /// Clears the cache without calling [onEvict];
   void clear() => _data.clear();

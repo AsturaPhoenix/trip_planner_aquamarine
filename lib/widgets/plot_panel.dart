@@ -7,18 +7,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:gpx/gpx.dart';
 import 'package:joda/time.dart' hide DateTime;
+import 'package:latlng/latlng.dart';
 import 'package:path/path.dart';
-import 'package:uuid/uuid.dart';
 
 import '../util/distance.dart';
 import '../util/subordinate_scroll_controller.dart';
 import 'color_picker.dart';
 import 'iterative_flex.dart';
-
-const _uuid = Uuid();
 
 class TimePoint {
   TimePoint({required this.time, required this.index});
@@ -41,7 +38,7 @@ class Segment {
               TimePoint(index: i, time: Instant(trkpts[i].time!))
         ];
 
-  final PolylineId key;
+  final Key key;
   final List<LatLng> points;
   final List<TimePoint> times;
 
@@ -92,14 +89,14 @@ class Track {
     this.segments = const [],
     this.selected = false,
   });
-  final String key;
+  final Key key;
   final String name;
   final Color color;
   final List<Segment> segments;
   final bool selected;
 
   Track copyWith({
-    String? key,
+    Key? key,
     String? name,
     Color? color,
     List<Segment>? segments,
@@ -123,7 +120,6 @@ class PlotPanel extends StatefulWidget implements ScrollControllerProvider {
     this.tracks = const [],
     this.scrollController,
     required this.onTracksChanged,
-    this.onModal,
   });
   final Instant? t;
   final TimeZone timeZone;
@@ -132,7 +128,6 @@ class PlotPanel extends StatefulWidget implements ScrollControllerProvider {
   @override
   final ScrollController? scrollController;
   final void Function(List<Track>) onTracksChanged;
-  final void Function(bool modal)? onModal;
 
   late final selectedCount = tracks.where((track) => track.selected).length;
 
@@ -203,10 +198,8 @@ class PlotPanelState extends State<PlotPanel>
   }
 
   void _selectColor(BuildContext context, Track current) async {
-    widget.onModal?.call(true);
     final color =
         await showColorPicker(context: context, initialColor: current.color);
-    widget.onModal?.call(false);
     if (color == null) return;
 
     widget.onTracksChanged([
@@ -246,11 +239,11 @@ class PlotPanelState extends State<PlotPanel>
       for (final trk in gpx.trks) {
         tracks.add(
           Track(
-            key: _uuid.v4(),
+            key: UniqueKey(),
             name: trk.name ?? basenameWithoutExtension(file.name),
             segments: [
               for (final trkseg in trk.trksegs)
-                Segment(key: PolylineId(_uuid.v4()), trkpts: trkseg.trkpts)
+                Segment(key: UniqueKey(), trkpts: trkseg.trkpts)
             ],
             selected: true,
           ),
@@ -409,7 +402,7 @@ class PlotPanelState extends State<PlotPanel>
                               if (track.selected)
                                 for (final segment in track.segments)
                                   charts.Series<TimeSeries<Speed>, DateTime>(
-                                    id: segment.key.value,
+                                    id: segment.key.toString(),
                                     seriesColor: charts.ColorUtil.fromDartColor(
                                       track.color,
                                     ),

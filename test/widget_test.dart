@@ -1,8 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:trip_planner_aquamarine/main.dart';
 
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -23,7 +23,7 @@ void main() {
 
   testWidgets('smoke test', (tester) async {
     await tester.pumpWidget(harness.buildTripPlanner());
-    expect(find.byType(GoogleMap), findsOneWidget);
+    expect(find.byType(FlutterMap), findsOneWidget);
   });
 
   group('with stations and tide graphs', () {
@@ -36,10 +36,6 @@ void main() {
       await tester.flushAsync();
       await tester.pumpAndSettle();
       expect(find.byType(TidePanel), findsOneWidget);
-      // We need to flush the scheduled _onPanelChanged or the test will
-      // complain. There isn't a great way to dispose this timer.
-      // flutter/flutter PR 116422
-      await tester.pump(Duration.zero);
     });
 
     testWidgets("doesn't try to flip station z-indices after disposed",
@@ -59,15 +55,25 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      final stationPriority =
-          tester.widget<Map>(find.byType(Map)).stationPriority;
+      final current = kDatapoints.values.firstWhere((station) =>
+              station.type == StationType.current && !station.isLegacy),
+          destination = kDatapoints.values
+              .firstWhere((station) => station.type == StationType.destination),
+          nogo = kDatapoints.values
+              .firstWhere((station) => station.type == StationType.nogo);
+
+      final stationFilters =
+          tester.widget<Map>(find.byType(Map)).stationFilters;
+      int stationPriority(Station station) =>
+          -stationFilters.indexWhere((p) => p(station));
+
       expect(
-        stationPriority(StationType.current),
-        greaterThan(stationPriority(StationType.destination)),
+        stationPriority(current),
+        greaterThan(stationPriority(destination)),
       );
       expect(
-        stationPriority(StationType.destination),
-        greaterThan(stationPriority(StationType.nogo)),
+        stationPriority(destination),
+        greaterThan(stationPriority(nogo)),
       );
     });
 
@@ -81,16 +87,24 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      var stationPriority =
-          tester.widget<Map>(find.byType(Map)).stationPriority;
+      final current = kDatapoints.values.firstWhere((station) =>
+              station.type == StationType.current && !station.isLegacy),
+          destination = kDatapoints.values
+              .firstWhere((station) => station.type == StationType.destination),
+          nogo = kDatapoints.values
+              .firstWhere((station) => station.type == StationType.nogo);
+
+      var stationFilters = tester.widget<Map>(find.byType(Map)).stationFilters;
+      int stationPriority(Station station) =>
+          -stationFilters.indexWhere((p) => p(station));
 
       expect(
-        stationPriority(StationType.destination),
-        greaterThan(stationPriority(StationType.current)),
+        stationPriority(destination),
+        greaterThan(stationPriority(current)),
       );
       expect(
-        stationPriority(StationType.current),
-        greaterThan(stationPriority(StationType.nogo)),
+        stationPriority(current),
+        greaterThan(stationPriority(nogo)),
       );
 
       // Don't bother flipping when the Plot panel is selected.
@@ -98,24 +112,24 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
-          stationPriority);
+      expect(
+          tester.widget<Map>(find.byType(Map)).stationFilters, stationFilters);
 
       await tester.tap(find.text('Tides'));
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
-          isNot(stationPriority));
-      stationPriority = tester.widget<Map>(find.byType(Map)).stationPriority;
+      expect(tester.widget<Map>(find.byType(Map)).stationFilters,
+          isNot(stationFilters));
+      stationFilters = tester.widget<Map>(find.byType(Map)).stationFilters;
 
       expect(
-        stationPriority(StationType.current),
-        greaterThan(stationPriority(StationType.destination)),
+        stationPriority(current),
+        greaterThan(stationPriority(destination)),
       );
       expect(
-        stationPriority(StationType.destination),
-        greaterThan(stationPriority(StationType.nogo)),
+        stationPriority(destination),
+        greaterThan(stationPriority(nogo)),
       );
 
       // Again, don't bother flipping when the Plot panel is selected.
@@ -123,8 +137,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(Duration.zero);
 
-      expect(tester.widget<Map>(find.byType(Map)).stationPriority,
-          stationPriority);
+      expect(
+          tester.widget<Map>(find.byType(Map)).stationFilters, stationFilters);
     });
 
     testWidgets('waits for location fix to initialize', (tester) async {
@@ -139,16 +153,24 @@ void main() {
       await tester.flushAsync();
       await tester.pumpAndSettle();
       expect(find.byType(TidePanel), findsOneWidget);
+    });
 
-      // We need to flush the scheduled _onPanelChanged or the test will complain.
-      // There isn't a great way to dispose this timer. flutter/flutter PR 116422
-      await tester.pump(Duration.zero);
+    testWidgets('starts with location tracking', (tester) async {
+      final position = harness.withLocation();
+
+      await tester.pumpWidget(harness.buildTripPlanner());
+      position.add(TripPlannerHarness.horseshoeBayParkingLot);
+      await tester.flushAsync();
+      await tester.pumpAndSettle();
+
+      expect(tester.state<MapState>(find.byType(Map)).trackingMode,
+          TrackingMode.location);
     });
 
     testWidgets("doesn't initialze station to unselectable station",
         (tester) async {
       final unselectableStation = kDatapoints.values
-          .firstWhere((station) => !Map.showMarkerTypes.contains(station.type));
+          .firstWhere((station) => station.type == StationType.meeting);
       harness.withLocation().seed(testPosition(unselectableStation.marker));
 
       await tester.pumpWidget(harness.buildTripPlanner());
@@ -157,7 +179,9 @@ void main() {
 
       final TripPlannerState state = tester.state(find.byType(TripPlanner));
       expect(
-          state.selectedStation?.type, predicate(Map.showMarkerTypes.contains));
+          state.selectedStation,
+          predicate((Station station) =>
+              state.stationFilters.any((p) => p(station))));
 
       await tester.pump(Duration.zero);
     });
@@ -234,7 +258,5 @@ void main() {
     stations.complete(kDatapoints);
     await tester.pumpAndSettle();
     expect(find.byType(TidePanel), findsOneWidget);
-
-    await tester.pump(Duration.zero);
   });
 }

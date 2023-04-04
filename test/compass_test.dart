@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlng/latlng.dart';
 import 'package:test/test.dart';
 import 'package:trip_planner_aquamarine/platform/orientation.dart';
 import 'package:trip_planner_aquamarine/widgets/compass.dart';

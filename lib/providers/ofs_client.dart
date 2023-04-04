@@ -1,17 +1,20 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/quadtree.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:aquamarine_util/async.dart';
+import 'package:aquamarine_util/memory_cache.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
 import 'package:vector_math/vector_math_64.dart';
 
-import '../persistence/memory_cache.dart';
 import '../widgets/tide_panel.dart';
 
 class _HourRange extends Equatable {
@@ -65,19 +68,19 @@ class OfsClient extends ChangeNotifier {
       kIsWeb && (kDebugMode || kProfileMode) ? 'localhost' : '34.83.198.158';
 
   static double resolutionForZoom(double zoom) {
-    const baseResolution = 28.0;
+    const baseResolution = 24.0;
     return baseResolution / pow(2, zoom);
   }
 
   OfsClient({required this.client});
   final http.Client client;
   // TODO(AsturaPhoenix): smarter caching policy with persistent cache
-  final _latlngCache = AsyncCacheMap<Hex32, Quadtree<int>>.persistent();
+  final _latlngCache = AsyncCache<Hex32, Quadtree<int>>.persistent();
   final _uvCache = MemoryCache<HourUtc, _UvCacheEntry>(capacity: 72);
   _UvTimelineKey? _uvTimelineKey;
 
-  final _samplingCache = AsyncCacheMap<_SamplingKey, List<LatLng>>.single();
-  final _immediateUvFetch = AsyncCacheMap<_UvRequest, void>.ephemeral();
+  final _samplingCache = AsyncCache<_SamplingKey, List<LatLng>>.single();
+  final _immediateUvFetch = AsyncCache<_UvRequest, void>.ephemeral();
 
   Future<Quadtree<int>> _latlng(Hex32 hash) async =>
       _latlngCache.computeIfAbsent(hash, () => _fetchLatLng(hash));
@@ -90,9 +93,9 @@ class OfsClient extends ChangeNotifier {
     return indexLatLng(response.stream);
   }
 
-  void _refresh(HourUtc t) {
+  Future<void> _refresh(HourUtc t) {
     final key = _UvRequest(_HourRange(t, t), _uvTimelineKey!);
-    _immediateUvFetch.computeIfAbsent(key, () => _fetchUv(key));
+    return _immediateUvFetch.computeIfAbsent(key, () => _fetchUv(key));
   }
 
   Future<void> _fetchUv(_UvRequest request) async {
@@ -118,6 +121,8 @@ class OfsClient extends ChangeNotifier {
         }),
       ),
     );
+
+    if (response.statusCode != HttpStatus.ok) throw response;
 
     final reader = BufferedReader(response.stream);
     try {
@@ -166,13 +171,48 @@ class OfsClient extends ChangeNotifier {
         ],
       );
 
+  Future<List<_UvCacheEntry>> _getUvsAboutHour(HourUtc t0) async {
+    final t1 = t0 + 1;
+    var uv0 = _uvCache[t0], uv1 = _uvCache[t1];
+
+    if (uv0 == null || uv1 == null) {
+      final refresh = Future.wait([
+        if (uv0 == null) _refresh(t0),
+        if (uv1 == null) _refresh(t1),
+      ]);
+
+      final completer = Completer();
+      void listener() {
+        uv0 = _uvCache[t0];
+        uv1 = _uvCache[t1];
+        if (uv0 != null && uv1 != null) {
+          removeListener(listener);
+          completer.complete();
+        }
+      }
+
+      refresh.onError((Object e, s) {
+        if (!completer.isCompleted) {
+          removeListener(listener);
+          completer.completeError(e, s);
+        }
+        throw e;
+      });
+
+      addListener(listener);
+      await completer.future;
+    }
+
+    return [uv0!, uv1!];
+  }
+
   /// Gets interpolated currents for a view. Produces a null iterable if data
   /// for this view has not yet been fetched (or was evicted from the cache), or
   /// an empty iterable if no data for this view is available on the server yet.
   ///
   /// Although currents are only returned for [timewindow.t], the extents of the
-  /// window are used to inform caching for animation.
-  Future<Iterable<QuadtreeEntry<Vector2>>?> getCurrents({
+  /// window may be used to inform caching for animation.
+  Future<Iterable<QuadtreeEntry<Vector2>>> getCurrents({
     required GraphTimeWindow timeWindow,
     required LatLngBounds bounds,
     required double zoom,
@@ -184,42 +224,36 @@ class OfsClient extends ChangeNotifier {
       _immediateUvFetch.clear();
     }
 
-    final t0 = HourUtc.truncate(timeWindow.t.value), t1 = t0 + 1;
-    final uv0 = _uvCache[t0], uv1 = _uvCache[t1];
+    final t0 = HourUtc.truncate(timeWindow.t.value);
+    final uv = await _getUvsAboutHour(t0);
 
-    if (uv0 == null || uv1 == null) {
-      if (uv0 == null) _refresh(t0);
-      if (uv1 == null) _refresh(t1);
-      return null;
-    }
-
-    if (uv1.latlngHash == Hex32.zero) {
+    if (uv[1].latlngHash == Hex32.zero) {
       // No data (yet?) for at least one side of this interval. For now, we
       // won't query the server for an update, but we should be more intelligent
       // about this.
       return const [];
     }
 
-    if (uv0.latlngHash != uv1.latlngHash) {
+    if (uv[0].latlngHash != uv[1].latlngHash) {
       // Don't interpolate between different meshes. (We don't expect this to
       // happen often if at all.)
       return const [];
     }
 
     final samplePoints = await _samplePoints(
-      _SamplingKey(uv0.latlngHash, bounds, resolutionForZoom(zoom)),
+      _SamplingKey(uv[0].latlngHash, bounds, resolutionForZoom(zoom)),
     );
 
     assert(
-      uv0.uv.length == samplePoints.length &&
-          uv1.uv.length == samplePoints.length,
+      uv[0].uv.length == samplePoints.length &&
+          uv[1].uv.length == samplePoints.length,
     );
 
     final f = timeWindow.t.value.difference(t0.t).inMilliseconds /
         Duration.millisecondsPerHour;
     return () sync* {
       for (int i = 0; i < samplePoints.length; ++i) {
-        final v0 = uv0.uv[i], v1 = uv1.uv[i];
+        final v0 = uv[0].uv[i], v1 = uv[1].uv[i];
         yield QuadtreeEntry<Vector2>(samplePoints[i], v0 + (v1 - v0) * f);
       }
     }();

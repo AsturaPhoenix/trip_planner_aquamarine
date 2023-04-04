@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Gradient;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlng/latlng.dart';
 import 'package:rxdart/rxdart.dart' hide ValueStream;
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 

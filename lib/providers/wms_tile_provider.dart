@@ -2,17 +2,18 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
+import 'dart:ui';
 
+import 'package:aquamarine_util/async.dart';
+import 'package:aquamarine_util/memory_cache.dart';
 import 'package:equatable/equatable.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/painting.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
 import 'package:json_annotation/json_annotation.dart';
 import 'package:logging/logging.dart';
 
 import '../persistence/blob_cache.dart';
-import '../persistence/memory_cache.dart';
-import '../platform/compositor.dart';
 
 part 'wms_tile_provider.g.dart';
 
@@ -30,7 +31,7 @@ class WmsParams {
 }
 
 extension on Point<int> {
-  ui.Offset toOffset() => ui.Offset(x.toDouble(), y.toDouble());
+  Offset toOffset() => Offset(x.toDouble(), y.toDouble());
   Point<int> operator <<(int z) => Point(x << z, y << z);
   // On web, >> is limited to int32.
   // https://github.com/dart-lang/sdk/issues/15361
@@ -102,12 +103,35 @@ class TileKey extends TileLocator {
   String toString() => '$type@$zoom:(${coordinate.x},${coordinate.y})+$lod';
 }
 
+Future<Image> _decode(Uint8List data) async {
+  final buffer = await ImmutableBuffer.fromUint8List(data);
+  final ImageDescriptor imageDescriptor;
+  try {
+    imageDescriptor = await ImageDescriptor.encoded(buffer);
+  } finally {
+    buffer.dispose();
+  }
+
+  try {
+    final codec = await imageDescriptor.instantiateCodec();
+    try {
+      return (await codec.getNextFrame()).image;
+    } finally {
+      codec.dispose();
+    }
+  } finally {
+    imageDescriptor.dispose();
+  }
+}
+
 // Derived from js-ogc
-class WmsTileProvider implements TileProvider {
+class WmsTileProvider extends TileProvider {
   static final log = Logger('WmsTileProvider');
 
-  /// This is determined by the Maps API, but doesn't seem to be a constant
-  /// provided there.
+  /// This has to remain stable for persistence, and it being an integer lets us
+  /// do a few micro-optimizations (bitshifts instead of floating-point
+  /// multiplication). Although we could extract this from [TileLayer], let's
+  /// keep this constant for now.
   static const logicalTileSize = 256;
 
   static const _defaultWmsParams = {
@@ -117,17 +141,19 @@ class WmsTileProvider implements TileProvider {
   };
 
   static const _epsg3857Extent = 20037508.34789244;
-  static const _origin = ui.Offset(
+  static const _origin = Offset(
     -_epsg3857Extent, // x starts from left
     _epsg3857Extent,
   ); // y starts from top
 
   /// Convert xyz tile coordinates to mercator bounds.
-  static ui.Rect _xyzToBounds(AreaLocator xyz) {
+  static Rect _xyzToBounds(AreaLocator xyz) {
     final wmsTileSize = _epsg3857Extent * 2 / (1 << xyz.zoom);
     return _origin + xyz.coordinate.toOffset().scale(1, -1) * wmsTileSize &
-        ui.Size(wmsTileSize, -wmsTileSize);
+        Size(wmsTileSize, -wmsTileSize);
   }
+
+  static final Paint _paint = Paint();
 
   WmsTileProvider({
     required this.client,
@@ -137,7 +163,6 @@ class WmsTileProvider implements TileProvider {
     this.levelOfDetail = 0,
     this.maxOversample = 2,
     this.fetchLod = 0,
-    this.preferredTileSize = 256,
     required this.params,
   });
 
@@ -158,13 +183,13 @@ class WmsTileProvider implements TileProvider {
   /// for custom logical tile sizes, but mobile does not.
   final int fetchLod;
 
-  /// The tile standard tile size multiplied by the device pixel ratio.
-  int preferredTileSize;
   WmsParams params;
 
+  @override
   void dispose() {
     cache.close();
     client.close();
+    super.dispose();
   }
 
   Uri _getTileUrl(TileLocator locator) {
@@ -195,27 +220,27 @@ class WmsTileProvider implements TileProvider {
     }
   }
 
-  final _memoryCache = MemoryCache<TileLocator, Future<CompositorImage>>(
-    capacity: 32,
-    onEvict: (image) async => (await image).dispose(),
+  final _memoryCache = AsyncCache<TileLocator, Image>.persistent(
+    MemoryCache(
+      capacity: 32,
+      onEvict: (image) async => (await image).dispose(),
+    ),
   );
 
   Future<Uint8List> getImageData(TileLocator locator) async =>
       cache[TileKey.forLocator(locator, tileType).toString()] ??=
           await fetchImageData(locator);
 
-  Future<CompositorImage> getImage(TileLocator locator) async =>
-      (await (_memoryCache[locator] ??= getImageData(locator)
-              .then(CompositorImage.decode)
-              .catchError((Object e) {
-        _memoryCache.remove(locator);
-        throw e;
+  Future<Image> getComponentImage(TileLocator locator) async =>
+      (await (_memoryCache.computeIfAbsent(locator, () async {
+        final data = await getImageData(locator);
+        return _decode(data);
       })))
           .clone();
 
   /// Windows a tile from a larger tile at a higher LOD.
   Future<void> _tileFromLarger(
-    Compositor compositor,
+    Canvas canvas,
     TileLocator locator,
   ) async {
     final levelsAbove = min(fetchLod - locator.lod, locator.zoom);
@@ -225,25 +250,26 @@ class WmsTileProvider implements TileProvider {
     final offset =
         ((locator.coordinate - (ancestor.coordinate << levelsAbove)) * srcSize)
             .toOffset();
-    final image = await getImage(ancestor);
-    compositor.composite(
+    final image = await getComponentImage(ancestor);
+    canvas.drawImageRect(
       image,
-      offset & ui.Size.square(srcSize.toDouble()),
-      ui.Offset.zero & const ui.Size.square(1),
+      offset & Size.square(srcSize.toDouble()),
+      Offset.zero & const Size.square(1),
+      _paint,
     );
     image.dispose();
   }
 
   /// Assembles a tile from smaller tiles at a lower LOD.
   Future<void> _tileFromSmaller(
-    Compositor compositor,
+    Canvas canvas,
     TileLocator locator,
   ) async {
     final levelsBelow = locator.lod - fetchLod;
     final descendantBasis = locator >> levelsBelow;
     final sideLength = 1 << levelsBelow;
 
-    compositor
+    canvas
       ..save()
       ..scale(1 / sideLength);
 
@@ -252,57 +278,102 @@ class WmsTileProvider implements TileProvider {
         final offset = Point(i, j);
         final descendantLocator = descendantBasis + offset;
 
-        final image = await getImage(descendantLocator);
-        compositor.composite(
+        final image = await getComponentImage(descendantLocator);
+        canvas.drawImageRect(
           image,
-          ui.Offset.zero &
-              ui.Size.square(
+          Offset.zero &
+              Size.square(
                 (logicalTileSize << descendantLocator.lod).toDouble(),
               ),
-          offset.toOffset() & const ui.Size.square(1),
+          offset.toOffset() & const Size.square(1),
+          _paint,
         );
         image.dispose();
       }
     }
 
-    compositor.restore();
+    canvas.restore();
   }
 
   /// Gets a tile image, composited from cached or fetched resources.
   ///
   /// The caller is responsible for calling `dispose` on the image.
-  Future<ui.Image> getTileContent(TileLocator locator) async {
+  Future<Image> getTileContent(
+    TileLocator locator, {
+    int preferredTileSize = logicalTileSize,
+  }) async {
     // Keep the natural resolution afforded by the LOD if we want to display at
     // a higher resolution, but don't waste bytes beyond the preferred size to
     // minimize encoding time.
     //
     // Also go ahead and normalize the tile size to 1.
     final tileSize = min(logicalTileSize << locator.lod, preferredTileSize);
-    final compositor = Compositor(tileSize);
-    compositor.scale(tileSize.toDouble());
+    final pictureRecorder = PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    canvas.scale(tileSize.toDouble());
 
     if (locator.lod <= fetchLod) {
-      await _tileFromLarger(compositor, locator);
+      await _tileFromLarger(canvas, locator);
     } else {
-      await _tileFromSmaller(compositor, locator);
+      await _tileFromSmaller(canvas, locator);
     }
 
-    return compositor.toImage();
+    final picture = pictureRecorder.endRecording();
+    try {
+      return picture.toImage(tileSize, tileSize);
+    } finally {
+      picture.dispose();
+    }
   }
 
   @override
-  Future<Tile> getTile(int x, int y, int? zoom) async {
-    try {
-      final locator = TileLocator(
-        zoom!,
-        Point(x, y),
-        max(min(levelOfDetail - zoom, maxOversample), 0),
-      );
-      return ImageTile(await getTileContent(locator));
-    } catch (e, s) {
-      // The Java maps impl caller likes to eat exceptions, so log them.
-      log.warning('getTile($x, $y, $zoom)', e, s);
-      rethrow;
-    }
+  ImageProvider<Object> getImage(Coords<num> coords, TileLayer options) {
+    assert(options.tileSize == logicalTileSize);
+
+    return _ImageProvider(
+      this,
+      TileLocator(
+        coords.z.toInt(),
+        Point(coords.x.toInt(), coords.y.toInt()),
+        max(min(levelOfDetail - coords.z.toInt(), maxOversample), 0),
+      ),
+    );
   }
+}
+
+class _ImageKey extends Equatable {
+  const _ImageKey(this.tileProvider, this.tileLocator, this.devicePixelRatio);
+  final WmsTileProvider tileProvider;
+  final TileLocator tileLocator;
+  final double devicePixelRatio;
+  @override
+  get props => [tileProvider, tileLocator, devicePixelRatio];
+}
+
+class _ImageProvider extends ImageProvider<_ImageKey> {
+  _ImageProvider(this.tileProvider, this.tileLocator);
+  final WmsTileProvider tileProvider;
+  final TileLocator tileLocator;
+
+  @override
+  Future<_ImageKey> obtainKey(ImageConfiguration configuration) async =>
+      _ImageKey(tileProvider, tileLocator, configuration.devicePixelRatio ?? 1);
+
+  @override
+  ImageStreamCompleter loadImage(_ImageKey key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(
+        (() async {
+          final image = await tileProvider.getTileContent(
+            tileLocator,
+            preferredTileSize:
+                (WmsTileProvider.logicalTileSize * key.devicePixelRatio)
+                    .toInt(),
+          );
+          assert(image.width == image.height);
+          return ImageInfo(
+            image: image,
+            scale: WmsTileProvider.logicalTileSize / image.height,
+          );
+        })(),
+      );
 }

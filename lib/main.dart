@@ -6,13 +6,11 @@ import 'dart:developer' as debug;
 import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive_flutter/adapters.dart';
 import 'package:http/http.dart' as http;
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart';
 
@@ -52,6 +50,29 @@ class TripPlanner extends StatefulWidget {
         SharedPreferences.getInstance()
             .then((instance) => sharedPreferences = instance)
       ]);
+
+  // tp.js: show_hide_marker
+  static const tideCurrentPriorityFilter = [
+        _tideCurrentFilter,
+        _launchDestinationFilter,
+        _nogoFilter,
+      ],
+      launchDestinationPriorityFilter = [
+        _launchDestinationFilter,
+        _tideCurrentFilter,
+        _nogoFilter,
+      ];
+
+  static bool _tideCurrentFilter(Station station) =>
+      const {StationType.tide, StationType.current}.contains(station.type) &&
+      !station.isLegacy;
+
+  static bool _launchDestinationFilter(Station station) => const {
+        StationType.launch,
+        StationType.destination
+      }.contains(station.type);
+
+  static bool _nogoFilter(Station station) => station.type == StationType.nogo;
 
   static Future<TripPlanner> main() async {
     initializeLogger();
@@ -151,7 +172,7 @@ class TripPlannerState extends State<TripPlanner> {
 
   final _mapKey = GlobalKey(), _panelKey = GlobalKey();
 
-  Station? selectedStation;
+  final mapController = MapController();
   late GraphTimeWindow timeWindow =
       GraphTimeWindow.now(widget.tripPlannerClient.timeZone);
   final distanceSystem = ValueNotifier(
@@ -162,9 +183,12 @@ class TripPlannerState extends State<TripPlanner> {
   StreamSubscription? _stationsSubscription;
   var tracks = <Track>[];
 
-  Iterable<Station> get selectableStations => stations.values
-      .where((station) => Map.showMarkerTypes.contains(station.type));
+  StationFilters stationFilters = TripPlanner.tideCurrentPriorityFilter;
 
+  Iterable<Station> get selectableStations =>
+      stations.values.where(stationFilters.isStationVisible);
+
+  Station? get selectedStation => mapController.selectedStation.value;
   Station? get tideCurrentStation => Optional(selectedStation).map(
         (station) => station.type.isTideCurrent
             ? station
@@ -175,21 +199,24 @@ class TripPlannerState extends State<TripPlanner> {
   late CancelableOperation<void> getInitialPosition;
   Position? _initialPosition;
 
-  int Function(StationType)? stationPriority;
-
-  bool hasModal = false;
-
   void _maybeCompleteInitialStationSelection() {
-    if (mounted &&
-        selectedStation == null &&
-        getInitialPosition.isCompleted &&
-        selectableStations.isNotEmpty) {
-      setState(
-        () => selectedStation = _initialPosition != null
-            ? nearestStation(selectableStations, _initialPosition!)
-            : selectableStations.first,
-      );
-    }
+    // The underlying flutter_map controller needs to be bound to a map, which
+    // happens in a build method, so wrap this in a post-frame callback just
+    // in case we somehow get stations and a GPS lock before the widget tree
+    // manages to build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          selectedStation == null &&
+          getInitialPosition.isCompleted &&
+          selectableStations.isNotEmpty) {
+        mapController.selectStation(
+          _initialPosition != null
+              ? nearestStation(selectableStations, _initialPosition!)
+              : selectableStations.first,
+          mayUnlock: false,
+        );
+      }
+    });
   }
 
   @override
@@ -248,33 +275,22 @@ class TripPlannerState extends State<TripPlanner> {
     getInitialPosition.cancel();
     _stationsSubscription?.cancel();
     distanceSystem.dispose();
+    mapController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final mapPanel = Stack(
+    final mapPanel = Map(
       key: _mapKey,
-      children: [
-        Map(
-          client: widget.wmsClient,
-          tileCache: widget.tileCache,
-          ofsClient: widget.ofsClient,
-          stations: stations,
-          selectedStation: selectedStation,
-          tracks: tracks,
-          timeWindow: timeWindow,
-          stationPriority: stationPriority,
-          onStationSelected: (station) =>
-              setState(() => selectedStation = station),
-        ),
-        if (hasModal)
-          // This constructor is not const on web.
-          // ignore: prefer_const_constructors
-          PointerInterceptor(
-            child: const SizedBox.expand(),
-          )
-      ],
+      client: widget.wmsClient,
+      tileCache: widget.tileCache,
+      ofsClient: widget.ofsClient,
+      stations: stations,
+      stationFilters: stationFilters,
+      tracks: tracks,
+      timeWindow: timeWindow,
+      controller: mapController,
     );
 
     return MaterialApp(
@@ -334,25 +350,28 @@ class TripPlannerState extends State<TripPlanner> {
 
           return Scaffold(
             appBar: AppBar(
-              title: Row(
-                children: [
-                  title,
-                  if (selectedStation != null && inlineStationBar)
-                    Expanded(
-                      child: Container(
-                        alignment: Alignment.center,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: selectedStationBarMinPadding,
-                        ),
-                        child: _SelectedStationBar(
-                          selectedStation!,
-                          blendEdges: true,
+              title: ListenableBuilder(
+                listenable: mapController.selectedStation,
+                builder: (context, _) => Row(
+                  children: [
+                    title,
+                    if (selectedStation != null && inlineStationBar)
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: selectedStationBarMinPadding,
+                          ),
+                          child: _SelectedStationBar(
+                            selectedStation!,
+                            blendEdges: true,
+                          ),
                         ),
                       ),
-                    ),
-                  if (centeredInlineStationBar)
-                    const Opacity(opacity: 0, child: title),
-                ],
+                    if (centeredInlineStationBar)
+                      const Opacity(opacity: 0, child: title),
+                  ],
+                ),
               ),
               actions: [
                 if (orientation.isOrientationAvailable)
@@ -372,67 +391,68 @@ class TripPlannerState extends State<TripPlanner> {
                   )
               ],
             ),
-            body: Column(
-              children: [
-                if (selectedStation != null && !inlineStationBar)
-                  _SelectedStationBar(
-                    selectedStation!,
-                    blendEdges: false,
-                  ),
-                Expanded(
-                  child: horizontal
-                      ? Row(
-                          children: [
-                            Expanded(child: mapPanel),
-                            if (selectedStation != null)
-                              SizedBox(
-                                width: min(
-                                  constraints.maxWidth / 2,
-                                  TidePanel.defaultGraphWidth,
+            body: ListenableBuilder(
+              listenable: mapController.selectedStation,
+              builder: (context, _) => Column(
+                children: [
+                  if (selectedStation != null && !inlineStationBar)
+                    _SelectedStationBar(
+                      selectedStation!,
+                      blendEdges: false,
+                    ),
+                  Expanded(
+                    child: horizontal
+                        ? Row(
+                            children: [
+                              Expanded(child: mapPanel),
+                              if (selectedStation != null)
+                                SizedBox(
+                                  width: min(
+                                    constraints.maxWidth / 2,
+                                    TidePanel.defaultGraphWidth,
+                                  ),
+                                  child:
+                                      _Panel(key: _panelKey, tripPlanner: this),
                                 ),
-                                child:
-                                    _Panel(key: _panelKey, tripPlanner: this),
-                              ),
-                          ],
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final defaultPanelHeight = min(
-                              _Panel.estimateHeight(
-                                context,
-                                constraints.maxWidth,
-                              ),
-                              constraints.maxHeight,
-                            );
+                            ],
+                          )
+                        : LayoutBuilder(
+                            builder: (context, constraints) {
+                              final defaultPanelHeight = min(
+                                _Panel.estimateHeight(
+                                  context,
+                                  constraints.maxWidth,
+                                ),
+                                constraints.maxHeight,
+                              );
 
-                            final minMapHeight =
-                                constraints.maxHeight - defaultPanelHeight;
+                              final minMapHeight =
+                                  constraints.maxHeight - defaultPanelHeight;
 
-                            final defaultPosition =
-                                defaultPanelHeight / constraints.maxHeight;
-                            final minimizedPosition =
-                                _Panel.tabBarHeight / constraints.maxHeight;
+                              final defaultPosition =
+                                  defaultPanelHeight / constraints.maxHeight;
+                              final minimizedPosition =
+                                  _Panel.tabBarHeight / constraints.maxHeight;
 
-                            return IterativeColumn(
-                              children: [
-                                IterativeFlexible(
-                                  pass: 1,
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) =>
-                                        OverflowBox(
-                                      alignment: Alignment.topLeft,
-                                      minHeight: minMapHeight,
-                                      maxHeight: max(
-                                        minMapHeight,
-                                        constraints.maxHeight,
+                              return IterativeColumn(
+                                children: [
+                                  IterativeFlexible(
+                                    pass: 1,
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) =>
+                                          OverflowBox(
+                                        alignment: Alignment.topLeft,
+                                        minHeight: minMapHeight,
+                                        maxHeight: max(
+                                          minMapHeight,
+                                          constraints.maxHeight,
+                                        ),
+                                        child: mapPanel,
                                       ),
-                                      child: mapPanel,
                                     ),
                                   ),
-                                ),
-                                if (selectedStation != null)
-                                  PointerInterceptor(
-                                    child: DraggableScrollableSheet(
+                                  if (selectedStation != null)
+                                    DraggableScrollableSheet(
                                       initialChildSize: defaultPosition,
                                       minChildSize: minimizedPosition,
                                       snap: true,
@@ -473,14 +493,14 @@ class TripPlannerState extends State<TripPlanner> {
                                           )
                                         ],
                                       ),
-                                    ),
-                                  )
-                              ],
-                            );
-                          },
-                        ),
-                ),
-              ],
+                                    )
+                                ],
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -589,52 +609,22 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
 
   TripPlannerState get tripPlanner => widget.tripPlanner;
 
-  Object? _panelChangedToken;
-  List<Set<StationType>>? _stationTypePriorities;
-
   void _onPanelChanged() {
-    // Flipping marker z indices is relatively expensive, so defer while
-    // animations are in progress.
-    //
-    // This can actually allocate a 0-length timer used to service scheduler
-    // tasks, so there isn't a great way to cancel it. Widget tests may complain
-    // about this.
-    //
-    // Also, the task queue is a non-FIFO priority heap, so we need to make sure
-    // we're not setting stale state.
-    final token = Object();
-    _panelChangedToken = token;
-    SchedulerBinding.instance.scheduleTask(
-      () {
-        if (_panelChangedToken != token) return;
+    // In any case but the case of direct user interaction, this is likely to be
+    // called during a parent build, during which we're not allowed to change
+    // tripPlanner state, so always schedule a microtask for simplicity.
+    scheduleMicrotask(() {
+      final stationFilters = const {
+        TidePanel: TripPlanner.tideCurrentPriorityFilter,
+        DetailsPanel: TripPlanner.launchDestinationPriorityFilter,
+      }[widget.tabs[tabController.index]];
 
-        final priorities = const {
-          TidePanel: [
-            {StationType.tide, StationType.current},
-            {StationType.launch, StationType.destination},
-          ],
-          DetailsPanel: [
-            {StationType.launch, StationType.destination},
-            {StationType.tide, StationType.current},
-          ],
-        }[widget.tabs[tabController.index]];
-
-        if (priorities != null && priorities != _stationTypePriorities) {
-          _stationTypePriorities = priorities;
-          tripPlanner.setState(
-            () => tripPlanner.stationPriority = (type) =>
-                priorities.length -
-                priorities.indexWhere((set) => set.contains(type)) %
-                    (priorities.length + 1),
-          );
-        }
-      },
-      Priority.animation - 1,
-    );
+      if (stationFilters != null &&
+          stationFilters != tripPlanner.stationFilters) {
+        tripPlanner.setState(() => tripPlanner.stationFilters = stationFilters);
+      }
+    });
   }
-
-  void _onModal(bool modal) =>
-      tripPlanner.setState(() => tripPlanner.hasModal = modal);
 
   @override
   void initState() {
@@ -649,7 +639,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
     );
 
     tabController.addListener(_onPanelChanged);
-    scheduleMicrotask(_onPanelChanged);
+    _onPanelChanged();
   }
 
   @override
@@ -670,7 +660,7 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
 
       tabController.addListener(_onPanelChanged);
       if (widget.tabs[tabController.index] != oldTab) {
-        scheduleMicrotask(_onPanelChanged);
+        _onPanelChanged();
       }
     } else if (widget.selectedStation != oldWidget.selectedStation &&
         widget.selectedStation.type == StationType.nogo) {
@@ -680,7 +670,6 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
-    _panelChangedToken = null;
     tabController.dispose();
     super.dispose();
   }
@@ -719,7 +708,6 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
                     timeWindow: tripPlanner.timeWindow,
                     onTimeWindowChanged: (timeWindow) => tripPlanner
                         .setState(() => tripPlanner.timeWindow = timeWindow),
-                    onModal: _onModal,
                   ),
                 DetailsPanel(
                   client: tripPlanner.widget.tripPlannerClient,
@@ -734,7 +722,6 @@ class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
                   scrollController: widget.scrollController,
                   onTracksChanged: (tracks) =>
                       tripPlanner.setState(() => tripPlanner.tracks = tracks),
-                  onModal: _onModal,
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'package:aquamarine_server/ofs_client.dart';
 import 'package:aquamarine_server/types.dart';
 import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/types.dart';
+import 'package:latlng/latlng.dart';
 import 'package:test/test.dart';
 
 import '../../test/data/ofs.nc.dods.dart';

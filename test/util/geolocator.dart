@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlng/latlng.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 const kHorseshoeBayParkingLot = Position(

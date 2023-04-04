@@ -4,7 +4,8 @@ import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/quadtree.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:aquamarine_util/async.dart';
-import 'package:async/async.dart';
+import 'package:async/async.dart' hide AsyncCache;
+import 'package:latlng/latlng.dart';
 
 import 'ofs_client.dart';
 import 'persistence.dart';
@@ -31,8 +32,7 @@ class UvRequestContext {
   final LatLngBounds bounds;
   final double resolution;
 
-  final samplingCache =
-      AsyncCacheMap<Hex32, List<QuadtreeEntry<int>>>.ephemeral();
+  final samplingCache = AsyncCache<Hex32, List<QuadtreeEntry<int>>>.ephemeral();
 }
 
 class AquamarineServer {
@@ -46,8 +46,8 @@ class AquamarineServer {
   final Persistence persistence;
   final DateTime Function() clock;
 
-  final latlngCache = AsyncCacheMap<Hex32, Quadtree<int>>.persistent();
-  final uvRefreshCache = AsyncCacheMap<HourUtc, bool>.ephemeral();
+  final latlngCache = AsyncCache<Hex32, Quadtree<int>>.persistent();
+  final uvRefreshCache = AsyncCache<HourUtc, bool>.ephemeral();
 
   Future<Stream<List<int>>?> latlng(Hex32 hash) => persistence.readLatLng(hash);
 

@@ -7,39 +7,7 @@
 
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.
-include: package:flutter_lints/flutter.yaml
+include: lints/flutter.yaml
 
 analyzer:
-  exclude: [build/**, lib/**/*.g.dart]
-  language:
-    strict-casts: true
-
-linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at
-  # https://dart-lang.github.io/linter/lints/index.html.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
-  rules:
-    cancel_subscriptions: true
-    close_sinks: true
-    prefer_relative_imports: true
-    unnecessary_statements: true
-
-    avoid_escaping_inner_quotes: true
-    avoid_js_rounded_ints: true
-    directives_ordering: true
-    prefer_expression_function_bodies: true
-    prefer_final_in_for_each: true
-    prefer_final_locals: true
-    prefer_if_elements_to_conditional_expressions: true
-    prefer_single_quotes: true
-    require_trailing_commas: true
-    sized_box_shrink_expand: true
-    use_to_and_as_if_applicable: true
+  exclude: [build/**]
