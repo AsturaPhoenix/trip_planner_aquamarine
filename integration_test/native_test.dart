@@ -169,6 +169,8 @@ void main() {
         }
       }
 
+      await pumpUntilMapSettled($.tester);
+
       expect(
         find.widgetWithImage(TextButton, PrecachedAsset.compass.image),
         findsOneWidget,
