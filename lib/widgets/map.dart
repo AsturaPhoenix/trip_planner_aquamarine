@@ -5,6 +5,7 @@ import 'dart:core' as core;
 import 'dart:math' as math;
 
 import 'package:aquamarine_server_interface/types.dart' as ifc;
+import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -134,6 +135,14 @@ class _MarkerIcons {
       /// not tide/current.
       tcSelected,
       location;
+}
+
+class _CurrentsViewKey extends Equatable {
+  const _CurrentsViewKey(this.bounds, this.zoom);
+  final LatLngBounds bounds;
+  final double zoom;
+  @override
+  get props => [bounds, zoom];
 }
 
 enum PrecachedAsset {
@@ -290,7 +299,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
   }
 
   final _currentsThrottle = AsyncThrottle();
-  LatLngBounds? _currentsBounds;
+  _CurrentsViewKey? _currentsBounds;
 
   void _updateCurrentPolylines({bool testBounds = false}) {
     _currentsThrottle.schedule([
@@ -298,16 +307,20 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
         if (gmap == null) return;
         final bounds = await gmap!.getVisibleRegion();
 
-        if (testBounds && (_currentsBounds?.containsBounds(bounds) ?? false)) {
+        if (testBounds &&
+            _currentsBounds != null &&
+            _currentsBounds!.bounds.containsBounds(bounds) &&
+            (_currentsBounds!.zoom - cameraPosition.zoom).abs() < .1) {
           return;
         }
 
-        _currentsBounds = bounds.pad(.125);
+        _currentsBounds =
+            _CurrentsViewKey(bounds.pad(.125), cameraPosition.zoom);
 
         final currents = await widget.ofsClient.getCurrents(
           timeWindow: widget.timeWindow,
-          bounds: _currentsBounds!.toIfc(),
-          zoom: cameraPosition.zoom,
+          bounds: _currentsBounds!.bounds.toIfc(),
+          zoom: _currentsBounds!.zoom,
         );
 
         if (currents == null) return;
