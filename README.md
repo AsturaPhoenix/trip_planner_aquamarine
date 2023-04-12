@@ -14,7 +14,7 @@ Flutter needs a fork to address a couple issues:
 
 Fixes are at `git@github.com:AsturaPhoenix/flutter.git`, branch: `rosswang`. To use this fork,
 ```
-git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang --depth 1`
+git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang --depth 1
 ```
 (optionally omitting `--depth 1` if you anticipate working on the Flutter fork). Then proceed with the instructions at https://docs.flutter.dev/get-started/install after the analogous `git clone`.
 
@@ -52,6 +52,16 @@ dart run build_runner build
 ### CORS
 
 For local web, you'll need a local trip planner at `http://localhost/trip_planner/` with `Header set Access-Control-Allow-Origin *` to serve resources that would otherwise be CORS restricted.
+
+### SFBOFS aggregation server
+
+To run the aggregation server for the current model, under the `server` directory, run
+
+```
+dart bin/main.dart
+```
+
+This will start an HTTP server on port 1080. Files will be stored under `server/persistence`, requiring 800 KB for each hour of data.
 
 ## Testing
 
@@ -107,7 +117,7 @@ flutter build web --base-href "/trip_planner_aquamarine/"
 
 Remember to add your Google Maps API key to `build/web/index.html`.
 
-CI pushes a release build of the master branch to the alpha server at http://35.233.215.192/trip_planner_aquamarine automatically.
+CI pushes a release build of the master branch to the alpha server at http://34.83.198.158/trip_planner_aquamarine automatically.
 
 ## Troubleshooting
 
