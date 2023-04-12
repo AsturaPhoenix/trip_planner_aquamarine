@@ -57,5 +57,5 @@ jobs:
             rm server.tar.gz &&
             cd server &&
             dart pub get &&
-            killall dart:main.dart &&
-            dart bin/main.dart &'
+            killall dart:main.dart ;
+            dart bin/main.dart >log 2>err &'
