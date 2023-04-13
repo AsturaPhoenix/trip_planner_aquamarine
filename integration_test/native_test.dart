@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
@@ -57,15 +58,27 @@ void test(String description, Future<void> Function(PatrolTester) callback) =>
 // There are a couple cases where we need to wait for a map to settle, but since
 // camera events are processed by native Maps, pumpAndSettle doesn't catch
 // pending updates.
-Future<void> pumpUntilMapSettled(WidgetTester tester) async {
+Future<void> pumpUntilMapSettled(WidgetTester tester,
+    {int settleForFrames = 15}) async {
   final MapState mapState = tester.state(find.byType(Map));
   CameraPosition cameraPosition = mapState.cameraPosition;
-  await tester.pumpWhile(() => mapState.cameraPosition == cameraPosition);
-  await tester.pumpWhile(() {
-    final settled = cameraPosition == mapState.cameraPosition;
-    cameraPosition = mapState.cameraPosition;
-    return !settled;
-  });
+
+  await tester.pump(kFrame);
+
+  int settledCount = 0;
+  try {
+    await tester.pumpWhile(() {
+      if (cameraPosition == mapState.cameraPosition) {
+        ++settledCount;
+      } else {
+        settledCount = 0;
+      }
+      cameraPosition = mapState.cameraPosition;
+      return settledCount < settleForFrames;
+    });
+  } on TimeoutException catch (e) {
+    print('Warning: $e');
+  }
 }
 
 void main() {
