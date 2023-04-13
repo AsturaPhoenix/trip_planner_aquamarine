@@ -58,4 +58,4 @@ jobs:
             cd server &&
             dart pub get &&
             killall dart:main.dart ;
-            dart bin/main.dart >log 2>err &'
+            dart bin/main.dart >>log 2>>err &'
