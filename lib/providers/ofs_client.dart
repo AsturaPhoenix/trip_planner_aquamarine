@@ -8,7 +8,6 @@ import 'package:aquamarine_util/async.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -78,11 +77,7 @@ class OfsClient extends ChangeNotifier {
   _UvTimelineKey? _uvTimelineKey;
 
   final _samplingCache = AsyncCacheMap<_SamplingKey, List<LatLng>>.single();
-
-  // TODO(AsturaPhoenix): Better granularity.
-  _UvRequest? _activeWindow;
-  final _immediateUvFetch = AsyncCacheMap<_UvRequest, void>.ephemeral(),
-      _windowUvFetch = AsyncCacheMap<_UvRequest, void>.ephemeral();
+  final _immediateUvFetch = AsyncCacheMap<_UvRequest, void>.ephemeral();
 
   Future<Quadtree<int>> _latlng(Hex32 hash) async =>
       _latlngCache.computeIfAbsent(hash, () => _fetchLatLng(hash));
@@ -95,35 +90,9 @@ class OfsClient extends ChangeNotifier {
     return indexLatLng(response.stream);
   }
 
-  void _refresh(GraphTimeWindow timeWindow) {
-    final t = HourUtc.truncate(timeWindow.t.value),
-        t0 = HourUtc.truncate(timeWindow.t0.value),
-        // Ideally this would be ceiling.
-        tf = HourUtc.truncate(timeWindow.tf.value);
-
-    final key = _UvRequest(_HourRange(t, t + 1), _uvTimelineKey!);
-    final windowKey = _UvRequest(_HourRange(t0, tf), _uvTimelineKey!);
-
-    _activeWindow = windowKey;
-
-    _immediateUvFetch.computeIfAbsent(key, () async {
-      await _fetchUv(key);
-
-      if (_activeWindow == windowKey) {
-        // Kick off a broader fetch, unawaited.
-        _windowUvFetch.computeIfAbsent(windowKey, () async {
-          for (final range in () sync* {
-            if (tf > t + 1) yield _HourRange(t + 2, min(t + 5, tf));
-            if (t0 < t) yield _HourRange(max(t0, t - 4), t - 1);
-            if (tf > t + 5) yield _HourRange(t + 6, tf);
-            if (t0 < t - 4) yield _HourRange(t0, t - 5);
-          }()) {
-            if (_activeWindow != windowKey) break;
-            await _fetchUv(_UvRequest(range, windowKey.space));
-          }
-        });
-      }
-    });
+  void _refresh(HourUtc t) {
+    final key = _UvRequest(_HourRange(t, t), _uvTimelineKey!);
+    _immediateUvFetch.computeIfAbsent(key, () => _fetchUv(key));
   }
 
   Future<void> _fetchUv(_UvRequest request) async {
@@ -152,7 +121,9 @@ class OfsClient extends ChangeNotifier {
 
     final reader = BufferedReader(response.stream);
     try {
-      while (reader.buffer.isNotEmpty || await reader.moveNext()) {
+      bool isCancelled() => _uvTimelineKey != request.space;
+      while (!isCancelled() &&
+          (reader.buffer.isNotEmpty || await reader.moveNext())) {
         final t = await readHourUtc(reader);
         final hash = await readHex32(reader);
         final entry = _UvCacheEntry(hash);
@@ -163,9 +134,11 @@ class OfsClient extends ChangeNotifier {
 
           await readVectors(
             reader,
-            () => entry.uv.length < samplePoints.length,
+            () => !isCancelled() && entry.uv.length < samplePoints.length,
             entry.uv.add,
           );
+
+          if (isCancelled()) return;
 
           if (samplePoints.length != entry.uv.length) {
             throw FormatException('Unexpected end of stream; received '
@@ -173,7 +146,7 @@ class OfsClient extends ChangeNotifier {
           }
         }
 
-        if (_uvTimelineKey != request.space) return;
+        if (isCancelled()) return;
 
         _uvCache[t] = entry;
         notifyListeners();
@@ -209,14 +182,14 @@ class OfsClient extends ChangeNotifier {
       _uvTimelineKey = timelineKey;
       _uvCache.clear();
       _immediateUvFetch.clear();
-      _windowUvFetch.clear();
     }
 
     final t0 = HourUtc.truncate(timeWindow.t.value), t1 = t0 + 1;
     final uv0 = _uvCache[t0], uv1 = _uvCache[t1];
 
     if (uv0 == null || uv1 == null) {
-      _refresh(timeWindow);
+      if (uv0 == null) _refresh(t0);
+      if (uv1 == null) _refresh(t1);
       return null;
     }
 
@@ -228,8 +201,8 @@ class OfsClient extends ChangeNotifier {
     }
 
     if (uv0.latlngHash != uv1.latlngHash) {
-      // Not currently possible to interpolate between different meshes. (We
-      // don't expect this to happen often if at all.)
+      // Don't interpolate between different meshes. (We don't expect this to
+      // happen often if at all.)
       return const [];
     }
 

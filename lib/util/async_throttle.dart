@@ -8,7 +8,7 @@ class AsyncThrottle {
 
   bool _busy = false, _disposed = false;
   Object? _key, _nextKey;
-  List<Future<void> Function()>? _next;
+  Iterable<Future<void> Function()>? _next;
 
   void dispose() => _disposed = true;
 
@@ -26,7 +26,7 @@ class AsyncThrottle {
   /// functionality wouldn't work as well as operations can't be uncancelled, so
   /// sequences pre-empted by subsequent unique operations couldn't then be
   /// resumed if a later operation had the same key.
-  void schedule(List<Future<void> Function()> operations, {Object? key}) {
+  void schedule(Iterable<Future<void> Function()> operations, {Object? key}) {
     assert(!_disposed);
 
     if (key != null && _key == key) {
