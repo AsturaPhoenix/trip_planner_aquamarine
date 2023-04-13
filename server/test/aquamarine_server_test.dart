@@ -171,6 +171,25 @@ void main() {
       verifyZeroInteractions(ofsClient);
     });
 
+    test('does not fetch when simulation would be too old', () async {
+      final ofsClient = MockOfsClient();
+      final persistence = FakePersistence();
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => DateTime.utc(2023, 04, 01),
+      );
+
+      final past = HourUtc(1955, 11, 05, 12);
+
+      final response = await server.uv(past, past, bounds, .005).single;
+      expect(response.t, past);
+      expect(response.latLngHash, Hex32.zero);
+      expect(response.uv, emitsDone);
+      verifyZeroInteractions(ofsClient);
+    });
+
     test('attempts to fetch if a newer simulation might be available',
         () async {
       final ofsClient = MockOfsClient();

@@ -66,11 +66,18 @@ class AquamarineServer {
     }());
   }
 
+  bool _isSimulationAvailable(HourUtc timestamp) {
+    const maxSimulationAge = Duration(days: 31);
+
+    final now = clock();
+    return timestamp.t.isBefore(now) &&
+        timestamp.t.isAfter(now.subtract(maxSimulationAge));
+  }
+
   Stream<UvResponseEntry> _uvForHour(
     HourUtc t,
     UvRequestContext context,
   ) async* {
-    final now = clock();
     final simulationTime = persistence.simulationTime(t);
 
     // The simulations we consider, in order, will be first the nowcasts, then
@@ -80,7 +87,7 @@ class AquamarineServer {
     final simulationTimes = OfsClient.simulationTimes(
             t, SimulationSchedule.nowcast)
         .followedBy(OfsClient.simulationTimes(t, SimulationSchedule.forecast))
-        .where((s) => !s.timestamp.t.isAfter(now))
+        .where((s) => _isSimulationAvailable(s.timestamp))
         .takeWhile((s) => s != simulationTime);
 
     bool hasResponse = false;
