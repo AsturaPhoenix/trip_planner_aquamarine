@@ -364,12 +364,14 @@ class Station {
         isSubordinate = node.getAttribute('subtype') == 'Subordinate',
         tideCurrentStationId =
             Optional(node.findElements('tide_station').firstOrNull).map(
-                  (tsid) => StationId(StationIdPrefix.t, int.parse(tsid.text)),
+                  (tsid) =>
+                      StationId(StationIdPrefix.t, int.parse(tsid.innerText)),
                 ) ??
                 Optional(node.findElements('current_station').firstOrNull).map(
-                  (csid) => StationId(StationIdPrefix.c, int.parse(csid.text)),
+                  (csid) =>
+                      StationId(StationIdPrefix.c, int.parse(csid.innerText)),
                 ),
-        details = node.findElements('details').firstOrNull?.text,
+        details = node.findElements('details').firstOrNull?.innerText,
         outlines = [
           for (final outline in node.findElements('outline'))
             [...outline.findElements('coord').map(latLngFromXml)]

@@ -95,6 +95,10 @@ CI pushes a release build of the master branch to the alpha server at http://34.
 
 * You may need to set `git config --system core.longpaths true`, delete the cached package that failed, and try again.
 
+**Analysis failures in CI but not locally**
+
+* Try running `flutter pub upgrade` to pull the latest compatible versions of dependencies.
+
 ### Web
 
 **Info panel does not show up**
