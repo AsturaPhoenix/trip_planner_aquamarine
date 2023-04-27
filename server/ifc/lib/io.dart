@@ -65,8 +65,9 @@ Future<void> readLatLngs(
 ) =>
     readFloat2x32(reader, LatLng.new, () => true, forEach);
 
-Future<Quadtree<int>> indexLatLng(Stream<List<int>> stream) async {
-  final quadtree = Quadtree<int>();
+Future<Quadtree<int>> indexLatLng(Stream<List<int>> stream,
+    {int threshold = 8}) async {
+  final quadtree = Quadtree<int>(threshold: threshold);
   int i = 0;
   final reader = BufferedReader(stream);
   try {

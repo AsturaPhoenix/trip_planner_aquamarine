@@ -40,7 +40,7 @@ class _Node<T> {
 }
 
 class Quadtree<T> {
-  Quadtree({this.threshold = 256});
+  Quadtree({this.threshold = 8});
   final _Node<T> _root = _Node(const LatLng(0, 0), 180);
   final int threshold;
 
@@ -49,28 +49,17 @@ class Quadtree<T> {
 
   void _split(final _Node<T> node) {
     final quarterRange = node.halfRange / 2;
-    node.children = List.unmodifiable(<_Node<T>>[
-      _Node(
-        LatLng(node.center.latitude - quarterRange,
-            node.center.longitude - quarterRange),
+    node.children = List.generate(
+      4,
+      (i) => _Node(
+        LatLng(
+            node.center.latitude + (i & 2 == 0 ? -quarterRange : quarterRange),
+            node.center.longitude +
+                (i & 1 == 0 ? -quarterRange : quarterRange)),
         quarterRange,
       ),
-      _Node(
-        LatLng(node.center.latitude - quarterRange,
-            node.center.longitude + quarterRange),
-        quarterRange,
-      ),
-      _Node(
-        LatLng(node.center.latitude + quarterRange,
-            node.center.longitude - quarterRange),
-        quarterRange,
-      ),
-      _Node(
-        LatLng(node.center.latitude + quarterRange,
-            node.center.longitude + quarterRange),
-        quarterRange,
-      ),
-    ]);
+      growable: false,
+    );
     for (final entry in node.entries) {
       node.child(entry.location).entries.add(entry);
     }

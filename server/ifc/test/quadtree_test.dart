@@ -160,5 +160,24 @@ void main() {
 
       expect(s2, s1);
     });
+
+    test('is stable across different thresholds', () async {
+      final q256 = await indexLatLng(
+          OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)),
+          threshold: 256);
+      final q4 = await indexLatLng(
+          OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)),
+          threshold: 4);
+      final bounds = LatLngBounds(
+        southwest: const LatLng(37.749046184059644, -122.59083476257324),
+        northeast: const LatLng(37.87212099252033, -122.41316523742675),
+      );
+      const resolution = 0.0068359375;
+
+      final s256 = [...q256.sample(bounds, resolution: resolution)];
+      final s4 = [...q4.sample(bounds, resolution: resolution)];
+
+      expect(s256, s4);
+    });
   });
 }
