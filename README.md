@@ -84,8 +84,10 @@ patrol drive -t integration_test/native_test.dart
 For web, a typical build is
 
 ```
-flutter build web --base-href "/trip_planner_aquamarine/"
+flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit
 ```
+
+CanvasKit is required as "`combinePaths` is not implemented in HTML renderer."
 
 CI pushes a release build of the master branch to the alpha server at http://34.83.198.158/trip_planner_aquamarine automatically.
 
@@ -105,3 +107,7 @@ CI pushes a release build of the master branch to the alpha server at http://34.
 
 * A local instance of the classic Trip Planner needs to be running at http://localhost/trip_planner.
 * The build must be debug or profile to use the localhost endpoint.
+
+**Things don't work on a mobile browser**
+
+* Check whether there's a [`--web-renderer`](https://docs.flutter.dev/platform-integration/web/renderers) issue. By default, desktop web is rendered using the CanvasKit renderer but mobile web is rendered using the HTML renderer. This can lead to inconsistencies or things being broken on one or the other.
