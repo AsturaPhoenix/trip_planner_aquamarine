@@ -109,8 +109,11 @@ class Persistence {
     // into the Shelf API.
     if (await file.exists()) {
       return () async* {
-        yield* file.openRead();
-        _releaseMutex(mutex, hash);
+        try {
+          yield* file.openRead();
+        } finally {
+          _releaseMutex(mutex, hash);
+        }
       }();
     } else {
       _releaseMutex(mutex, hash);
@@ -143,7 +146,7 @@ class Persistence {
         await _uvFile(t).open(),
         () => _releaseMutex(mutex, t),
       );
-    } on Exception {
+    } on Object {
       _releaseMutex(mutex, t);
       rethrow;
     }
