@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:aquamarine_server_interface/io.dart';
@@ -11,19 +12,32 @@ import 'ofs_client.dart';
 import 'persistence.dart';
 import 'types.dart';
 
+/// u/v response data for a particular sample hour.
+///
+/// Consumers must call [close]. Keeping a separate callback rather than relying
+/// on the consumer disposing the [uv] stream makes it easier to code around
+/// cases where response processing is cancelled before ever subscribing to the
+/// stream, where the entire construct can be wrapped in a `try`/`finally`
+/// rather than special-casing depending on whether or not the stream was
+/// listened to.
 class UvResponseEntry {
+  static Future<void> _noop() async {}
+
   UvResponseEntry({
     required this.t,
     required this.latLngHash,
     required this.uv,
+    required this.close,
   });
   UvResponseEntry.empty(this.t)
       : latLngHash = Hex32.zero,
-        uv = Stream.empty();
+        uv = Stream.empty(),
+        close = _noop;
 
   final HourUtc t;
   final Hex32 latLngHash;
   final Stream<List<int>> uv;
+  final Future<void> Function() close;
 }
 
 /// Common storage for a given request
@@ -93,7 +107,12 @@ class AquamarineServer {
     bool hasResponse = false;
 
     try {
-      yield await _readUv(t, context);
+      final protector = ClosableProtector(await _readUv(t, context));
+      try {
+        yield* protector.stream;
+      } finally {
+        protector.close();
+      }
       hasResponse = true;
 
       if (simulationTime == null || simulationTimes.isEmpty) {
@@ -108,7 +127,12 @@ class AquamarineServer {
     // first as we'll need random access to decimate.
     if (await uvRefreshCache.computeIfAbsent(
         t, () => refreshUv(t, simulationTimes))) {
-      yield await _readUv(t, context);
+      final protector = ClosableProtector(await _readUv(t, context));
+      try {
+        yield* protector.stream;
+      } finally {
+        protector.close();
+      }
     } else if (!hasResponse) {
       // Send a tombstone so that the client knows this timestamp won't have a
       // repsonse for this request, so that the client doesn't have to wait for
@@ -140,17 +164,14 @@ class AquamarineServer {
         t: t,
         latLngHash: latlngHash,
         uv: () async* {
-          try {
-            for (final entry in samplePoints) {
-              yield await reader.readVectorBytes(entry.value);
-            }
-          } finally {
-            reader.close();
+          for (final entry in samplePoints) {
+            yield await reader.readVectorBytes(entry.value);
           }
         }(),
+        close: reader.close,
       );
-    } on Exception {
-      reader.close();
+    } on Object {
+      unawaited(reader.close());
       rethrow;
     }
   }
@@ -163,8 +184,9 @@ class AquamarineServer {
 
       // Since latlngs don't change often if ever, and we'll need to read from
       // disk to decimate UVs anyway, don't bother indexing the latlngs or
-      // splitting the stream here; just write them to the disk. We'll index
-      // them on cache miss later, which would happen on every server restart.
+      // splitting the stream here; just download again and write them to the
+      // disk. We'll index them on cache miss later, which would happen on every
+      // server restart.
       if (!latlngCache.containsKey(uv.latlngHash) &&
           !await persistence.latlngFileExists(uv.latlngHash)) {
         final latlng = await ofsClient.fetchLatLng(s);
