@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -70,10 +71,14 @@ Future<void> main() async {
         return Response.ok(() async* {
           await for (final entry
               in instance.uv(begin, end, bounds, resolution)) {
-            yield Uint8List.sublistView((ByteData(8)
-              ..setUint32(0, entry.t.hoursSinceEpoch)
-              ..setUint32(4, entry.latLngHash.value)));
-            yield* entry.uv;
+            try {
+              yield Uint8List.sublistView((ByteData(8)
+                ..setUint32(0, entry.t.hoursSinceEpoch)
+                ..setUint32(4, entry.latLngHash.value)));
+              yield* entry.uv;
+            } finally {
+              unawaited(entry.close());
+            }
           }
         }(), headers: headers);
       }),
