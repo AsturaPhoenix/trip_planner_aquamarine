@@ -47,6 +47,7 @@ void main() {
     expect(received, false);
     await null;
     expect(received, true);
+    expect(done, false);
     await null;
     expect(done, true);
   });
