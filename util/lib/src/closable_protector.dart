@@ -32,8 +32,8 @@ import 'dart:async';
 ///
 /// ```dart
 /// final protector = ClosableProtector(value);
-///   yield* protector.stream;
 /// try {
+///   yield* protector.stream;
 /// } finally {
 ///   protector.close(); // optionally awaited
 /// }
