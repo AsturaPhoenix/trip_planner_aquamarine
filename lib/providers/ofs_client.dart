@@ -64,8 +64,7 @@ class _UvCacheEntry {
 
 class OfsClient extends ChangeNotifier {
   static final log = Logger('OfsClient');
-  static const host =
-      kIsWeb && (kDebugMode || kProfileMode) ? 'localhost' : '34.83.198.158';
+  static const host = '34.83.198.158';
 
   static double resolutionForZoom(double zoom) {
     const baseResolution = 24.0;

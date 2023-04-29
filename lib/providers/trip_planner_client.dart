@@ -189,9 +189,10 @@ class TripPlannerHttpClient {
       baseUrl =
           await resolveRedirects(client, baseUrl, maxRedirects: maxRedirects);
     } on Object {
-      // For web during development, we may run into CORS denials, so use a local instance.
+      // For web during development, we may run into CORS denials, so use the
+      // alpha server
       if (kIsWeb && (kDebugMode || kProfileMode)) {
-        baseUrl = Uri.parse('http://localhost/trip_planner/');
+        baseUrl = Uri.parse('http://34.83.198.158/trip_planner/');
       } else {
         rethrow;
       }
