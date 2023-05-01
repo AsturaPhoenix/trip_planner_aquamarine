@@ -8,7 +8,7 @@ This project uses [Flutter](https://flutter.dev/). Install the dependencies as o
 
 Flutter needs a fork to address a couple issues:
 * https://github.com/flutter/flutter/issues/116212
-* https://github.com/flutter/flutter/issues/82016
+* <s>https://github.com/flutter/flutter/issues/82016</s> (still open but no longer required)
 * https://github.com/flutter/flutter/issues/119966
 * https://github.com/flutter/flutter/issues/102469
 
@@ -39,7 +39,7 @@ dart run build_runner build
 
 ### CORS
 
-For local web, you'll need a local trip planner at `http://localhost/trip_planner/` with `Header set Access-Control-Allow-Origin *` to serve resources that would otherwise be CORS restricted.
+For local web, you'll need to build in debug or profile mode to use a classic Trip Planner instance that supports CORS (i.e. the alpha server or a local instance).
 
 ### SFBOFS aggregation server
 
@@ -49,7 +49,7 @@ To run the aggregation server for the current model, under the `server` director
 dart bin/main.dart
 ```
 
-This will start an HTTP server on port 1080. Files will be stored under `server/persistence`, requiring 800 KB for each hour of data. The local server is used for web debug and profile builds.
+This will start an HTTP server on port 1080. Files will be stored under `server/persistence`, requiring 800 KB for each hour of data. The local server is only used in web debug and profile builds. If a local server is not running, these builds will fall back to the alpha server.
 
 ## Testing
 
@@ -103,10 +103,13 @@ CI pushes a release build of the master branch to the alpha server at http://34.
 
 ### Web
 
-**Info panel does not show up**
+**Info panel doesn't show up**
 
-* A local instance of the classic Trip Planner needs to be running at http://localhost/trip_planner.
-* The build must be debug or profile to use the localhost endpoint.
+* The build must be in debug or profile mode to use local endpoints or the CORS-permissive alpha server.
+
+**Detail panel images don't show up**
+
+* The local or alpha server classic Trip Planner may need its forwarding redirected to the latest prod Trip Planner.
 
 **Things don't work on a mobile browser**
 

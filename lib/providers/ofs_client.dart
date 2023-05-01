@@ -64,16 +64,17 @@ class _UvCacheEntry {
 
 class OfsClient extends ChangeNotifier {
   static final log = Logger('OfsClient');
-  static const host =
-      kIsWeb && (kDebugMode || kProfileMode) ? 'localhost' : '34.83.198.158';
 
   static double resolutionForZoom(double zoom) {
     const baseResolution = 24.0;
     return baseResolution / pow(2, zoom);
   }
 
-  OfsClient({required this.client});
+  OfsClient(this.client, this.baseUrl) {
+    log.info('URL: $baseUrl');
+  }
   final http.Client client;
+  final Uri baseUrl;
   // TODO(AsturaPhoenix): smarter caching policy with persistent cache
   final _latlngCache = AsyncCache<Hex32, Quadtree<int>>.persistent();
   final _uvCache = MemoryCache<HourUtc, _UvCacheEntry>(capacity: 72);
@@ -87,7 +88,7 @@ class OfsClient extends ChangeNotifier {
 
   Future<Quadtree<int>> _fetchLatLng(Hex32 hash) async {
     final response = await client.send(
-      http.Request('get', Uri.http('$host:1080', '/latlng/$hash')),
+      http.Request('get', baseUrl.resolve('latlng/$hash')),
     );
 
     return indexLatLng(response.stream);
@@ -104,21 +105,26 @@ class OfsClient extends ChangeNotifier {
     final response = await client.send(
       http.Request(
         'get',
-        Uri.http('$host:1080', '/uv', {
-          'begin': request.time.begin.toString(),
-          'end': request.time.end.toString(),
-          'bounds': jsonEncode({
-            'sw': [
-              bounds.southwest.latitude,
-              bounds.southwest.longitude,
-            ],
-            'ne': [
-              bounds.northeast.latitude,
-              bounds.northeast.longitude,
-            ],
-          }),
-          'resolution': resolution.toString(),
-        }),
+        baseUrl.resolveUri(
+          Uri(
+            path: 'uv',
+            queryParameters: {
+              'begin': request.time.begin.toString(),
+              'end': request.time.end.toString(),
+              'bounds': jsonEncode({
+                'sw': [
+                  bounds.southwest.latitude,
+                  bounds.southwest.longitude,
+                ],
+                'ne': [
+                  bounds.northeast.latitude,
+                  bounds.northeast.longitude,
+                ],
+              }),
+              'resolution': resolution.toString(),
+            },
+          ),
+        ),
       ),
     );
 

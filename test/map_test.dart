@@ -27,9 +27,9 @@ class MapHarness extends StatelessWidget {
         home: Scaffold(
           appBar: AppBar(),
           body: Map(
-            client: harness.wmsClient,
+            client: harness.client,
             tileCache: harness.tileCache,
-            ofsClient: OfsClient(client: harness.ofsClient),
+            ofsClient: OfsClient(harness.client, Uri()),
             stations: kDatapoints,
             timeWindow: GraphTimeWindow.now(TripPlannerHarness.timeZone),
             controller: controller,

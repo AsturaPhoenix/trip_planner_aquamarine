@@ -88,8 +88,7 @@ class TripPlannerHarness {
       addTearDown(() => FilePicker.platform = old);
     }
 
-    when(wmsClient.get(any))
-        .thenAnswer((_) => Completer<http.Response>().future);
+    when(client.get(any)).thenAnswer((_) => Completer<http.Response>().future);
 
     await TripPlanner.initAsyncGlobals();
   }
@@ -102,7 +101,7 @@ class TripPlannerHarness {
   final stationCache = FakeBox<Station>();
   final tideGraphCache = FakeBlobCache(), tileCache = FakeBlobCache();
   final tripPlannerHttpClient = MockTripPlannerHttpClient();
-  final wmsClient = MockClient(), ofsClient = MockClient();
+  final client = MockClient();
 
   late final TripPlannerClient tripPlannerClient = TripPlannerClient(
     stationCache,
@@ -113,9 +112,9 @@ class TripPlannerHarness {
 
   TripPlanner buildTripPlanner() => TripPlanner(
         tripPlannerClient: tripPlannerClient,
-        wmsClient: wmsClient,
+        client: client,
         tileCache: tileCache,
-        ofsClient: OfsClient(client: ofsClient),
+        ofsClient: OfsClient(client, Uri()),
       );
 
   StreamController<Position> withLocation() {

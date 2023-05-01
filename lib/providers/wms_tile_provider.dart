@@ -188,7 +188,6 @@ class WmsTileProvider extends TileProvider {
   @override
   void dispose() {
     cache.close();
-    client.close();
     super.dispose();
   }
 
