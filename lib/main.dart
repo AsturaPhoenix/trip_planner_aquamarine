@@ -21,6 +21,7 @@ import 'platform/orientation.dart' as orientation;
 import 'providers/ofs_client.dart';
 import 'providers/trip_planner_client.dart';
 import 'util/distance.dart';
+import 'util/http.dart';
 import 'util/optional.dart';
 import 'widgets/compass.dart';
 import 'widgets/details_panel.dart';
@@ -39,6 +40,23 @@ void initializeLogger() => Logger.root.onRecord.listen(
         stackTrace: record.stackTrace,
       ),
     );
+
+Future<T> Function() retryOnDemand<T>(Future<T> Function() fn) {
+  Future<T>? cached;
+
+  Future<T> evaluate() async {
+    try {
+      return fn();
+    } on Object {
+      cached = null;
+      rethrow;
+    }
+  }
+
+  cached = evaluate();
+
+  return () => cached ??= evaluate();
+}
 
 void main() async => runApp(await TripPlanner.main());
 
@@ -81,13 +99,28 @@ class TripPlanner extends StatefulWidget {
 
     initializeTimeZones();
 
-    final httpClientFactory = RetryOnDemand(
-      () => TripPlannerHttpClient.resolveFromRedirect(
-        kIsWeb
-            ? Uri(path: '/trip_planner/')
-            : Uri.parse('https://www.bask.org/trip_planner/'),
-      ),
-    );
+    final client = http.Client();
+
+    final Future<Uri> Function() tripPlannerUrl;
+    final Uri ofsUrl;
+    const alphaServer = '34.83.198.158';
+
+    // Gate on !kReleaseMode rather than kDebugMode to make development easier
+    // by allowing profile builds to use a local override.
+    if (kIsWeb && !kReleaseMode) {
+      tripPlannerUrl = () async =>
+          (await client.test(Uri.http('localhost', '/trip_planner/'))) ??
+          Uri.http(alphaServer, '/trip_planner/');
+      ofsUrl = (await client.test(Uri.http('localhost:1080'))) ??
+          Uri.http('$alphaServer:1080');
+    } else {
+      tripPlannerUrl = () => client.resolveRedirects(
+            kIsWeb
+                ? Uri(path: '/trip_planner/')
+                : Uri.https('www.bask.org', '/trip_planner/'),
+          );
+      ofsUrl = Uri.http('$alphaServer:1080');
+    }
 
     await Hive.initFlutter();
     BlobCache.registerAdapters();
@@ -121,25 +154,27 @@ class TripPlanner extends StatefulWidget {
       tripPlannerClient: TripPlannerClient(
         await stationCache,
         await tideGraphCache,
-        httpClientFactory.get,
+        retryOnDemand(
+          () async => TripPlannerHttpClient(client, await tripPlannerUrl()),
+        ),
         TimeZone.forId('America/Los_Angeles'),
       ),
-      wmsClient: http.Client(),
+      client: client,
       tileCache: await tileCache,
-      ofsClient: OfsClient(client: http.Client()),
+      ofsClient: OfsClient(client, ofsUrl),
     );
   }
 
   const TripPlanner({
     super.key,
     required this.tripPlannerClient,
-    required this.wmsClient,
+    required this.client,
     required this.tileCache,
     required this.ofsClient,
   });
 
   final TripPlannerClient tripPlannerClient;
-  final http.Client wmsClient;
+  final http.Client client;
   final BlobCache tileCache;
   final OfsClient ofsClient;
 
@@ -249,6 +284,7 @@ class TripPlannerState extends State<TripPlanner> {
   @override
   void didUpdateWidget(covariant TripPlanner oldWidget) {
     super.didUpdateWidget(oldWidget);
+    assert(widget.client == oldWidget.client);
     if (widget.tripPlannerClient != oldWidget.tripPlannerClient) {
       updateClient();
     }
@@ -276,6 +312,7 @@ class TripPlannerState extends State<TripPlanner> {
     _stationsSubscription?.cancel();
     distanceSystem.dispose();
     mapController.dispose();
+    widget.client.close();
     super.dispose();
   }
 
@@ -283,7 +320,7 @@ class TripPlannerState extends State<TripPlanner> {
   Widget build(BuildContext context) {
     final mapPanel = Map(
       key: _mapKey,
-      client: widget.wmsClient,
+      client: widget.client,
       tileCache: widget.tileCache,
       ofsClient: widget.ofsClient,
       stations: stations,

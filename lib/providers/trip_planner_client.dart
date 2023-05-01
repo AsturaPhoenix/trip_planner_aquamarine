@@ -17,66 +17,6 @@ import '../persistence/blob_cache.dart';
 import '../persistence/tide_graph_cache.dart';
 import '../util/optional.dart';
 
-class _RedirectInfo implements RedirectInfo {
-  _RedirectInfo({
-    required this.location,
-    required this.method,
-    required this.statusCode,
-  });
-
-  @override
-  final Uri location;
-  @override
-  final String method;
-  @override
-  final int statusCode;
-}
-
-Future<Uri> resolveRedirects(
-  Client client,
-  Uri url, {
-  required int maxRedirects,
-}) async {
-  final redirects = <RedirectInfo>[];
-  while (redirects.length <= maxRedirects) {
-    final response =
-        await client.send(Request('HEAD', url)..followRedirects = false);
-    if (response.isRedirect) {
-      url = Uri.parse(response.headers['location']!);
-      redirects.add(
-        _RedirectInfo(
-          location: url,
-          method: 'HEAD',
-          statusCode: response.statusCode,
-        ),
-      );
-    } else if (response.statusCode == HttpStatus.ok) {
-      return url;
-    } else {
-      throw response;
-    }
-  }
-  throw RedirectException('Too many redirects', redirects);
-}
-
-class RetryOnDemand<T> {
-  static final log = Logger('RetryOnDemand');
-
-  RetryOnDemand(this._factory) {
-    _cached = _guardedFactory();
-  }
-
-  final Future<T> Function() _factory;
-  Future<T>? _cached;
-
-  Future<T> _guardedFactory() => _factory().onError((Object e, s) {
-        _cached = null;
-        throw e;
-      });
-
-  Future<T> get() => _cached ??= _guardedFactory();
-}
-
 class TripPlannerClient {
   static final log = Logger('TripPlannerClient');
 
@@ -103,7 +43,6 @@ class TripPlannerClient {
   void close() {
     stationCache.close().ignore();
     tideGraphCache.close();
-    httpClientFactory?.call().then((client) => client.close()).ignore();
   }
 
   Stream<Map<StationId, Station>> getDatapoints() async* {
@@ -180,31 +119,11 @@ class TripPlannerClient {
 class TripPlannerHttpClient {
   static final log = Logger('TripPlannerHttpClient');
 
-  static Future<TripPlannerHttpClient> resolveFromRedirect(
-    Uri baseUrl, {
-    int maxRedirects = 5,
-  }) async {
-    final client = Client();
-    try {
-      baseUrl =
-          await resolveRedirects(client, baseUrl, maxRedirects: maxRedirects);
-    } on Object {
-      // For web during development, we may run into CORS denials, so use a local instance.
-      if (kIsWeb && (kDebugMode || kProfileMode)) {
-        baseUrl = Uri.parse('http://localhost/trip_planner/');
-      } else {
-        rethrow;
-      }
-    }
-    log.info('base URL: $baseUrl');
-    return TripPlannerHttpClient(client, baseUrl);
+  TripPlannerHttpClient(this.client, this.baseUrl) {
+    log.info('URL: $baseUrl');
   }
-
-  TripPlannerHttpClient(this.client, this.baseUrl);
   final Client client;
   final Uri baseUrl;
-
-  void close() => client.close();
 
   late final datapointsUrl = baseUrl.resolve('datapoints.xml');
 

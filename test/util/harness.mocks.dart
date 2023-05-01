@@ -139,14 +139,6 @@ class MockTripPlannerHttpClient extends _i1.Mock
         ),
       ) as Uri);
   @override
-  void close() => super.noSuchMethod(
-        Invocation.method(
-          #close,
-          [],
-        ),
-        returnValueForMissingStub: null,
-      );
-  @override
   _i5.Future<Map<_i4.StationId, _i4.Station>> getDatapoints() =>
       (super.noSuchMethod(
         Invocation.method(
