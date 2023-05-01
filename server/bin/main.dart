@@ -21,67 +21,70 @@ Future<void> main() async {
     persistence: await Persistence.load(),
   );
   final server = await io.serve(
-    Router()
-      ..get('/latlng/<hash>', (_, String hash) async {
-        final latlng = await instance.latlng(Hex32.parse(hash));
-        return latlng == null
-            ? Response.notFound(null, headers: headers)
-            : Response.ok(latlng, headers: headers);
-      })
-      ..get('/uv', (Request request) {
-        final HourUtc begin, end;
-        final LatLngBounds bounds;
-        final double resolution;
-        try {
-          final parameters = request.url.queryParameters;
-
-          begin = HourUtc.truncate(
-            DateTime.parse(parameters['begin']!).toUtc(),
-          );
-          end = HourUtc.truncate(
-            DateTime.parse(parameters['end']!).toUtc(),
-          );
-
-          {
-            final json = jsonDecode(parameters['bounds']!);
-            bounds = LatLngBounds(
-              southwest: LatLng(
-                (json['sw'][0] as num).toDouble(),
-                (json['sw'][1] as num).toDouble(),
-              ),
-              northeast: LatLng(
-                (json['ne'][0] as num).toDouble(),
-                (json['ne'][1] as num).toDouble(),
-              ),
-            );
-          }
-
-          {
-            final value = parameters['resolution'];
-            resolution = value == null ? 0 : double.parse(value);
-          }
-
-          print('uv: begin: $begin, end: $end, '
-              'bounds: $bounds, resolution: $resolution');
-        } on Object catch (e) {
-          print(e);
-          return Response.badRequest(headers: headers);
-        }
-
-        return Response.ok(() async* {
-          await for (final entry
-              in instance.uv(begin, end, bounds, resolution)) {
+    Pipeline()
+        .addMiddleware((handler) => (request) async =>
+            (await handler(request)).change(headers: headers))
+        .addHandler(Router()
+          ..get('/latlng/<hash>', (_, String hash) async {
+            final latlng = await instance.latlng(Hex32.parse(hash));
+            return latlng == null
+                ? Response.notFound(null)
+                : Response.ok(latlng);
+          })
+          ..get('/uv', (Request request) {
+            final HourUtc begin, end;
+            final LatLngBounds bounds;
+            final double resolution;
             try {
-              yield Uint8List.sublistView((ByteData(8)
-                ..setUint32(0, entry.t.hoursSinceEpoch)
-                ..setUint32(4, entry.latLngHash.value)));
-              yield* entry.uv;
-            } finally {
-              unawaited(entry.close());
+              final parameters = request.url.queryParameters;
+
+              begin = HourUtc.truncate(
+                DateTime.parse(parameters['begin']!).toUtc(),
+              );
+              end = HourUtc.truncate(
+                DateTime.parse(parameters['end']!).toUtc(),
+              );
+
+              {
+                final json = jsonDecode(parameters['bounds']!);
+                bounds = LatLngBounds(
+                  southwest: LatLng(
+                    (json['sw'][0] as num).toDouble(),
+                    (json['sw'][1] as num).toDouble(),
+                  ),
+                  northeast: LatLng(
+                    (json['ne'][0] as num).toDouble(),
+                    (json['ne'][1] as num).toDouble(),
+                  ),
+                );
+              }
+
+              {
+                final value = parameters['resolution'];
+                resolution = value == null ? 0 : double.parse(value);
+              }
+
+              print('uv: begin: $begin, end: $end, '
+                  'bounds: $bounds, resolution: $resolution');
+            } on Object catch (e) {
+              print(e);
+              return Response.badRequest();
             }
-          }
-        }(), headers: headers);
-      }),
+
+            return Response.ok(() async* {
+              await for (final entry
+                  in instance.uv(begin, end, bounds, resolution)) {
+                try {
+                  yield Uint8List.sublistView((ByteData(8)
+                    ..setUint32(0, entry.t.hoursSinceEpoch)
+                    ..setUint32(4, entry.latLngHash.value)));
+                  yield* entry.uv;
+                } finally {
+                  unawaited(entry.close());
+                }
+              }
+            }());
+          })),
     InternetAddress.anyIPv6,
     1080,
   );
