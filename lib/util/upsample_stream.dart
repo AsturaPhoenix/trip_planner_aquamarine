@@ -50,9 +50,9 @@ extension Upsample<T> on Stream<T> {
       },
       onPause: () => subscription.pause(),
       onResume: () => subscription.resume(),
-      onCancel: () {
-        subscription.cancel();
+      onCancel: () async {
         blender.dispose();
+        await subscription.cancel();
       },
     );
 

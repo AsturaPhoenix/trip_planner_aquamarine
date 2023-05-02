@@ -630,11 +630,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
           PolylineLayer(
             polylines: _trackPolylines,
           ),
-          ListenableBuilder(
-            listenable: widget.controller.selectedStation,
-            builder: (context, _) {
-              final selectedStation = widget.controller.selectedStation.value;
-
+          ValueListenableBuilder(
+            valueListenable: widget.controller.selectedStation,
+            builder: (context, selectedStation, _) {
               if (selectedStation != null &&
                   widget.stationFilters.isStationVisible(selectedStation)) {
                 final tcStation =

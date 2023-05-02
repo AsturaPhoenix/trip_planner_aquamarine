@@ -25,7 +25,6 @@ class MapHarness extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         home: Scaffold(
-          appBar: AppBar(),
           body: Map(
             client: harness.client,
             tileCache: harness.tileCache,

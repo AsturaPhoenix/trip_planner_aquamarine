@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 import 'package:http/http.dart' as http;
@@ -26,6 +27,7 @@ import 'cache.dart';
 @GenerateNiceMocks([
   MockSpec<TripPlannerHttpClient>(),
   MockSpec<http.Client>(),
+  MockSpec<CameraPlatform>(mixingIn: [MockPlatformInterfaceMixin]),
   MockSpec<PermissionHandlerPlatform>(mixingIn: [MockPlatformInterfaceMixin]),
   MockSpec<GeolocatorPlatform>(mixingIn: [MockPlatformInterfaceMixin]),
   MockSpec<FilePicker>(mixingIn: [MockPlatformInterfaceMixin]),
@@ -87,6 +89,11 @@ class TripPlannerHarness {
       FilePicker.platform = filePicker;
       addTearDown(() => FilePicker.platform = old);
     }
+    if (!useReal.contains(CameraPlatform)) {
+      final old = CameraPlatform.instance;
+      CameraPlatform.instance = camera;
+      addTearDown(() => CameraPlatform.instance = old);
+    }
 
     when(client.get(any)).thenAnswer((_) => Completer<http.Response>().future);
 
@@ -97,6 +104,7 @@ class TripPlannerHarness {
   final geolocator = MockGeolocatorPlatform();
   final motionSensors = FakeMotionSensorsDriver();
   final filePicker = MockFilePicker();
+  final camera = MockCameraPlatform();
 
   final stationCache = FakeBox<Station>();
   final tideGraphCache = FakeBlobCache(), tileCache = FakeBlobCache();
