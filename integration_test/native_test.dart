@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
+import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
@@ -67,7 +68,7 @@ void main() {
   group('with real permissions', () {
     setUp(
       () => harness.setUp(
-        useReal: const {PermissionHandlerPlatform},
+        useReal: const {CameraPlatform, PermissionHandlerPlatform},
         isAbsoluteOrientationAvailable: true,
       ),
     );

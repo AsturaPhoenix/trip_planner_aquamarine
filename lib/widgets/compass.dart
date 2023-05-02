@@ -220,7 +220,7 @@ class CompassState extends State<Compass>
         );
 
     cameraController = CameraController(
-      (() async => (await camera.availableCameras()).firstWhere(
+      (() async => (await camera.availableCameras()).firstWhereOrNull(
             (c) => c.lensDirection == camera.CameraLensDirection.back,
           ))(),
       camera.ResolutionPreset.max,
@@ -348,68 +348,79 @@ class CompassState extends State<Compass>
                     cameraController.stop();
                   }
 
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Opacity(
-                        opacity: const Interval(arThreshold, 1)
-                            .transform(decomposition.planarDeviation),
-                        child: ValueListenableBuilder(
-                          valueListenable: cameraController,
-                          builder: (context, cameraController, _) {
-                            if (cameraController == null) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            } else {
-                              // CameraPreview uses an AspectRatio, which bases
-                              // its layout on max size and cannot acheive a
-                              // "cover" effect.
-                              var size = cameraController.value.previewSize!;
-                              if (const [
-                                DeviceOrientation.portraitUp,
-                                DeviceOrientation.portraitDown
-                              ].contains(
-                                cameraController.value.deviceOrientation,
-                              )) {
-                                size = size.flipped;
-                              }
-                              return FittedBox(
-                                fit: BoxFit.cover,
-                                clipBehavior: Clip.hardEdge,
-                                child: SizedBox(
-                                  width: size.width,
-                                  height: size.height,
-                                  child: camera.CameraPreview(cameraController),
+                  return FutureBuilder(
+                    future: cameraController.description,
+                    builder: (context, cameraDescription) => Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Don't show the camera UI at all if we know there's no
+                        // camera.
+                        if (cameraDescription.connectionState !=
+                                ConnectionState.done ||
+                            cameraDescription.hasData)
+                          Opacity(
+                            opacity: const Interval(arThreshold, 1)
+                                .transform(decomposition.planarDeviation),
+                            child: ValueListenableBuilder(
+                              valueListenable: cameraController,
+                              builder: (context, cameraController, _) {
+                                if (cameraController == null) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                } else {
+                                  // CameraPreview uses an AspectRatio, which
+                                  // bases its layout on max size and cannot
+                                  // acheive a "cover" effect.
+                                  var size =
+                                      cameraController.value.previewSize!;
+                                  if (const [
+                                    DeviceOrientation.portraitUp,
+                                    DeviceOrientation.portraitDown
+                                  ].contains(
+                                    cameraController.value.deviceOrientation,
+                                  )) {
+                                    size = size.flipped;
+                                  }
+                                  return FittedBox(
+                                    fit: BoxFit.cover,
+                                    clipBehavior: Clip.hardEdge,
+                                    child: SizedBox(
+                                      width: size.width,
+                                      height: size.height,
+                                      child: camera.CameraPreview(
+                                        cameraController,
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        Padding(
+                          padding: EdgeInsets.only(
+                            top: Scaffold.of(context).appBarMaxHeight!,
+                          ),
+                          child: screenOrientation == Orientation.portrait
+                              ? CompassPortraitLayout(
+                                  arLayout: decomposition.planarDeviation,
+                                  locationInfo:
+                                      locationInfo(CrossAxisAlignment.center),
+                                  compass: compass(decomposition),
+                                  bearingInfo:
+                                      bearingInfo(CrossAxisAlignment.center),
+                                )
+                              : CompassLandscapeLayout(
+                                  arLayout: decomposition.planarDeviation > .75,
+                                  locationInfo:
+                                      locationInfo(CrossAxisAlignment.start),
+                                  compass: compass(decomposition),
+                                  bearingInfo:
+                                      bearingInfo(CrossAxisAlignment.start),
                                 ),
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.only(
-                          top: Scaffold.of(context).appBarMaxHeight!,
-                        ),
-                        child: screenOrientation == Orientation.portrait
-                            ? CompassPortraitLayout(
-                                arLayout: decomposition.planarDeviation,
-                                locationInfo:
-                                    locationInfo(CrossAxisAlignment.center),
-                                compass: compass(decomposition),
-                                bearingInfo:
-                                    bearingInfo(CrossAxisAlignment.center),
-                              )
-                            : CompassLandscapeLayout(
-                                arLayout: decomposition.planarDeviation > .75,
-                                locationInfo:
-                                    locationInfo(CrossAxisAlignment.start),
-                                compass: compass(decomposition),
-                                bearingInfo:
-                                    bearingInfo(CrossAxisAlignment.start),
-                              ),
-                      )
-                    ],
+                        )
+                      ],
+                    ),
                   );
                 },
               ),

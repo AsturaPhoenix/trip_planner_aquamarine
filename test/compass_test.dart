@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'dart:math';
-import 'dart:ui';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:latlng/latlng.dart';
-import 'package:test/test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:motion_sensors/motion_sensors.dart';
 import 'package:trip_planner_aquamarine/platform/orientation.dart';
+import 'package:trip_planner_aquamarine/util/distance.dart';
 import 'package:trip_planner_aquamarine/widgets/compass.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import 'util/async.dart';
+import 'util/harness.dart';
 import 'util/vector_matcher.dart';
 
 Matcher quaternionCloseTo(Quaternion value, num delta) => VectorIsCloseTo(
@@ -15,6 +22,20 @@ Matcher quaternionCloseTo(Quaternion value, num delta) => VectorIsCloseTo(
       distance: (a, b) => (b - a).length,
       distanceSquared: (a, b) => (b - a).length2,
     );
+
+class CompassHarness extends StatelessWidget {
+  CompassHarness({
+    super.key,
+    required this.harness,
+    DistanceSystem distanceSystem = DistanceSystem.nauticalMiles,
+  }) : distanceSystem = ValueNotifier(distanceSystem);
+  final TripPlannerHarness harness;
+  final ValueNotifier<DistanceSystem> distanceSystem;
+
+  @override
+  Widget build(BuildContext context) =>
+      MaterialApp(home: Compass(distanceSystem: distanceSystem));
+}
 
 void main() {
   test('Mercator lerp should work east across the 180 meridian', () {
@@ -35,7 +56,7 @@ void main() {
     expect(midpoint, const LatLng(0, 180));
   });
 
-  group('Decomposition strategies', () {
+  group('decomposition strategies', () {
     final strategies = {
       'byYaw': (Quaternion q) =>
           Quaternion.axisAngle(Vector3(0, 0, 1), yaw(q).radians),
@@ -79,6 +100,60 @@ void main() {
         print('${strategy.key}: '
             '${stopwatch.elapsedMicroseconds / iterations * 1000} ns/op');
       }
+    });
+  });
+
+  group('widget tests', () {
+    late TripPlannerHarness harness;
+
+    setUpAll(TripPlannerHarness.setUpAll);
+    setUp(() => harness = TripPlannerHarness());
+    setUp(() => harness.setUp(isAbsoluteOrientationAvailable: true));
+
+    testWidgets('smoke test', (tester) async {
+      await tester.pumpWidget(CompassHarness(harness: harness));
+      // flutter/flutter#125849
+      await tester.pumpWidget(const SizedBox());
+      await tester.flushAsync();
+    });
+
+    testWidgets('smoke test with camera query that does not complete',
+        (tester) async {
+      when(harness.camera.availableCameras())
+          .thenAnswer((_) => Completer<List<CameraDescription>>().future);
+      await tester.pumpWidget(CompassHarness(harness: harness));
+      await tester.pump(Duration.zero);
+    });
+
+    testWidgets('shows spinner while waiting for camera', (tester) async {
+      harness
+        ..withLocation().seed(TripPlannerHarness.horseshoeBayParkingLot)
+        ..withOrientation()
+            .seed(OrientationEvent(Quaternion.euler(0, pi / 2, 0)));
+      const cameraDescription = CameraDescription(
+          name: 'foo',
+          lensDirection: CameraLensDirection.back,
+          sensorOrientation: 0);
+      when(harness.camera.availableCameras())
+          .thenAnswer((_) async => const [cameraDescription]);
+      when(harness.camera
+              .createCamera(cameraDescription, any, enableAudio: false))
+          .thenAnswer((_) => Completer<int>().future);
+
+      await tester.pumpWidget(CompassHarness(harness: harness));
+      await tester.pump(Duration.zero); // get past skipBuffered
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    });
+
+    testWidgets('does not show spinner when there is no camera',
+        (tester) async {
+      harness
+        ..withLocation().seed(TripPlannerHarness.horseshoeBayParkingLot)
+        ..withOrientation()
+            .seed(OrientationEvent(Quaternion.euler(0, pi / 2, 0)));
+      await tester.pumpWidget(CompassHarness(harness: harness));
+      await tester.pump(Duration.zero); // get past skipBuffered
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     });
   });
 }
