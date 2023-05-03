@@ -97,16 +97,22 @@ class Quadtree<T> {
   Iterable<QuadtreeEntry<T>> sample(
     LatLngBounds bounds, {
     double resolution = 0,
-  }) =>
-      _sample(_root, bounds, adjustedResolution: .75 * resolution);
+  }) {
+    // Dumping results straight into a list is about 30% faster than composing
+    // an iterable on VM?
+    final out = <QuadtreeEntry<T>>[];
+    _sample(_root, bounds, adjustedResolution: .75 * resolution, out: out);
+    return out;
+  }
 
   /// adjustedResolution is a .75 fudged resolution so that if [node.halfRange]
   /// exceeds it, the node is split, so that the resulting resolution is
   /// centered about the original requested resolution.
-  Iterable<QuadtreeEntry<T>> _sample(
+  void _sample(
     _Node<T> node,
     LatLngBounds? bounds, {
     required double adjustedResolution,
+    required List<QuadtreeEntry<T>> out,
   }) {
     // null means world bounds; see comment on bounds
     if (bounds != null) {
@@ -117,7 +123,7 @@ class Quadtree<T> {
       // need to test bounds. This is about a 10% savings.
       if (nodeBounds != null) {
         if (!nodeBounds.intersectsBounds(bounds)) {
-          return const [];
+          return;
         }
         if (bounds.containsBounds(nodeBounds)) {
           bounds = null;
@@ -125,12 +131,18 @@ class Quadtree<T> {
       }
     }
 
-    Iterable<QuadtreeEntry<T>> filterByBounds(
-      Iterable<QuadtreeEntry<T>> sample,
-    ) =>
-        bounds == null
-            ? sample
-            : sample.where((entry) => bounds!.contains(entry.location));
+    void addFiltered(Iterable<QuadtreeEntry<T>> sample) {
+      if (bounds == null) {
+        out.addAll(sample);
+      } else {
+        // foreach+if seems about 10% faster than addAll+where?
+        for (final entry in sample) {
+          if (bounds.contains(entry.location)) {
+            out.add(entry);
+          }
+        }
+      }
+    }
 
     if (node.isLeaf) {
       // We could filter by bounds prior to downsampling, but that could yield
@@ -146,12 +158,14 @@ class Quadtree<T> {
         // If the node is near the sampling resolution, use it to downsample.
         // Caution: this makes the results unstable unless entries are sorted in
         // a way consistent with child nodes.
-        return filterByBounds(node.entries.take(1));
+        addFiltered(node.entries.take(1));
+        return;
       } else if (adjustedResolution == 0 ||
           node.entries.length <= minSplitThreshold) {
         // If further splitting would be unlikely to simplify downsampling, just
         // return everything.
-        return filterByBounds(node.entries);
+        addFiltered(node.entries);
+        return;
       } else {
         _split(node);
       }
@@ -160,11 +174,12 @@ class Quadtree<T> {
     if (node.halfRange < adjustedResolution) {
       // If we're already too small, just take the representative.
       assert(node.entries.length <= 1);
-      return filterByBounds(node.entries);
+      addFiltered(node.entries);
     } else {
-      return node.children!.expand(
-        (node) => _sample(node, bounds, adjustedResolution: adjustedResolution),
-      );
+      for (final child in node.children!) {
+        _sample(child, bounds,
+            adjustedResolution: adjustedResolution, out: out);
+      }
     }
   }
 }
