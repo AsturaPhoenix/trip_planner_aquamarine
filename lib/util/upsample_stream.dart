@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart' show min;
 
 import 'animation_coordinator.dart';
+
+DateTime _defaultClock() => clock.now();
 
 extension Upsample<T> on Stream<T> {
   Stream<T> upsample<Delta>({
@@ -12,7 +15,7 @@ extension Upsample<T> on Stream<T> {
     StateSpace<T, Delta>? stateSpace,
     Duration maxPeriod = AnimationCoordinator.defaultAnimationDuration,
     Curve blendAnimationCurve = Curves.easeInOut,
-    DateTime Function() clock = DateTime.now,
+    DateTime Function() clock = _defaultClock,
   }) {
     late final StreamSubscription subscription;
     late final StreamController<T> controller;

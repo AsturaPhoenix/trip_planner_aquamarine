@@ -46,6 +46,7 @@ dependencies:
       url: https://github.com/AsturaPhoenix/flutter-plugins.git
       path: packages/camera/camera
       ref: 2ca9b7e98ce21df44d812518ee49b927099090be
+  clock: ^1.1.1
   collection: ^1.17.0
   community_charts_flutter: ^1.0.0
   equatable: ^2.0.5
