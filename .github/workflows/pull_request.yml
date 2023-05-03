@@ -30,6 +30,10 @@ jobs:
       - run: flutter pub get -C server/ifc
 
       - run: flutter analyze --fatal-infos
+      - run: cd latlng; dart test
+      - run: cd util; dart test
+      - run: cd server/ifc; dart test
+      - run: cd server; dart test
       - run: flutter test
       - uses: nanasess/setup-chromedriver@v1
       - run: chromedriver --port=4444 &
