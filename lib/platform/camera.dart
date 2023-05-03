@@ -1,14 +1,21 @@
-import 'package:camera/camera.dart' as camera;
+import 'package:camera/camera.dart';
 import 'package:flutter/widgets.dart';
+import 'package:logging/logging.dart';
 
-class CameraController extends ValueNotifier<camera.CameraController?> {
-  CameraController(this.description, this.resolutionPreset) : super(null);
+class CameraManager extends ChangeNotifier {
+  static final log = Logger('Camera');
 
-  Future<camera.CameraDescription?> description;
-  camera.ResolutionPreset resolutionPreset;
+  CameraManager(this.description, this.resolutionPreset);
+
+  Future<CameraDescription?> description;
+  ResolutionPreset resolutionPreset;
   bool isPreviewPaused = false;
+  ConnectionState _connectionState = ConnectionState.none;
+  ConnectionState get connectionState => _connectionState;
+  CameraController? _controller;
+  CameraController? get controller => _controller;
 
-  Future<camera.CameraController?>? _init;
+  Future<void>? _init;
 
   void stop() {
     isPreviewPaused = true;
@@ -16,33 +23,49 @@ class CameraController extends ValueNotifier<camera.CameraController?> {
     // disposed while the operation was in progress. We can safely ignore that
     // case since the camera controller will be recreated the next time we need
     // it.
-    value?.pausePreview().ignore();
+    controller?.pausePreview().ignore();
   }
 
-  start() {
+  void start() {
     isPreviewPaused = false;
     if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-      _init ??= _initialize();
-      value?.resumePreview().ignore();
+      _initialize();
+      controller?.resumePreview().ignore();
     }
   }
 
-  Future<camera.CameraController?> _initialize() async {
-    final description = await this.description;
-    if (description == null) return null;
+  void _initialize() {
+    // Camera platform impls (e.g. Android) may only allow one concurrent
+    // instance at a time.
+    late Future<void> thisInit;
+    thisInit = _init ??= () async {
+      assert(controller == null);
+      _connectionState = ConnectionState.waiting;
+      notifyListeners();
 
-    final value = camera.CameraController(
-      description,
-      resolutionPreset,
-      enableAudio: false,
-    );
+      try {
+        final description = await this.description;
+        if (description == null) return;
 
-    await value.initialize();
-    if (isPreviewPaused) {
-      value.pausePreview().ignore();
-    }
-    this.value = value;
-    return value;
+        final value = CameraController(
+          description,
+          resolutionPreset,
+          enableAudio: false,
+        );
+
+        await value.initialize();
+        if (isPreviewPaused) {
+          value.pausePreview().ignore();
+        }
+        _controller = value;
+      } catch (e, s) {
+        log.warning(null, e, s);
+      } finally {
+        _connectionState = ConnectionState.done;
+        assert(_init == thisInit);
+        notifyListeners();
+      }
+    }();
   }
 
   void didChangeAppLifecycleState(AppLifecycleState state) async {
@@ -57,17 +80,26 @@ class CameraController extends ValueNotifier<camera.CameraController?> {
       if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         return;
       }
-      value?.dispose();
-      value = null;
-      _init = null;
+      if (controller != null) {
+        controller!.dispose();
+        _controller = null;
+        _init = null;
+        notifyListeners();
+      }
+      // If initialization failed, i.e. if controller was null, don't reset
+      // _init because if it was due to permissions denied, this could rapidly
+      // pause and resume the app; even if the permissions UI isn't shown, the
+      // app seems to pause and resume on Android, which would kick off another
+      // initialization attempt ad infinitum.
     } else if (state == AppLifecycleState.resumed) {
-      _init ??= _initialize();
+      _initialize();
     }
   }
 
   @override
   Future<void> dispose() async {
-    (await _init)?.dispose();
+    await _init;
+    controller?.dispose();
     super.dispose();
   }
 }

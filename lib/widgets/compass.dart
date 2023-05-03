@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:camera/camera.dart' as camera;
+import 'package:camera/camera.dart';
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
@@ -150,7 +150,7 @@ class CompassState extends State<Compass>
   var compassType =
       CompassType.values[sharedPreferences.getInt(compassTypeSettingKey) ?? 0];
 
-  late final CameraController cameraController;
+  late final CameraManager camera;
 
   @override
   void initState() {
@@ -219,11 +219,11 @@ class CompassState extends State<Compass>
               .asBroadcastStream(onListen: broadcastSubscriptions.add),
         );
 
-    cameraController = CameraController(
-      (() async => (await camera.availableCameras()).firstWhereOrNull(
-            (c) => c.lensDirection == camera.CameraLensDirection.back,
+    camera = CameraManager(
+      (() async => (await availableCameras()).firstWhereOrNull(
+            (c) => c.lensDirection == CameraLensDirection.back,
           ))(),
-      camera.ResolutionPreset.max,
+      ResolutionPreset.max,
     );
 
     WidgetsBinding.instance.addObserver(this);
@@ -231,7 +231,7 @@ class CompassState extends State<Compass>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) =>
-      cameraController.didChangeAppLifecycleState(state);
+      camera.didChangeAppLifecycleState(state);
 
   @override
   void dispose() {
@@ -239,7 +239,7 @@ class CompassState extends State<Compass>
     for (final subscription in broadcastSubscriptions) {
       subscription.cancel();
     }
-    cameraController.dispose();
+    camera.dispose();
     // This needs to happen after the subscription cancellations or the ticker
     // provider mixin will complain about leaks.
     super.dispose();
@@ -339,88 +339,89 @@ class CompassState extends State<Compass>
                   final decomposition =
                       QuaternionDecomposition(animatedOrientation.data);
 
-                  // Planar deviation at which to enable the camera.
+                  // Planar deviation at which to enable the
                   const arThreshold = .5;
 
                   if (decomposition.planarDeviation > arThreshold) {
-                    cameraController.start();
+                    camera.start();
                   } else {
-                    cameraController.stop();
+                    camera.stop();
                   }
 
-                  return FutureBuilder(
-                    future: cameraController.description,
-                    builder: (context, cameraDescription) => Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        // Don't show the camera UI at all if we know there's no
-                        // camera.
-                        if (cameraDescription.connectionState !=
-                                ConnectionState.done ||
-                            cameraDescription.hasData)
-                          Opacity(
-                            opacity: const Interval(arThreshold, 1)
-                                .transform(decomposition.planarDeviation),
-                            child: ValueListenableBuilder(
-                              valueListenable: cameraController,
-                              builder: (context, cameraController, _) {
-                                if (cameraController == null) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                } else {
-                                  // CameraPreview uses an AspectRatio, which
-                                  // bases its layout on max size and cannot
-                                  // acheive a "cover" effect.
-                                  var size =
-                                      cameraController.value.previewSize!;
-                                  if (const [
-                                    DeviceOrientation.portraitUp,
-                                    DeviceOrientation.portraitDown
-                                  ].contains(
-                                    cameraController.value.deviceOrientation,
-                                  )) {
-                                    size = size.flipped;
-                                  }
-                                  return FittedBox(
-                                    fit: BoxFit.cover,
-                                    clipBehavior: Clip.hardEdge,
-                                    child: SizedBox(
-                                      width: size.width,
-                                      height: size.height,
-                                      child: camera.CameraPreview(
-                                        cameraController,
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
+                  return ListenableBuilder(
+                    listenable: camera,
+                    builder: (context, _) {
+                      final cameraController = camera.controller;
+
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Don't show the camera UI at all if we know there's no
+                          //
+                          if (camera.connectionState ==
+                                  ConnectionState.waiting ||
+                              cameraController != null)
+                            Opacity(
+                              opacity: const Interval(arThreshold, 1)
+                                  .transform(decomposition.planarDeviation),
+                              child: cameraController == null
+                                  ? const Center(
+                                      child: CircularProgressIndicator(),
+                                    )
+                                  : () {
+                                      // CameraPreview uses an AspectRatio, which
+                                      // bases its layout on max size and cannot
+                                      // acheive a "cover" effect.
+                                      var size =
+                                          cameraController.value.previewSize!;
+                                      if (const [
+                                        DeviceOrientation.portraitUp,
+                                        DeviceOrientation.portraitDown
+                                      ].contains(
+                                        cameraController
+                                            .value.deviceOrientation,
+                                      )) {
+                                        size = size.flipped;
+                                      }
+                                      return FittedBox(
+                                        fit: BoxFit.cover,
+                                        clipBehavior: Clip.hardEdge,
+                                        child: SizedBox(
+                                          width: size.width,
+                                          height: size.height,
+                                          child: CameraPreview(
+                                            cameraController,
+                                          ),
+                                        ),
+                                      );
+                                    }(),
                             ),
-                          ),
-                        Padding(
-                          padding: EdgeInsets.only(
-                            top: Scaffold.of(context).appBarMaxHeight!,
-                          ),
-                          child: screenOrientation == Orientation.portrait
-                              ? CompassPortraitLayout(
-                                  arLayout: decomposition.planarDeviation,
-                                  locationInfo:
-                                      locationInfo(CrossAxisAlignment.center),
-                                  compass: compass(decomposition),
-                                  bearingInfo:
-                                      bearingInfo(CrossAxisAlignment.center),
-                                )
-                              : CompassLandscapeLayout(
-                                  arLayout: decomposition.planarDeviation > .75,
-                                  locationInfo:
-                                      locationInfo(CrossAxisAlignment.start),
-                                  compass: compass(decomposition),
-                                  bearingInfo:
-                                      bearingInfo(CrossAxisAlignment.start),
-                                ),
-                        )
-                      ],
-                    ),
+                          Padding(
+                            padding: EdgeInsets.only(
+                              top: Scaffold.of(context).appBarMaxHeight!,
+                            ),
+                            child: screenOrientation == Orientation.portrait
+                                ? CompassPortraitLayout(
+                                    arLayout: decomposition.planarDeviation,
+                                    locationInfo:
+                                        locationInfo(CrossAxisAlignment.center),
+                                    compass: compass(decomposition),
+                                    bearingInfo:
+                                        bearingInfo(CrossAxisAlignment.center),
+                                  )
+                                : CompassLandscapeLayout(
+                                    arLayout:
+                                        decomposition.planarDeviation > .75,
+                                    locationInfo:
+                                        locationInfo(CrossAxisAlignment.start),
+                                    compass: compass(decomposition),
+                                    bearingInfo:
+                                        bearingInfo(CrossAxisAlignment.start),
+                                  ),
+                          )
+                        ],
+                      );
+                    },
                   );
                 },
               ),

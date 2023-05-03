@@ -107,8 +107,19 @@ void main() {
     late TripPlannerHarness harness;
 
     setUpAll(TripPlannerHarness.setUpAll);
-    setUp(() => harness = TripPlannerHarness());
-    setUp(() => harness.setUp(isAbsoluteOrientationAvailable: true));
+    setUp(() {
+      harness = TripPlannerHarness();
+      harness.setUp(isAbsoluteOrientationAvailable: true);
+
+      WidgetsBinding.instance
+          .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+      // TODO(AsturaPhoenix): Make the compass widget more robust at smaller
+      // sizes.
+      final window = TestWidgetsFlutterBinding.instance.window;
+      window.physicalSizeTestValue =
+          const Size(1080, 2340) * window.devicePixelRatio;
+    });
 
     testWidgets('smoke test', (tester) async {
       await tester.pumpWidget(CompassHarness(harness: harness));
@@ -125,35 +136,68 @@ void main() {
       await tester.pump(Duration.zero);
     });
 
-    testWidgets('shows spinner while waiting for camera', (tester) async {
-      harness
-        ..withLocation().seed(TripPlannerHarness.horseshoeBayParkingLot)
-        ..withOrientation()
-            .seed(OrientationEvent(Quaternion.euler(0, pi / 2, 0)));
+    group('with location and vertical orientation', () {
       const cameraDescription = CameraDescription(
           name: 'foo',
           lensDirection: CameraLensDirection.back,
           sensorOrientation: 0);
-      when(harness.camera.availableCameras())
-          .thenAnswer((_) async => const [cameraDescription]);
-      when(harness.camera
-              .createCamera(cameraDescription, any, enableAudio: false))
-          .thenAnswer((_) => Completer<int>().future);
 
-      await tester.pumpWidget(CompassHarness(harness: harness));
-      await tester.pump(Duration.zero); // get past skipBuffered
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
+      // The compass animates to a tilted position, and it won't start the
+      // camera until the animation crosses a threshold.
+      const animationDelay = Duration(seconds: 1);
+      final orientationEvent = OrientationEvent(Quaternion.euler(0, pi / 2, 0));
 
-    testWidgets('does not show spinner when there is no camera',
-        (tester) async {
-      harness
-        ..withLocation().seed(TripPlannerHarness.horseshoeBayParkingLot)
-        ..withOrientation()
-            .seed(OrientationEvent(Quaternion.euler(0, pi / 2, 0)));
-      await tester.pumpWidget(CompassHarness(harness: harness));
-      await tester.pump(Duration.zero); // get past skipBuffered
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      setUp(() => harness
+          .withLocation()
+          .seed(TripPlannerHarness.horseshoeBayParkingLot));
+
+      testWidgets('shows spinner while waiting for camera', (tester) async {
+        when(harness.camera.availableCameras())
+            .thenAnswer((_) async => const [cameraDescription]);
+        when(harness.camera
+                .createCamera(cameraDescription, any, enableAudio: false))
+            .thenAnswer((_) => Completer<int>().future);
+        final orientation = harness.withOrientation();
+
+        await tester.pumpWidget(CompassHarness(harness: harness));
+        await tester.pump(Duration.zero); // get past skipBuffered
+        orientation.add(orientationEvent);
+        await tester.pump(animationDelay);
+        // Pump another frame to settle camera initialization.
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      });
+
+      testWidgets('does not show spinner when there is no camera',
+          (tester) async {
+        final orientation = harness.withOrientation();
+
+        await tester.pumpWidget(CompassHarness(harness: harness));
+        await tester.pump(Duration.zero); // get past skipBuffered
+        orientation.add(orientationEvent);
+        await tester.pump(animationDelay);
+        // Pump another frame to settle camera initialization.
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      });
+
+      testWidgets('does not show spinner when camera permissions were denied',
+          (tester) async {
+        when(harness.camera.availableCameras())
+            .thenAnswer((_) async => const [cameraDescription]);
+        when(harness.camera
+                .createCamera(cameraDescription, any, enableAudio: false))
+            .thenAnswer((_) => Future.error(CameraException('', null)));
+        final orientation = harness.withOrientation();
+
+        await tester.pumpWidget(CompassHarness(harness: harness));
+        await tester.pump(Duration.zero); // get past skipBuffered
+        orientation.add(orientationEvent);
+        await tester.pump(animationDelay);
+        // Pump another frame to settle camera initialization.
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      });
     });
   });
 }
