@@ -1,12 +1,13 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:aquamarine_server_interface/types.dart';
+import 'package:file/file.dart';
+import 'package:file/local.dart';
 import 'package:mutex/mutex.dart';
 
-import 'ofs_client.dart';
-import 'types.dart';
+import '../ofs_client.dart';
+import '../types.dart';
 
 class UvReader {
   static int vectorByteIndex(int index) => 4 + 8 * index;
@@ -32,38 +33,46 @@ class UvReader {
 }
 
 class Persistence {
-  static const root = 'persistence';
+  static const root = 'persistence',
+      latlngDirectory = '$root/latlng',
+      uvDirectory = '$root/uv';
 
-  static File _latlngFile(Hex32 hash) => File('$root/latlng/$hash');
-  static File _uvFile(HourUtc t) => File('$root/uv/$t');
-  static final File _simulationTimesFile = File('$root/simulation_times');
+  static File latlngFile(FileSystem fileSystem, Hex32 hash) =>
+      fileSystem.file('$latlngDirectory/$hash');
+  static File uvFile(FileSystem fileSystem, HourUtc t) =>
+      fileSystem.file('$uvDirectory/$t');
+  static File simulationTimesFile(FileSystem fileSystem) =>
+      fileSystem.file('$root/simulation_times');
 
   /// Whether a simulation time should be recorded as a candidate for a future
   /// refresh.
   static bool needsFutureRefresh(SimulationTime s, HourUtc t) =>
       s != OfsClient.simulationTimes(t, SimulationSchedule.nowcast).first;
 
-  static Future<Persistence> load() async {
+  static Future<Persistence> load([
+    FileSystem fileSystem = const LocalFileSystem(),
+  ]) async {
     // Ensure initial directory structure
-    await Directory(root).create();
+    await fileSystem.directory(root).create();
     await Future.wait([
-      Directory('$root/latlng').create(),
-      Directory('$root/uv').create(),
+      fileSystem.directory(latlngDirectory).create(),
+      fileSystem.directory(uvDirectory).create(),
     ]);
 
     Map<HourUtc, SimulationTime> simulationTimes;
     try {
-      simulationTimes = await readSimulationTimes();
+      simulationTimes = await readSimulationTimes(fileSystem);
     } on Exception {
       print('Unable to load simulation times from disk.');
       simulationTimes = {};
     }
-    return Persistence(simulationTimes: simulationTimes);
+    return Persistence(fileSystem, simulationTimes: simulationTimes);
   }
 
-  Persistence({Map<HourUtc, SimulationTime>? simulationTimes})
+  Persistence(this.fileSystem, {Map<HourUtc, SimulationTime>? simulationTimes})
       : _simulationTimes = simulationTimes ?? {};
 
+  final FileSystem fileSystem;
   final Map<HourUtc, SimulationTime> _simulationTimes;
   final _mutexes = <Object, ReadWriteMutex>{};
 
@@ -88,7 +97,7 @@ class Persistence {
     try {
       // Although this await could syntactically be omitted, it affects the
       // timing of the mutex release.
-      return await _latlngFile(hash).exists();
+      return await latlngFile(fileSystem, hash).exists();
     } finally {
       _releaseMutex(mutex, hash);
     }
@@ -98,7 +107,7 @@ class Persistence {
     final mutex = _getMutex(hash);
     await mutex.acquireRead();
 
-    final file = _latlngFile(hash);
+    final file = latlngFile(fileSystem, hash);
 
     // We need to know whether the file exists to set an appropriate status code
     // for the HTTP response. If we were to rely on openRead, we wouldn't
@@ -126,7 +135,7 @@ class Persistence {
     await mutex.acquireWrite();
 
     try {
-      final file = _latlngFile(hash).openWrite();
+      final file = latlngFile(fileSystem, hash).openWrite();
       try {
         await file.addStream(stream);
         await file.flush();
@@ -143,7 +152,7 @@ class Persistence {
     await mutex.acquireRead();
     try {
       return UvReader(
-        await _uvFile(t).open(),
+        await uvFile(fileSystem, t).open(),
         () => _releaseMutex(mutex, t),
       );
     } on Object {
@@ -156,15 +165,15 @@ class Persistence {
     HourUtc t,
     SimulationTime s,
     Hex32 latlngHash,
-    Stream<List<int>> stream,
+    Stream<List<int>> vectorBytes,
   ) async {
     final mutex = _getMutex(t);
     await mutex.acquireWrite();
     try {
-      final file = _uvFile(t).openWrite();
+      final file = uvFile(fileSystem, t).openWrite();
       try {
         file.add(latlngHash.toBytes());
-        await file.addStream(stream);
+        await file.addStream(vectorBytes);
         await file.flush();
       } finally {
         await file.close();
@@ -182,7 +191,7 @@ class Persistence {
   }
 
   Future<void> writeSimulationTimes() =>
-      _simulationTimesFile.writeAsString(jsonEncode({
+      simulationTimesFile(fileSystem).writeAsString(jsonEncode({
         for (final entry in _simulationTimes.entries)
           entry.key.toString(): {
             'typePrefix': entry.value.schedule.typePrefix,
@@ -191,9 +200,10 @@ class Persistence {
           }
       }));
 
-  static Future<Map<HourUtc, SimulationTime>> readSimulationTimes() async {
+  static Future<Map<HourUtc, SimulationTime>> readSimulationTimes(
+      FileSystem fileSystem) async {
     final Map<String, dynamic> json =
-        jsonDecode(await _simulationTimesFile.readAsString())
+        jsonDecode(await simulationTimesFile(fileSystem).readAsString())
             as Map<String, dynamic>;
 
     return {

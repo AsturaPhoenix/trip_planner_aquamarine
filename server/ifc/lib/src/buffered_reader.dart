@@ -47,9 +47,8 @@ class BufferedReader {
     }
 
     final data = buffer.takeBytes();
-    final out = data.sublist(0, size);
-    buffer.add(data.sublist(size));
-    return out;
+    buffer.add(Uint8List.sublistView(data, size));
+    return Uint8List.sublistView(data, 0, size);
   }
 
   Future<void> consumeUntil(Uint8List marker) async {

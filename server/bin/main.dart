@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:aquamarine_server/aquamarine_server.dart';
 import 'package:aquamarine_server/ofs_client.dart';
-import 'package:aquamarine_server/persistence.dart';
+import 'package:aquamarine_server/persistence/v2.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlng/latlng.dart';

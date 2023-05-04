@@ -79,13 +79,18 @@ class Quadtree<T> {
         node.entries.add(entry);
         return;
       } else {
-        _split(node);
-        // TODO(AsturaPhoenix): If more than [threshold] entries share the same
-        // location, this won't terminate.
-        //
-        // The underlying collection could well be a map for our use case, but
-        // hashing 100,000 coordinates is probably something we should only do
-        // for debug.
+        try {
+          _split(node);
+        } on StackOverflowError {
+          // TODO(AsturaPhoenix): If more than [threshold] entries share the
+          // same location, this won't terminate.
+          //
+          // The underlying collection could well be a map for our use case, but
+          // hashing 100,000 coordinates is probably something we should only do
+          // for debug.
+          throw ArgumentError.value(entry.location, 'location',
+              'Entries should not share the same location');
+        }
       }
     }
 

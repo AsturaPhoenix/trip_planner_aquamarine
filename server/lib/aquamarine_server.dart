@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/quadtree.dart';
@@ -9,7 +8,7 @@ import 'package:async/async.dart' hide AsyncCache;
 import 'package:latlng/latlng.dart';
 
 import 'ofs_client.dart';
-import 'persistence.dart';
+import 'persistence/v2.dart';
 import 'types.dart';
 
 /// u/v response data for a particular sample hour.
@@ -65,6 +64,9 @@ class AquamarineServer {
 
   Future<Stream<List<int>>?> latlng(Hex32 hash) => persistence.readLatLng(hash);
 
+  /// Consumers should close each entry in turn rather than awaiting the entire
+  /// stream, as awaiting the entire stream can deadlock a refresh, which cannot
+  /// write to persistence while a from-persistence entry is open.
   Stream<UvResponseEntry> uv(
     HourUtc begin,
     HourUtc end,
@@ -106,8 +108,9 @@ class AquamarineServer {
 
     bool hasResponse = false;
 
-    try {
-      final protector = ClosableProtector(await _readUv(t, context));
+    final reader = await _readUv(t, context);
+    if (reader != null) {
+      final protector = ClosableProtector(reader);
       try {
         yield* protector.stream;
       } finally {
@@ -119,15 +122,13 @@ class AquamarineServer {
         // No need to refresh.
         return;
       }
-    } on FileSystemException {
-      // cache miss
     }
 
     // When we fetch UVs from the server, go ahead and write them to the disk
     // first as we'll need random access to decimate.
     if (await uvRefreshCache.computeIfAbsent(
-        t, () => refreshUv(t, simulationTimes))) {
-      final protector = ClosableProtector(await _readUv(t, context));
+        t, () => refreshUv(simulationTimes))) {
+      final protector = ClosableProtector((await _readUv(t, context))!);
       try {
         yield* protector.stream;
       } finally {
@@ -141,8 +142,10 @@ class AquamarineServer {
     }
   }
 
-  Future<UvResponseEntry> _readUv(HourUtc t, UvRequestContext context) async {
+  Future<UvResponseEntry?> _readUv(HourUtc t, UvRequestContext context) async {
     final reader = await persistence.readUv(t);
+    if (reader == null) return null;
+
     try {
       final latlngHash = await reader.readLatLngHash();
 
@@ -176,8 +179,7 @@ class AquamarineServer {
     }
   }
 
-  Future<bool> refreshUv(
-      HourUtc t, Iterable<SimulationTime> simulationTimes) async {
+  Future<bool> refreshUv(Iterable<SimulationTime> simulationTimes) async {
     for (final s in simulationTimes) {
       final uv = await ofsClient.fetchUv(s);
       if (uv == null) continue;
@@ -200,7 +202,7 @@ class AquamarineServer {
         // try to use it.
       }
 
-      await persistence.writeUv(t, s, uv.latlngHash, uv.uv);
+      await persistence.writeUv(s, uv.latlngHash, uv.uv);
 
       return true;
     }

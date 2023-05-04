@@ -7,9 +7,10 @@ import 'dart:async' as _i6;
 import 'dart:typed_data' as _i8;
 
 import 'package:aquamarine_server/ofs_client.dart' as _i5;
-import 'package:aquamarine_server/persistence.dart' as _i3;
+import 'package:aquamarine_server/persistence/v2.dart' as _i9;
 import 'package:aquamarine_server/types.dart' as _i7;
 import 'package:aquamarine_server_interface/types.dart' as _i4;
+import 'package:file/file.dart' as _i3;
 import 'package:http/http.dart' as _i2;
 import 'package:mockito/mockito.dart' as _i1;
 
@@ -34,8 +35,8 @@ class _FakeClient_0 extends _i1.SmartFake implements _i2.Client {
         );
 }
 
-class _FakeUvReader_1 extends _i1.SmartFake implements _i3.UvReader {
-  _FakeUvReader_1(
+class _FakeFileSystem_1 extends _i1.SmartFake implements _i3.FileSystem {
+  _FakeFileSystem_1(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -112,7 +113,25 @@ class MockOfsClient extends _i1.Mock implements _i5.OfsClient {
 /// A class which mocks [Persistence].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockPersistence extends _i1.Mock implements _i3.Persistence {
+class MockPersistence extends _i1.Mock implements _i9.Persistence {
+  @override
+  _i3.FileSystem get fileSystem => (super.noSuchMethod(
+        Invocation.getter(#fileSystem),
+        returnValue: _FakeFileSystem_1(
+          this,
+          Invocation.getter(#fileSystem),
+        ),
+        returnValueForMissingStub: _FakeFileSystem_1(
+          this,
+          Invocation.getter(#fileSystem),
+        ),
+      ) as _i3.FileSystem);
+  @override
+  bool get allClosed => (super.noSuchMethod(
+        Invocation.getter(#allClosed),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
   @override
   _i7.SimulationTime? simulationTime(_i4.HourUtc? t) => (super.noSuchMethod(
         Invocation.method(
@@ -130,6 +149,23 @@ class MockPersistence extends _i1.Mock implements _i3.Persistence {
         returnValue: _i6.Future<bool>.value(false),
         returnValueForMissingStub: _i6.Future<bool>.value(false),
       ) as _i6.Future<bool>);
+  @override
+  _i6.Future<void> verifyLatLng({
+    _i3.File? file,
+    _i4.Hex32? hash,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #verifyLatLng,
+          [],
+          {
+            #file: file,
+            #hash: hash,
+          },
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
   @override
   _i6.Future<_i6.Stream<List<int>>?> readLatLng(_i4.Hex32? hash) =>
       (super.noSuchMethod(
@@ -157,42 +193,27 @@ class MockPersistence extends _i1.Mock implements _i3.Persistence {
         returnValueForMissingStub: _i6.Future<void>.value(),
       ) as _i6.Future<void>);
   @override
-  _i6.Future<_i3.UvReader> readUv(_i4.HourUtc? t) => (super.noSuchMethod(
+  _i6.Future<_i9.UvReader?> readUv(_i4.HourUtc? t) => (super.noSuchMethod(
         Invocation.method(
           #readUv,
           [t],
         ),
-        returnValue: _i6.Future<_i3.UvReader>.value(_FakeUvReader_1(
-          this,
-          Invocation.method(
-            #readUv,
-            [t],
-          ),
-        )),
-        returnValueForMissingStub:
-            _i6.Future<_i3.UvReader>.value(_FakeUvReader_1(
-          this,
-          Invocation.method(
-            #readUv,
-            [t],
-          ),
-        )),
-      ) as _i6.Future<_i3.UvReader>);
+        returnValue: _i6.Future<_i9.UvReader?>.value(),
+        returnValueForMissingStub: _i6.Future<_i9.UvReader?>.value(),
+      ) as _i6.Future<_i9.UvReader?>);
   @override
   _i6.Future<void> writeUv(
-    _i4.HourUtc? t,
     _i7.SimulationTime? s,
     _i4.Hex32? latlngHash,
-    _i6.Stream<List<int>>? stream,
+    _i6.Stream<List<int>>? vectorBytes,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
           #writeUv,
           [
-            t,
             s,
             latlngHash,
-            stream,
+            vectorBytes,
           ],
         ),
         returnValue: _i6.Future<void>.value(),
@@ -207,12 +228,21 @@ class MockPersistence extends _i1.Mock implements _i3.Persistence {
         returnValue: _i6.Future<void>.value(),
         returnValueForMissingStub: _i6.Future<void>.value(),
       ) as _i6.Future<void>);
+  @override
+  _i6.Future<void> migrate() => (super.noSuchMethod(
+        Invocation.method(
+          #migrate,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
 }
 
 /// A class which mocks [UvReader].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockUvReader extends _i1.Mock implements _i3.UvReader {
+class MockUvReader extends _i1.Mock implements _i9.UvReader {
   @override
   _i6.Future<void> close() => (super.noSuchMethod(
         Invocation.method(
