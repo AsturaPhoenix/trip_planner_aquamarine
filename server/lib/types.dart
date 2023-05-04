@@ -7,8 +7,25 @@ class SimulationTime extends Equatable {
   final HourUtc timestamp;
   final int index;
 
+  HourUtc get representedTimestamp =>
+      timestamp + index - schedule.referenceHour;
+
   @override
   get props => [schedule, timestamp, index];
+
+  @override
+  String toString() {
+    // This is copied from OfsClient, which is separate because it also uses
+    // the formatted date components for the URI path.
+    final yyyy = timestamp.year.toString(),
+        mm = timestamp.month.toString().padLeft(2, '0'),
+        dd = timestamp.day.toString().padLeft(2, '0'),
+        hh = timestamp.hour.toString().padLeft(2, '0'),
+        iii = index.toString().padLeft(3, '0');
+    final typePrefix = schedule.typePrefix;
+
+    return '$typePrefix$iii.$yyyy$mm$dd.t${hh}z';
+  }
 }
 
 class SimulationSchedule {

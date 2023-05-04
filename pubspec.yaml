@@ -105,9 +105,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^2.0.1
-
-  aquamarine_server:
-    path: server
+  
   build_runner: ^2.3.3
   camera_platform_interface: ^2.5.0
   geolocator_platform_interface: ^4.0.7

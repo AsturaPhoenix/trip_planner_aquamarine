@@ -39,12 +39,11 @@ Future<void> readFloat2x32<T>(
     // populated contents.
     final data = ByteData.sublistView(bytes);
 
-    int j = 0;
-    while ((ok = condition()) && j <= data.lengthInBytes - 8) {
+    int j;
+    for (j = 0; (ok = condition()) && j <= data.lengthInBytes - 8; j += 8) {
       forEach(readElement(data.getFloat32(j), data.getFloat32(j + 4)));
-      j += 8;
     }
-    reader.buffer.add(bytes.sublist(j));
+    reader.buffer.add(Uint8List.sublistView(bytes, j));
   }
 
   if (ok) {

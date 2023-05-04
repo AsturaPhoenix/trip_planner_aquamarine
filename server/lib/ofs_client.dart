@@ -101,14 +101,14 @@ class OfsClient {
 
       final v1 = reader.buffer.takeBytes();
       final out = BytesBuilder();
-
-      for (int j = 0; j <= v1.length - 4; i += 4, j += 4) {
+      int j;
+      for (j = 0; i <= v0.length - 4 && j <= v1.length - 4; i += 4, j += 4) {
         combiner(out, v0.sublist(i, i + 4), v1.sublist(j, j + 4));
       }
 
       yield out.takeBytes();
 
-      reader.buffer.add(v1.sublist(v1.length & -4));
+      reader.buffer.add(v1.sublist(j));
     }
   }
 
@@ -187,7 +187,7 @@ class OfsClient {
           }
         }(),
       );
-    } on Exception {
+    } on Object {
       reader.cancel();
       rethrow;
     }
