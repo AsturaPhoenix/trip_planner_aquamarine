@@ -7,6 +7,12 @@ import 'package:equatable/equatable.dart';
 
 /// A pair of latitude and longitude coordinates, stored as degrees.
 class LatLng extends Equatable {
+  // TODO(AsturaPhoenix): spherical
+  static LatLng interpolate(LatLng a, LatLng b, double t) => LatLng(
+        a.latitude + t * (b.latitude - a.latitude),
+        a.longitude + t * (b.longitude - a.longitude),
+      );
+
   /// Creates a geographical location specified in degrees [latitude] and
   /// [longitude].
   ///

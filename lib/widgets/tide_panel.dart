@@ -4,6 +4,7 @@ import 'dart:core' as core;
 import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:joda/time.dart';
 import 'package:logging/logging.dart';
@@ -307,62 +308,88 @@ class TidePanelState extends State<TidePanel>
             constraints: BoxConstraints(
               maxWidth: max(widget.graphWidth, effectiveMaxWidth),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Material(
-                  color: theme.colorScheme.secondaryContainer,
-                  elevation: 1,
-                  textStyle: theme.textTheme.titleMedium,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                    constraints: BoxConstraints(
-                      minWidth: widget.graphWidth,
-                      minHeight: 31,
+            child: Listener(
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent &&
+                    widget.onTimeWindowChanged != null) {
+                  // TODO(AsturaPhoenix): This is calibrated for the GPS track
+                  // position marker use case. Once we get dedicated track time
+                  // UI, change this to 6 minutes like the web Trip Planner.
+                  const interval = Duration(minutes: 1);
+                  widget.onTimeWindowChanged!(
+                    widget.timeWindow.copyWith(
+                      t: widget.timeWindow.t +
+                          interval *
+                              // Allow control by either horizontal or vertical
+                              // scroll.
+                              ((event.scrollDelta.dx - event.scrollDelta.dy) /
+                                  // Empirically determined. Is this a constant
+                                  // somewhere?
+                                  100),
+                      correctionPolicy: TimeWindowCorrectionPolicy.preserveTime,
                     ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                          '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: '
-                          '${widget.station.shortTitle}'),
+                  );
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Material(
+                    color: theme.colorScheme.secondaryContainer,
+                    elevation: 1,
+                    textStyle: theme.textTheme.titleMedium,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 16,
+                      ),
+                      constraints: BoxConstraints(
+                        minWidth: widget.graphWidth,
+                        minHeight: 31,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                            '${widget.station.type == StationType.tide ? 'Tide Height' : 'Currents'}: '
+                            '${widget.station.shortTitle}'),
+                      ),
                     ),
                   ),
-                ),
-                Center(
-                  child: TideGraph(
-                    client: widget.client,
-                    station: widget.station,
-                    timeWindow: widget.timeWindow,
-                    width: widget.graphWidth,
-                    height: widget.graphHeight,
-                    overlaySwatch: widget.overlaySwatch,
-                    onTimeChanged: Optional(widget.onTimeWindowChanged).map(
-                      (f) => (t) => f(
-                            widget.timeWindow.copyWith(
-                              t: t,
-                              // Since we're setting the time via the graph, it
-                              // should never be outside the graph bounds, and
-                              // in debug we'd want to know if it ever was.
-                              correctionPolicy:
-                                  TimeWindowCorrectionPolicy.strict,
+                  Center(
+                    child: TideGraph(
+                      client: widget.client,
+                      station: widget.station,
+                      timeWindow: widget.timeWindow,
+                      width: widget.graphWidth,
+                      height: widget.graphHeight,
+                      overlaySwatch: widget.overlaySwatch,
+                      onTimeChanged: Optional(widget.onTimeWindowChanged).map(
+                        (f) => (t) => f(
+                              widget.timeWindow.copyWith(
+                                t: t,
+                                // Since we're setting the time via the graph, it
+                                // should never be outside the graph bounds, and
+                                // in debug we'd want to know if it ever was.
+                                correctionPolicy:
+                                    TimeWindowCorrectionPolicy.strict,
+                              ),
                             ),
-                          ),
+                      ),
                     ),
                   ),
-                ),
-                TimeDisplay(
-                  t: widget.timeWindow.t,
-                  contentWidth: widget.graphWidth,
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: TimeControls(
-                    timeWindow: widget.timeWindow,
-                    onWindowChanged: widget.onTimeWindowChanged,
+                  TimeDisplay(
+                    t: widget.timeWindow.t,
+                    contentWidth: widget.graphWidth,
                   ),
-                ),
-              ],
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: TimeControls(
+                      timeWindow: widget.timeWindow,
+                      onWindowChanged: widget.onTimeWindowChanged,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
