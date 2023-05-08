@@ -10,6 +10,7 @@ import 'package:flutter_map/flutter_map.dart' as fml;
 import 'package:flutter_map/flutter_map.dart' hide LatLngBounds, Polygon;
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:joda/time.dart';
 import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -277,6 +278,44 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               strokeWidth: 2,
             )
     ];
+  }
+
+  LatLng? _interpolateSegment(Segment segment, Instant t) {
+    if (segment.times.isEmpty) return null;
+
+    int start = 0, end = segment.times.length - 1;
+    // This is really while(true) with a precondition check and guard for
+    // malformed tracks.
+    while (t >= segment.times[start].time && t <= segment.times[end].time) {
+      double f = t.difference(segment.times[start].time).inMilliseconds /
+          segment.times[end].time
+              .difference(segment.times[start].time)
+              .inMilliseconds;
+      if (f.isNaN) {
+        f = .5;
+      }
+
+      if (end - start > 1) {
+        final i = (start + (f * (end - start)).round()).clamp(
+          start + 1,
+          end - 1,
+        );
+
+        if (segment.times[i].time > t) {
+          end = i;
+        } else {
+          start = i;
+        }
+      } else {
+        return LatLng.interpolate(
+          segment.points[segment.times[start].index],
+          segment.points[segment.times[end].index],
+          f,
+        );
+      }
+    }
+
+    return null;
   }
 
   void _fitTracks() {
@@ -629,6 +668,28 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
             ),
           PolylineLayer(
             polylines: _trackPolylines,
+          ),
+          // TODO(AsturaPhoenix): This places all circle markers above all track
+          // polylines, which can be visually incorrect. Eventually we'll want
+          // to render each circle with its polyline.
+          CircleLayer(
+            circles: [
+              for (final track in widget.tracks)
+                if (track.selected)
+                  for (final segment in track.segments)
+                    ...() {
+                      final latlng =
+                          _interpolateSegment(segment, widget.timeWindow.t);
+                      return [
+                        if (latlng != null)
+                          CircleMarker(
+                            point: latlng.toFml(),
+                            radius: 6,
+                            color: track.color,
+                          )
+                      ];
+                    }()
+            ],
           ),
           ValueListenableBuilder(
             valueListenable: widget.controller.selectedStation,

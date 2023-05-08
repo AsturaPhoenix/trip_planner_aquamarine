@@ -257,11 +257,15 @@ class PlotPanelState extends State<PlotPanel>
 
     if (tracksAdded) {
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => scrollController.animateTo(
-          scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        ),
+        (_) {
+          if (!scrollController.hasClients) return;
+
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
       );
     }
   }
