@@ -3,13 +3,13 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i6;
+import 'dart:async' as _i7;
 import 'dart:typed_data' as _i8;
 
-import 'package:aquamarine_server/ofs_client.dart' as _i5;
+import 'package:aquamarine_server/ofs_client.dart' as _i6;
 import 'package:aquamarine_server/persistence/v2.dart' as _i9;
-import 'package:aquamarine_server/types.dart' as _i7;
-import 'package:aquamarine_server_interface/types.dart' as _i4;
+import 'package:aquamarine_server/types.dart' as _i4;
+import 'package:aquamarine_server_interface/types.dart' as _i5;
 import 'package:file/file.dart' as _i3;
 import 'package:http/http.dart' as _i2;
 import 'package:mockito/mockito.dart' as _i1;
@@ -45,8 +45,19 @@ class _FakeFileSystem_1 extends _i1.SmartFake implements _i3.FileSystem {
         );
 }
 
-class _FakeHex32_2 extends _i1.SmartFake implements _i4.Hex32 {
-  _FakeHex32_2(
+class _FakeSimulationTime_2 extends _i1.SmartFake
+    implements _i4.SimulationTime {
+  _FakeSimulationTime_2(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeHex32_3 extends _i1.SmartFake implements _i5.Hex32 {
+  _FakeHex32_3(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -58,7 +69,7 @@ class _FakeHex32_2 extends _i1.SmartFake implements _i4.Hex32 {
 /// A class which mocks [OfsClient].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockOfsClient extends _i1.Mock implements _i5.OfsClient {
+class MockOfsClient extends _i1.Mock implements _i6.OfsClient {
   @override
   _i2.Client get client => (super.noSuchMethod(
         Invocation.getter(#client),
@@ -72,8 +83,8 @@ class MockOfsClient extends _i1.Mock implements _i5.OfsClient {
         ),
       ) as _i2.Client);
   @override
-  _i6.Future<_i2.ByteStream?> fetchResource(
-    _i7.SimulationTime? s,
+  _i7.Future<_i2.ByteStream?> fetchResource(
+    _i4.SimulationTime? s,
     List<String>? query,
   ) =>
       (super.noSuchMethod(
@@ -84,30 +95,30 @@ class MockOfsClient extends _i1.Mock implements _i5.OfsClient {
             query,
           ],
         ),
-        returnValue: _i6.Future<_i2.ByteStream?>.value(),
-        returnValueForMissingStub: _i6.Future<_i2.ByteStream?>.value(),
-      ) as _i6.Future<_i2.ByteStream?>);
+        returnValue: _i7.Future<_i2.ByteStream?>.value(),
+        returnValueForMissingStub: _i7.Future<_i2.ByteStream?>.value(),
+      ) as _i7.Future<_i2.ByteStream?>);
   @override
-  _i6.Future<_i6.Stream<_i8.Uint8List>?> fetchLatLng(_i7.SimulationTime? s) =>
+  _i7.Future<_i7.Stream<_i8.Uint8List>?> fetchLatLng(_i4.SimulationTime? s) =>
       (super.noSuchMethod(
         Invocation.method(
           #fetchLatLng,
           [s],
         ),
-        returnValue: _i6.Future<_i6.Stream<_i8.Uint8List>?>.value(),
+        returnValue: _i7.Future<_i7.Stream<_i8.Uint8List>?>.value(),
         returnValueForMissingStub:
-            _i6.Future<_i6.Stream<_i8.Uint8List>?>.value(),
-      ) as _i6.Future<_i6.Stream<_i8.Uint8List>?>);
+            _i7.Future<_i7.Stream<_i8.Uint8List>?>.value(),
+      ) as _i7.Future<_i7.Stream<_i8.Uint8List>?>);
   @override
-  _i6.Future<_i5.OfsUvData?> fetchUv(_i7.SimulationTime? s) =>
+  _i7.Future<_i6.OfsUvData?> fetchUv(_i4.SimulationTime? s) =>
       (super.noSuchMethod(
         Invocation.method(
           #fetchUv,
           [s],
         ),
-        returnValue: _i6.Future<_i5.OfsUvData?>.value(),
-        returnValueForMissingStub: _i6.Future<_i5.OfsUvData?>.value(),
-      ) as _i6.Future<_i5.OfsUvData?>);
+        returnValue: _i7.Future<_i6.OfsUvData?>.value(),
+        returnValueForMissingStub: _i7.Future<_i6.OfsUvData?>.value(),
+      ) as _i7.Future<_i6.OfsUvData?>);
 }
 
 /// A class which mocks [Persistence].
@@ -133,26 +144,18 @@ class MockPersistence extends _i1.Mock implements _i9.Persistence {
         returnValueForMissingStub: false,
       ) as bool);
   @override
-  _i7.SimulationTime? simulationTime(_i4.HourUtc? t) => (super.noSuchMethod(
-        Invocation.method(
-          #simulationTime,
-          [t],
-        ),
-        returnValueForMissingStub: null,
-      ) as _i7.SimulationTime?);
-  @override
-  _i6.Future<bool> latlngFileExists(_i4.Hex32? hash) => (super.noSuchMethod(
+  _i7.Future<bool> latlngFileExists(_i5.Hex32? hash) => (super.noSuchMethod(
         Invocation.method(
           #latlngFileExists,
           [hash],
         ),
-        returnValue: _i6.Future<bool>.value(false),
-        returnValueForMissingStub: _i6.Future<bool>.value(false),
-      ) as _i6.Future<bool>);
+        returnValue: _i7.Future<bool>.value(false),
+        returnValueForMissingStub: _i7.Future<bool>.value(false),
+      ) as _i7.Future<bool>);
   @override
-  _i6.Future<void> verifyLatLng({
+  _i7.Future<void> verifyLatLng({
     _i3.File? file,
-    _i4.Hex32? hash,
+    _i5.Hex32? hash,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -163,23 +166,23 @@ class MockPersistence extends _i1.Mock implements _i9.Persistence {
             #hash: hash,
           },
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
   @override
-  _i6.Future<_i6.Stream<List<int>>?> readLatLng(_i4.Hex32? hash) =>
+  _i7.Future<_i7.Stream<List<int>>?> readLatLng(_i5.Hex32? hash) =>
       (super.noSuchMethod(
         Invocation.method(
           #readLatLng,
           [hash],
         ),
-        returnValue: _i6.Future<_i6.Stream<List<int>>?>.value(),
-        returnValueForMissingStub: _i6.Future<_i6.Stream<List<int>>?>.value(),
-      ) as _i6.Future<_i6.Stream<List<int>>?>);
+        returnValue: _i7.Future<_i7.Stream<List<int>>?>.value(),
+        returnValueForMissingStub: _i7.Future<_i7.Stream<List<int>>?>.value(),
+      ) as _i7.Future<_i7.Stream<List<int>>?>);
   @override
-  _i6.Future<void> writeLatLng(
-    _i4.Hex32? hash,
-    _i6.Stream<List<int>>? stream,
+  _i7.Future<void> writeLatLng(
+    _i5.Hex32? hash,
+    _i7.Stream<List<int>>? stream,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -189,23 +192,23 @@ class MockPersistence extends _i1.Mock implements _i9.Persistence {
             stream,
           ],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
   @override
-  _i6.Future<_i9.UvReader?> readUv(_i4.HourUtc? t) => (super.noSuchMethod(
+  _i7.Future<_i9.UvReader?> readUv(_i5.HourUtc? t) => (super.noSuchMethod(
         Invocation.method(
           #readUv,
           [t],
         ),
-        returnValue: _i6.Future<_i9.UvReader?>.value(),
-        returnValueForMissingStub: _i6.Future<_i9.UvReader?>.value(),
-      ) as _i6.Future<_i9.UvReader?>);
+        returnValue: _i7.Future<_i9.UvReader?>.value(),
+        returnValueForMissingStub: _i7.Future<_i9.UvReader?>.value(),
+      ) as _i7.Future<_i9.UvReader?>);
   @override
-  _i6.Future<void> writeUv(
-    _i7.SimulationTime? s,
-    _i4.Hex32? latlngHash,
-    _i6.Stream<List<int>>? vectorBytes,
+  _i7.Future<void> writeUv(
+    _i4.SimulationTime? s,
+    _i5.Hex32? latlngHash,
+    _i7.Stream<List<int>>? vectorBytes,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -216,27 +219,27 @@ class MockPersistence extends _i1.Mock implements _i9.Persistence {
             vectorBytes,
           ],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
   @override
-  _i6.Future<void> writeSimulationTimes() => (super.noSuchMethod(
+  _i7.Future<void> writeSimulationTimes() => (super.noSuchMethod(
         Invocation.method(
           #writeSimulationTimes,
           [],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
   @override
-  _i6.Future<void> migrate() => (super.noSuchMethod(
+  _i7.Future<void> migrate() => (super.noSuchMethod(
         Invocation.method(
           #migrate,
           [],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
 }
 
 /// A class which mocks [UvReader].
@@ -244,43 +247,55 @@ class MockPersistence extends _i1.Mock implements _i9.Persistence {
 /// See the documentation for Mockito's code generation for more information.
 class MockUvReader extends _i1.Mock implements _i9.UvReader {
   @override
-  _i6.Future<void> close() => (super.noSuchMethod(
+  _i4.SimulationTime get simulationTime => (super.noSuchMethod(
+        Invocation.getter(#simulationTime),
+        returnValue: _FakeSimulationTime_2(
+          this,
+          Invocation.getter(#simulationTime),
+        ),
+        returnValueForMissingStub: _FakeSimulationTime_2(
+          this,
+          Invocation.getter(#simulationTime),
+        ),
+      ) as _i4.SimulationTime);
+  @override
+  _i7.Future<void> close() => (super.noSuchMethod(
         Invocation.method(
           #close,
           [],
         ),
-        returnValue: _i6.Future<void>.value(),
-        returnValueForMissingStub: _i6.Future<void>.value(),
-      ) as _i6.Future<void>);
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
   @override
-  _i6.Future<_i4.Hex32> readLatLngHash() => (super.noSuchMethod(
+  _i7.Future<_i5.Hex32> readLatLngHash() => (super.noSuchMethod(
         Invocation.method(
           #readLatLngHash,
           [],
         ),
-        returnValue: _i6.Future<_i4.Hex32>.value(_FakeHex32_2(
+        returnValue: _i7.Future<_i5.Hex32>.value(_FakeHex32_3(
           this,
           Invocation.method(
             #readLatLngHash,
             [],
           ),
         )),
-        returnValueForMissingStub: _i6.Future<_i4.Hex32>.value(_FakeHex32_2(
+        returnValueForMissingStub: _i7.Future<_i5.Hex32>.value(_FakeHex32_3(
           this,
           Invocation.method(
             #readLatLngHash,
             [],
           ),
         )),
-      ) as _i6.Future<_i4.Hex32>);
+      ) as _i7.Future<_i5.Hex32>);
   @override
-  _i6.Future<_i8.Uint8List> readVectorBytes(int? index) => (super.noSuchMethod(
+  _i7.Future<_i8.Uint8List> readVectorBytes(int? index) => (super.noSuchMethod(
         Invocation.method(
           #readVectorBytes,
           [index],
         ),
-        returnValue: _i6.Future<_i8.Uint8List>.value(_i8.Uint8List(0)),
+        returnValue: _i7.Future<_i8.Uint8List>.value(_i8.Uint8List(0)),
         returnValueForMissingStub:
-            _i6.Future<_i8.Uint8List>.value(_i8.Uint8List(0)),
-      ) as _i6.Future<_i8.Uint8List>);
+            _i7.Future<_i8.Uint8List>.value(_i8.Uint8List(0)),
+      ) as _i7.Future<_i8.Uint8List>);
 }

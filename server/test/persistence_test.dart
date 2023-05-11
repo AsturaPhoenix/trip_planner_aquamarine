@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:aquamarine_server/ofs_client.dart';
+import 'package:aquamarine_server/persistence/caching.dart';
+import 'package:aquamarine_server/persistence/persistence.dart';
 import 'package:aquamarine_server/persistence/v1.dart' as v1;
-import 'package:aquamarine_server/persistence/v2.dart';
+import 'package:aquamarine_server/persistence/v2.dart' as v2;
 import 'package:aquamarine_server/types.dart';
 import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/types.dart';
@@ -21,6 +24,62 @@ import 'ofs_client_test.dart';
 ])
 import 'persistence_test.mocks.dart';
 
+class TestHarness {
+  final simulationTime = SimulationTime(
+    SimulationSchedule.nowcast,
+    HourUtc(2023, 03, 27, 03),
+    1,
+  );
+
+  Stream<Uint8List> latlngData() =>
+      OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods));
+
+  Future<OfsUvData> uvData() => OfsClient.readUv(Stream.value(kOfsNcDods));
+
+  Future<void> writeLatLng(Persistence persistence) =>
+      persistence.writeLatLng(kLatlngHash, latlngData());
+
+  Future<void> writeUv(Persistence persistence) async {
+    final data = await uvData();
+    await persistence.writeUv(
+      simulationTime,
+      data.latlngHash,
+      data.uv,
+    );
+  }
+
+  Future<void> verifyLatLng(Persistence persistence) async {
+    expect(await persistence.latlngFileExists(kLatlngHash), true);
+    expect(
+        await persistence.readLatLng(kLatlngHash),
+        emitsInOrder([
+          emitsInOrder(await latlngData().toList()),
+          emitsDone,
+        ]));
+  }
+
+  Future<void> verifyUv(Persistence persistence) async {
+    final data = await uvData();
+    final uvReader =
+        (await persistence.readUv(simulationTime.representedTimestamp))!;
+    expect(await uvReader.readLatLngHash(), data.latlngHash);
+
+    final uvReferenceReader = BufferedReader(data.uv);
+
+    for (int i = 0;
+        uvReferenceReader.buffer.isNotEmpty ||
+            await uvReferenceReader.moveNext();
+        ++i) {
+      expect(
+        await uvReader.readVectorBytes(i),
+        await uvReferenceReader.readBuffer(8),
+      );
+    }
+
+    await uvReader.close();
+  }
+}
+
 void main() {
   final n6 = SimulationTime(
         SimulationSchedule.nowcast,
@@ -35,19 +94,19 @@ void main() {
 
   test('simulationTime serialization', () {
     expect(
-        Persistence.deserializeSimulationTime(
-            Persistence.serializeSimulationTime(n6)),
+        v2.Persistence.deserializeSimulationTime(
+            v2.Persistence.serializeSimulationTime(n6)),
         n6);
 
     expect(
-        Persistence.deserializeSimulationTime(
-            Persistence.serializeSimulationTime(f48)),
+        v2.Persistence.deserializeSimulationTime(
+            v2.Persistence.serializeSimulationTime(f48)),
         f48);
   });
 
   test('releases mutexes on incomplete read', () async {
     final fileSystem = MockFileSystem();
-    final persistence = Persistence(fileSystem);
+    final persistence = v2.Persistence(fileSystem);
 
     final latlngFile = MockFile();
     when(fileSystem.file(any)).thenReturn(latlngFile);
@@ -71,12 +130,19 @@ void main() {
 
   group('fake file system', () {
     late FileSystem fileSystem;
-    late Persistence persistence;
-    Future<void> reload() async =>
-        persistence = await Persistence.load(fileSystem: fileSystem);
+    late v2.Persistence persistence;
 
     setUp(() => fileSystem = MemoryFileSystem.test());
-    setUp(reload);
+    setUp(() async =>
+        persistence = await v2.Persistence.load(fileSystem: fileSystem));
+
+    test('integrity', () async {
+      final harness = TestHarness();
+      await harness.writeLatLng(persistence);
+      await harness.writeUv(persistence);
+      await harness.verifyLatLng(persistence);
+      await harness.verifyUv(persistence);
+    });
 
     test('latlng that does not exist fails fast', () async {
       expect(await persistence.latlngFileExists(Hex32.zero), false);
@@ -93,7 +159,7 @@ void main() {
     });
 
     test('corrupt latlng is deleted on verication', () async {
-      await Persistence.latlngFile(persistence.fileSystem, Hex32.zero)
+      await v2.Persistence.latlngFile(persistence.fileSystem, Hex32.zero)
           .writeAsString('foo');
       await persistence.verifyLatLng(hash: Hex32.zero);
       expect(await persistence.latlngFileExists(Hex32.zero), false);
@@ -104,7 +170,7 @@ void main() {
       // from `load`.
 
       // Write a corrupt latlng file.
-      await Persistence.latlngFile(persistence.fileSystem, Hex32.zero)
+      await v2.Persistence.latlngFile(fileSystem, Hex32.zero)
           .writeAsString('foo');
       // Start a read lock.
       final verify = persistence.verifyLatLng(hash: Hex32.zero);
@@ -134,7 +200,7 @@ void main() {
 
     test('too-short uv file is deleted', () async {
       final t = n6.representedTimestamp;
-      final file = Persistence.uvFile(fileSystem, t);
+      final file = v2.Persistence.uvFile(fileSystem, t);
       file.writeAsBytesSync(const [], flush: true);
 
       await expectLater(persistence.readUv(t), throwsA(isA<FormatException>()));
@@ -142,7 +208,8 @@ void main() {
     });
 
     test('cleanup of corrupt uv does not delete update', () async {
-      await Persistence.uvFile(persistence.fileSystem, n6.representedTimestamp)
+      await v2.Persistence.uvFile(
+              persistence.fileSystem, n6.representedTimestamp)
           .writeAsString('foo');
 
       // This starts a read lock. Verification will start asynchronously since
@@ -162,24 +229,19 @@ void main() {
   });
 
   test('migration', () async {
-    final simulationTime = SimulationTime(
-      SimulationSchedule.nowcast,
-      HourUtc(2023, 03, 27, 03),
-      1,
-    );
-    final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+    final harness = TestHarness();
     final fileSystem = MemoryFileSystem();
     final p1 = await v1.Persistence.load(fileSystem);
-    await p1.writeLatLng(
-        kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
+    await p1.writeLatLng(kLatlngHash, harness.latlngData());
+    final uvData = await harness.uvData();
     await p1.writeUv(
-      simulationTime.representedTimestamp,
-      simulationTime,
-      data.latlngHash,
-      data.uv,
+      harness.simulationTime.representedTimestamp,
+      harness.simulationTime,
+      uvData.latlngHash,
+      uvData.uv,
     );
 
-    final p2 = await Persistence.load(
+    final p2 = await v2.Persistence.load(
         fileSystem: fileSystem, blockUntilVerified: true);
 
     expect(
@@ -191,32 +253,68 @@ void main() {
       false,
     );
 
-    expect(await p2.latlngFileExists(kLatlngHash), true);
-    expect(
-        await p2.readLatLng(kLatlngHash),
-        emitsInOrder([
-          emitsInOrder(
-            await OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)).toList(),
-          ),
-          emitsDone,
-        ]));
+    await harness.verifyLatLng(p2);
+    await harness.verifyUv(p2);
+  });
 
-    final uvReader = (await p2.readUv(simulationTime.representedTimestamp))!;
-    expect(await uvReader.readLatLngHash(), data.latlngHash);
+  group('caching', () {
+    late FileSystem fileSystem;
+    late Persistence persistence;
 
-    final uvReferenceReader =
-        BufferedReader((await OfsClient.readUv(Stream.value(kOfsNcDods))).uv);
+    setUp(() => fileSystem = MemoryFileSystem.test());
+    setUp(() async => persistence =
+        CachingPersistence(await v2.Persistence.load(fileSystem: fileSystem)));
 
-    for (int i = 0;
-        uvReferenceReader.buffer.isNotEmpty ||
-            await uvReferenceReader.moveNext();
-        ++i) {
-      expect(
-        await uvReader.readVectorBytes(i),
-        await uvReferenceReader.readBuffer(8),
+    test('integrity', () async {
+      final harness = TestHarness();
+      await harness.writeLatLng(persistence);
+      await harness.writeUv(persistence);
+      await harness.verifyLatLng(persistence);
+      await harness.verifyUv(persistence);
+    });
+
+    test('uv that does not exist fails fast', () async {
+      expect(await persistence.readUv(n6.representedTimestamp), null);
+    });
+
+    test('incomplete uv write does not cause irreparable corruption', () async {
+      await expectLater(
+        persistence.writeUv(
+          n6,
+          Hex32.zero,
+          Stream.error('foo'),
+        ),
+        throwsA('foo'),
       );
-    }
+      expect(await persistence.readUv(n6.representedTimestamp), null);
+    });
 
-    await uvReader.close();
+    test('too-short uv file is deleted', () async {
+      final t = n6.representedTimestamp;
+      final file = v2.Persistence.uvFile(fileSystem, t);
+      file.writeAsBytesSync(const [], flush: true);
+
+      await expectLater(persistence.readUv(t), throwsA(isA<FormatException>()));
+      expect(file.existsSync(), false);
+    });
+
+    test('cleanup of corrupt uv does not delete update', () async {
+      await v2.Persistence.uvFile(fileSystem, n6.representedTimestamp)
+          .writeAsString('foo');
+
+      // This starts a read lock. Verification will start asynchronously since
+      // it'll need to await that lock, and we'll reserve a conflicting write
+      // lock in the meantime.
+      //
+      // We also need to register the expectLater ahead of time to prevent the
+      // exception from being considered uncaught.
+      final read = expectLater(
+        persistence.readUv(n6.representedTimestamp),
+        throwsA(isA<FormatException>()),
+      );
+      await persistence.writeUv(n6, Hex32.zero, Stream.empty());
+      await read;
+      expect(await persistence.readUv(n6.representedTimestamp), isNotNull);
+    });
   });
 }

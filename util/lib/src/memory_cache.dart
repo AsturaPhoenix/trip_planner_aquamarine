@@ -42,6 +42,8 @@ class MemoryCache<K, V extends Object> {
   }
 
   /// Removes the entry for [key] from the cache without calling [onEvict].
+  /// A value can optionally be provided such that the entry is only removed if
+  /// the value matches.
   V? remove(K key, [V? value]) =>
       value == null || _data[key] == value ? _data.remove(key) : null;
 

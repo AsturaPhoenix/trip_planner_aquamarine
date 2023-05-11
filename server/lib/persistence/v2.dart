@@ -13,33 +13,39 @@ import 'package:path/path.dart';
 import '../mutex.dart';
 import '../ofs_client.dart';
 import '../types.dart';
+import 'persistence.dart' as base;
 import 'v1.dart' as v1;
 
-class UvReader {
+class UvReader implements base.UvReader {
   static int vectorByteIndex(int index) => 4 + 8 * index;
 
-  UvReader(this._file, this._close);
+  UvReader._(this.simulationTime, this._file, this._close);
 
+  @override
+  final SimulationTime simulationTime;
   final RandomAccessFile _file;
   final void Function() _close;
 
+  @override
   Future<void> close() async {
     await _file.close();
     _close();
   }
 
+  @override
   Future<Hex32> readLatLngHash() async {
     await _file.setPosition(0);
     return Hex32.fromBytes(await _file.read(4));
   }
 
+  @override
   Future<Uint8List> readVectorBytes(int index) async {
     await _file.setPosition(vectorByteIndex(index));
     return _file.read(8);
   }
 }
 
-class Persistence {
+class Persistence implements base.Persistence {
   static const root = 'persistence/v2',
       latlngDirectory = '$root/latlng',
       uvDirectory = '$root/uv';
@@ -50,11 +56,6 @@ class Persistence {
       fileSystem.file('$uvDirectory/$t');
   static File simulationTimesFile(FileSystem fileSystem) =>
       fileSystem.file('$root/simulation_times');
-
-  /// Whether a simulation time should be recorded as a candidate for a future
-  /// refresh.
-  static bool needsFutureRefresh(SimulationTime s, HourUtc t) =>
-      s != OfsClient.simulationTimes(t, SimulationSchedule.nowcast).first;
 
   static Future<Persistence> load({
     FileSystem fileSystem = const LocalFileSystem(),
@@ -117,12 +118,7 @@ class Persistence {
 
   bool get allClosed => _mutexes.isEmpty;
 
-  /// The simulation timestamp upon which date for time [t] is based, or null if
-  /// they were based on the latest historical nowcast to include them. A
-  /// refresh may be warranted if this is nonnull and a newer simulation is
-  /// available.
-  SimulationTime? simulationTime(HourUtc t) => _simulationTimes[t];
-
+  @override
   Future<bool> latlngFileExists(Hex32 hash) async {
     final mutex = _mutexes[hash];
     await mutex.acquireRead();
@@ -213,6 +209,7 @@ class Persistence {
   /// Reads the latlng file for a given [hash]. The file is not verified since
   /// latlng updates are not expected to happen like ever; verification is
   /// performed during loading.
+  @override
   Future<Stream<List<int>>?> readLatLng(Hex32 hash) async {
     final mutex = _mutexes[hash];
     await mutex.acquireRead();
@@ -240,6 +237,7 @@ class Persistence {
     }
   }
 
+  @override
   Future<void> writeLatLng(Hex32 hash, Stream<List<int>> stream) async {
     final mutex = _mutexes[hash];
     await mutex.acquireWrite();
@@ -270,6 +268,7 @@ class Persistence {
   /// and the file is deleted. If the simulation time does not match metadata,
   /// it is assumed that the metadata read was corrupt, and the metadata are
   /// updated.
+  @override
   Future<UvReader?> readUv(HourUtc t) async {
     final mutex = _mutexes[t];
     await mutex.acquireRead();
@@ -298,7 +297,8 @@ class Persistence {
       await raf.setPosition(length - 5);
       final s = Persistence.deserializeSimulationTime(await raf.read(5));
       if (s.representedTimestamp == t) {
-        final expectedSimulationTime = needsFutureRefresh(s, t) ? s : null;
+        final expectedSimulationTime =
+            OfsClient.needsFutureRefresh(s) ? s : null;
         if (_simulationTimes[t] != expectedSimulationTime) {
           print('Metadata corruption; backfilling simulation time $s for $t');
           if (expectedSimulationTime != null) {
@@ -308,7 +308,10 @@ class Persistence {
           }
         }
 
-        return UvReader(raf, mutex.release);
+        return UvReader._(
+            _simulationTimes[t] ?? OfsClient.finalSimulationTime(t),
+            raf,
+            mutex.release);
       } else {
         throw FormatException('uv corruption; invalid simulation time.');
       }
@@ -327,6 +330,7 @@ class Persistence {
     }
   }
 
+  @override
   Future<void> writeUv(
     SimulationTime s,
     Hex32 latlngHash,
@@ -353,7 +357,7 @@ class Persistence {
       }
       await sink.close();
 
-      if (needsFutureRefresh(s, t)) {
+      if (OfsClient.needsFutureRefresh(s)) {
         _simulationTimes[t] = s;
       } else {
         _simulationTimes.remove(t);
