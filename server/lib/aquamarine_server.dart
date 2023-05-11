@@ -8,7 +8,8 @@ import 'package:async/async.dart' hide AsyncCache;
 import 'package:latlng/latlng.dart';
 
 import 'ofs_client.dart';
-import 'persistence/v2.dart';
+import 'persistence/caching.dart';
+import 'persistence/persistence.dart';
 import 'types.dart';
 
 /// u/v response data for a particular sample hour.
@@ -24,16 +25,19 @@ class UvResponseEntry {
 
   UvResponseEntry({
     required this.t,
+    required this.simulationTime,
     required this.latLngHash,
     required this.uv,
     required this.close,
   });
   UvResponseEntry.empty(this.t)
       : latLngHash = Hex32.zero,
+        simulationTime = null,
         uv = Stream.empty(),
         close = _noop;
 
   final HourUtc t;
+  final SimulationTime? simulationTime;
   final Hex32 latLngHash;
   final Stream<List<int>> uv;
   final Future<void> Function() close;
@@ -51,9 +55,9 @@ class UvRequestContext {
 class AquamarineServer {
   AquamarineServer({
     required this.ofsClient,
-    required this.persistence,
+    required Persistence persistence,
     this.clock = DateTime.now,
-  });
+  }) : persistence = CachingPersistence(persistence);
 
   final OfsClient ofsClient;
   final Persistence persistence;
@@ -94,7 +98,8 @@ class AquamarineServer {
     HourUtc t,
     UvRequestContext context,
   ) async* {
-    final simulationTime = persistence.simulationTime(t);
+    bool hasResponse = false;
+    final reader = await _readUv(t, context);
 
     // The simulations we consider, in order, will be first the nowcasts, then
     // the forecasts, preferring later simulations, filtering out simulations
@@ -104,11 +109,8 @@ class AquamarineServer {
             t, SimulationSchedule.nowcast)
         .followedBy(OfsClient.simulationTimes(t, SimulationSchedule.forecast))
         .where((s) => _isSimulationAvailable(s.timestamp))
-        .takeWhile((s) => s != simulationTime);
+        .takeWhile((s) => s != reader?.simulationTime);
 
-    bool hasResponse = false;
-
-    final reader = await _readUv(t, context);
     if (reader != null) {
       final protector = ClosableProtector(reader);
       try {
@@ -118,7 +120,8 @@ class AquamarineServer {
       }
       hasResponse = true;
 
-      if (simulationTime == null || simulationTimes.isEmpty) {
+      if (!OfsClient.needsFutureRefresh(reader.simulationTime!) ||
+          simulationTimes.isEmpty) {
         // No need to refresh.
         return;
       }
@@ -165,6 +168,7 @@ class AquamarineServer {
 
       return UvResponseEntry(
         t: t,
+        simulationTime: reader.simulationTime,
         latLngHash: latlngHash,
         uv: () async* {
           for (final entry in samplePoints) {

@@ -35,7 +35,29 @@ void main() {
       northeast: const LatLng(37.9, -122.4),
     );
 
-    Future<void> verifyResponse(
+    Future<void> verifyResponse(UvResponseEntry response) async {
+      try {
+        expect(response.t, sampleTime);
+        expect(response.latLngHash, kLatlngHash);
+
+        int vectorCount = 0;
+        final reader = BufferedReader(response.uv);
+        try {
+          await readVectors(reader, () => true, (vector) {
+            expect(vector.length, lessThan(kSpeedLimit));
+            ++vectorCount;
+          });
+        } finally {
+          reader.cancel();
+        }
+
+        expect(vectorCount, inInclusiveRange(100, 1000));
+      } finally {
+        await response.close();
+      }
+    }
+
+    Future<void> verifyResponses(
       Stream<UvResponseEntry> stream, {
       int responseCount = 1,
     }) async {
@@ -43,25 +65,7 @@ void main() {
 
       await for (final response in stream) {
         ++responses;
-        try {
-          expect(response.t, sampleTime);
-          expect(response.latLngHash, kLatlngHash);
-
-          int vectorCount = 0;
-          final reader = BufferedReader(response.uv);
-          try {
-            await readVectors(reader, () => true, (vector) {
-              expect(vector.length, lessThan(kSpeedLimit));
-              ++vectorCount;
-            });
-          } finally {
-            reader.cancel();
-          }
-
-          expect(vectorCount, inInclusiveRange(100, 1000));
-        } finally {
-          await response.close();
-        }
+        await verifyResponse(response);
       }
 
       expect(responses, responseCount);
@@ -83,7 +87,7 @@ void main() {
       when(ofsClient.fetchLatLng(simulationTime)).thenAnswer(
           (_) async => OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
 
-      await verifyResponse(server.uv(sampleTime, sampleTime, bounds, .005));
+      await verifyResponses(server.uv(sampleTime, sampleTime, bounds, .005));
       expect(persistence.allClosed, true);
     });
 
@@ -103,7 +107,7 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
-      await verifyResponse(server.uv(sampleTime, sampleTime, bounds, .005));
+      await verifyResponses(server.uv(sampleTime, sampleTime, bounds, .005));
       verifyZeroInteractions(ofsClient);
 
       expect(persistence.allClosed, true);
@@ -173,13 +177,47 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
-      await verifyResponse(server.uv(sampleTime, sampleTime, bounds, .005));
+      await verifyResponses(server.uv(sampleTime, sampleTime, bounds, .005));
 
       verify(ofsClient.fetchUv(simulationTime));
       // Make sure we never tried to refetch the simulation we already had.
       verifyNever(ofsClient.fetchUv(oldSimulationTime));
 
       expect(persistence.allClosed, true);
+    });
+
+    test('does not block while attempting to fetch a newer simulation',
+        () async {
+      final ofsClient = MockOfsClient();
+      final persistence =
+          await Persistence.load(fileSystem: MemoryFileSystem.test());
+
+      final oldSimulationTime = SimulationTime(
+          SimulationSchedule.forecast, HourUtc(2023, 03, 26, 21), 1);
+
+      final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+      await persistence.writeLatLng(
+          kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
+      await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => DateTime.utc(2023, 04, 01),
+      );
+
+      when(ofsClient.fetchUv(simulationTime)).thenAnswer((_) async => OfsUvData(
+          latlngHash: data.latlngHash,
+          uv: StreamController<List<int>>().stream));
+
+      server.uv(sampleTime, sampleTime, bounds, .005).drain();
+
+      await untilCalled(ofsClient.fetchUv(simulationTime));
+
+      // Make sure we can start receiving a new response even while the last one
+      // is awaiting a write.
+      await verifyResponse(
+          await server.uv(sampleTime, sampleTime, bounds, .005).first);
     });
 
     test('updates response if a newer simulation is available', () async {
@@ -204,7 +242,7 @@ void main() {
       when(ofsClient.fetchUv(simulationTime))
           .thenAnswer((_) => OfsClient.readUv(Stream.value(kOfsNcDods)));
 
-      await verifyResponse(
+      await verifyResponses(
         server.uv(sampleTime, sampleTime, bounds, .005),
         responseCount: 2,
       );
@@ -216,11 +254,12 @@ void main() {
     // cancelled, so we only have to test response cancellation cases that
     // happen while we're reading from disk.
 
-    test('cleans up if cancelled while reading latlng file', () async {
+    test('caches even if cancelled while reading latlng file', () async {
       final ofsClient = MockOfsClient();
       final persistence = MockPersistence();
       final uvReader = MockUvReader();
 
+      when(uvReader.simulationTime).thenReturn(simulationTime);
       when(persistence.readUv(sampleTime)).thenAnswer((_) async => uvReader);
       when(uvReader.readLatLngHash()).thenAnswer((_) async => Hex32.zero);
       when(persistence.readLatLng(Hex32.zero))
@@ -238,7 +277,11 @@ void main() {
 
       await untilCalled(persistence.readLatLng(Hex32.zero));
       await subscription.cancel();
-      verify(uvReader.close());
+      verify(persistence.readLatLng(Hex32.zero));
+
+      await expectLater(server.uv(sampleTime, sampleTime, bounds, .005),
+          emitsInOrder([isA<UvResponseEntry>(), emitsDone]));
+      verifyNever(persistence.readLatLng(Hex32.zero));
     });
   });
 }

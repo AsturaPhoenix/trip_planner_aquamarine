@@ -39,6 +39,14 @@ class OfsClient {
     }
   }
 
+  static SimulationTime finalSimulationTime(HourUtc t) =>
+      simulationTimes(t, SimulationSchedule.nowcast).first;
+
+  /// Whether a simulation time should be recorded as a candidate for a future
+  /// refresh.
+  static bool needsFutureRefresh(SimulationTime s) =>
+      s != finalSimulationTime(s.representedTimestamp);
+
   static Uri resourceUri({
     required SimulationTime simulationTime,
     required List<String> query,
