@@ -1,4 +1,4 @@
-import 'package:aquamarine_server/versioned_read_write_mutex.dart';
+import 'package:aquamarine_server/mutex.dart';
 import 'package:test/test.dart';
 
 void main() {

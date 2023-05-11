@@ -10,9 +10,9 @@ import 'package:file/file.dart';
 import 'package:file/local.dart';
 import 'package:path/path.dart';
 
+import '../mutex.dart';
 import '../ofs_client.dart';
 import '../types.dart';
-import '../versioned_read_write_mutex.dart';
 import 'v1.dart' as v1;
 
 class UvReader {
@@ -113,17 +113,7 @@ class Persistence {
 
   final FileSystem fileSystem;
   final Map<HourUtc, SimulationTime> _simulationTimes;
-  final _mutexes = <Object, VersionedReadWriteMutex>{};
-
-  VersionedReadWriteMutex _getMutex(Object key) =>
-      _mutexes[key] ??= VersionedReadWriteMutex();
-  void _releaseMutex(VersionedReadWriteMutex mutex, Object key) {
-    mutex.release();
-    if (!mutex.isLocked) {
-      final removed = _mutexes.remove(key);
-      assert(mutex == removed);
-    }
-  }
+  final _mutexes = MutexMap();
 
   bool get allClosed => _mutexes.isEmpty;
 
@@ -134,14 +124,14 @@ class Persistence {
   SimulationTime? simulationTime(HourUtc t) => _simulationTimes[t];
 
   Future<bool> latlngFileExists(Hex32 hash) async {
-    final mutex = _getMutex(hash);
+    final mutex = _mutexes[hash];
     await mutex.acquireRead();
     try {
       // Although this await could syntactically be omitted, it affects the
       // timing of the mutex release.
       return await latlngFile(fileSystem, hash).exists();
     } finally {
-      _releaseMutex(mutex, hash);
+      mutex.release();
     }
   }
 
@@ -163,7 +153,7 @@ class Persistence {
     hash ??= Hex32.parse(basename(file!.path));
     file ??= latlngFile(fileSystem, hash);
 
-    final mutex = _getMutex(hash);
+    final mutex = _mutexes[hash];
     await mutex.acquireRead();
     try {
       if (!await file.exists()) return;
@@ -209,14 +199,14 @@ class Persistence {
       }
 
       if (hash != await computeHash()) {
-        mutex.release();
+        mutex.transientRelease();
         if (await mutex.acquireWrite()) {
           print('Deleting corrupt latlng file $hash');
           await file.delete();
         }
       }
     } finally {
-      _releaseMutex(mutex, hash);
+      mutex.release();
     }
   }
 
@@ -224,7 +214,7 @@ class Persistence {
   /// latlng updates are not expected to happen like ever; verification is
   /// performed during loading.
   Future<Stream<List<int>>?> readLatLng(Hex32 hash) async {
-    final mutex = _getMutex(hash);
+    final mutex = _mutexes[hash];
     await mutex.acquireRead();
 
     final file = latlngFile(fileSystem, hash);
@@ -241,17 +231,17 @@ class Persistence {
         try {
           yield* file.openRead();
         } finally {
-          _releaseMutex(mutex, hash);
+          mutex.release();
         }
       }();
     } else {
-      _releaseMutex(mutex, hash);
+      mutex.release();
       return null;
     }
   }
 
   Future<void> writeLatLng(Hex32 hash, Stream<List<int>> stream) async {
-    final mutex = _getMutex(hash);
+    final mutex = _mutexes[hash];
     await mutex.acquireWrite();
 
     try {
@@ -267,7 +257,7 @@ class Persistence {
       }
       await sink.close();
     } finally {
-      _releaseMutex(mutex, hash);
+      mutex.release();
     }
   }
 
@@ -281,7 +271,7 @@ class Persistence {
   /// it is assumed that the metadata read was corrupt, and the metadata are
   /// updated.
   Future<UvReader?> readUv(HourUtc t) async {
-    final mutex = _getMutex(t);
+    final mutex = _mutexes[t];
     await mutex.acquireRead();
 
     final file = uvFile(fileSystem, t);
@@ -289,7 +279,7 @@ class Persistence {
     try {
       raf = await file.open();
     } catch (e) {
-      _releaseMutex(mutex, t);
+      mutex.release();
       if (e is FileSystemException) {
         return null;
       } else {
@@ -318,20 +308,20 @@ class Persistence {
           }
         }
 
-        return UvReader(raf, () => _releaseMutex(mutex, t));
+        return UvReader(raf, mutex.release);
       } else {
         throw FormatException('uv corruption; invalid simulation time.');
       }
     } on Object {
       try {
         await raf.close();
-        mutex.release();
+        mutex.transientRelease();
         if (await mutex.acquireWrite()) {
           print('Deleting corrupt uv file $t');
           await file.delete();
         }
       } finally {
-        _releaseMutex(mutex, t);
+        mutex.release();
       }
       rethrow;
     }
@@ -343,7 +333,7 @@ class Persistence {
     Stream<List<int>> vectorBytes,
   ) async {
     final t = s.representedTimestamp;
-    final mutex = _getMutex(t);
+    final mutex = _mutexes[t];
     await mutex.acquireWrite();
     try {
       final file = uvFile(fileSystem, t);
@@ -370,7 +360,7 @@ class Persistence {
       }
       writeSimulationTimes();
     } finally {
-      _releaseMutex(mutex, t);
+      mutex.release();
     }
   }
 
