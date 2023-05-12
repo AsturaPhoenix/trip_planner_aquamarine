@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:aquamarine_server/aquamarine_server.dart';
 import 'package:aquamarine_server/ofs_client.dart';
@@ -239,14 +240,27 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
+      final partialData = [
+        Uint8List.sublistView(kOfsNcDods, 0, kOfsNcDods.length ~/ 2),
+        Uint8List.sublistView(kOfsNcDods, kOfsNcDods.length ~/ 2),
+      ];
+      final controller = StreamController<List<int>>();
       when(ofsClient.fetchUv(simulationTime))
-          .thenAnswer((_) => OfsClient.readUv(Stream.value(kOfsNcDods)));
+          .thenAnswer((_) => OfsClient.readUv(controller.stream));
+      // We want to make sure the server doesn't block while trying to write
+      // UVs, so prime some UV data.
+      controller.add(partialData[0]);
 
-      await verifyResponses(
-        server.uv(sampleTime, sampleTime, bounds, .005),
-        responseCount: 2,
-      );
+      final responses =
+          StreamIterator(server.uv(sampleTime, sampleTime, bounds, .005));
+      expect(await responses.moveNext(), true);
+      verifyResponse(responses.current);
 
+      controller.add(partialData[1]);
+      expect(await responses.moveNext(), true);
+      verifyResponse(responses.current);
+
+      expect(await responses.moveNext(), false);
       expect(persistence.allClosed, true);
     });
 
