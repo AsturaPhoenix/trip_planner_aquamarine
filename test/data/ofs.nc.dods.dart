@@ -8838,7 +8838,7 @@ W3DELXfFvzcb5+0rZtc0mHdbWJ9Ef26Vt27FWbfwxVflqK/S9l9VM95+alpTRr11W83/A6YHqPNs
 fAwA
 ''');
 
-List<int> get kOfsNcDods => _decode(r'''
+Uint8List get kOfsNcDods => _decode(r'''
 H4sICIIoMWQAA25vcy5zZmJvZnMuZmllbGRzLm4wMDEuMjAyMzAzMjcudDAzei5uYyAoMykuZG9k
 cwCM/Qd0XttVL3yfc9x770223GRLVrHcZMuqlq3ee7OsYsm2LNuSbMuybIdQQg8ECBBaCJAQIBAC
 ISQBLoQaIBCSm5BcSOgptAChJad8v+0933H5xvjGO75zxhqP/Dx77zXXnP/5n3OtvUrl0MzQ9OhM
