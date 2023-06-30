@@ -47,7 +47,7 @@ class Persistence {
   /// Whether a simulation time should be recorded as a candidate for a future
   /// refresh.
   static bool needsFutureRefresh(SimulationTime s, HourUtc t) =>
-      s != OfsClient.simulationTimes(t, SimulationSchedule.nowcast).first;
+      s != OfsClient.samplesCoveringTime(t, SimulationSchedule.nowcast).first;
 
   static Future<Persistence> load([
     FileSystem fileSystem = const LocalFileSystem(),
