@@ -16,29 +16,29 @@ void main() {
 
   group('chooses correct nowcast outputs', () {
     test('for middle-of-the-road timestamps', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 5), n), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 5), n), [
         SimulationTime(n, HourUtc(2023, 3, 27, 9), 2),
       ]);
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 6), n), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 6), n), [
         SimulationTime(n, HourUtc(2023, 3, 27, 9), 3),
       ]);
     });
 
     test('coincident with a simulation run', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 3), n), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 3), n), [
         SimulationTime(n, HourUtc(2023, 3, 27, 9), 0),
         SimulationTime(n, HourUtc(2023, 3, 27, 3), 6),
       ]);
     });
 
     test('at the end of the day', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 23), n), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 23), n), [
         SimulationTime(n, HourUtc(2023, 3, 28, 3), 2),
       ]);
     });
 
     test('coincident with a simulation run at the end of the day', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 21), n), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 21), n), [
         SimulationTime(n, HourUtc(2023, 3, 28, 3), 0),
         SimulationTime(n, HourUtc(2023, 3, 27, 21), 6),
       ]);
@@ -47,7 +47,7 @@ void main() {
 
   group('chooses correct forecast outputs', () {
     test('for middle-of-the-road timestamps', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 5), f), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 5), f), [
         SimulationTime(f, HourUtc(2023, 3, 27, 3), 2),
         SimulationTime(f, HourUtc(2023, 3, 26, 21), 8),
         SimulationTime(f, HourUtc(2023, 3, 26, 15), 14),
@@ -60,7 +60,7 @@ void main() {
     });
 
     test('coincident with a simulation run', () {
-      expect(OfsClient.simulationTimes(HourUtc(2023, 3, 27, 3), f), [
+      expect(OfsClient.samplesCoveringTime(HourUtc(2023, 3, 27, 3), f), [
         SimulationTime(f, HourUtc(2023, 3, 27, 3), 0),
         SimulationTime(f, HourUtc(2023, 3, 26, 21), 6),
         SimulationTime(f, HourUtc(2023, 3, 26, 15), 12),
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('readUv', () async {
-      final result = await OfsClient.readUv(chunker([kOfsNcDods]));
+      final result = await OfsClient.readLatLngUv(chunker([kOfsNcDods]));
       expect(result.latlngHash, kLatlngHash);
 
       int count = 0;

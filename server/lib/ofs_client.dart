@@ -15,19 +15,16 @@ import 'types.dart';
 /// The data from a DODS lonc-latc-u-v download, reorganized for caching.
 ///
 /// uv, received as [...u][...v], becomes [...(u, v)].
-///
-/// Since we don't expect latlngs to change often if ever, they are hashed as
-/// they come and discarded. If we do get a cache miss, we fire off a new
-/// download. This should more than halve memory usage.
-class OfsUvData {
-  OfsUvData({required this.latlngHash, required this.uv});
+class LatLngUv {
+  LatLngUv._({required this.latlngHash, required this.uv, required this.close});
   final Hex32 latlngHash;
   final Stream<List<int>> uv;
+  final void Function() close;
 }
 
 class OfsClient {
   /// Determines the simulation runs that would cover the target time [t].
-  static Iterable<SimulationTime> simulationTimes(
+  static Iterable<SimulationTime> samplesCoveringTime(
     HourUtc t,
     SimulationSchedule schedule,
   ) sync* {
@@ -40,12 +37,24 @@ class OfsClient {
   }
 
   static SimulationTime finalSimulationTime(HourUtc t) =>
-      simulationTimes(t, SimulationSchedule.nowcast).first;
+      samplesCoveringTime(t, SimulationSchedule.nowcast).first;
 
   /// Whether a simulation time should be recorded as a candidate for a future
   /// refresh.
   static bool needsFutureRefresh(SimulationTime s) =>
       s != finalSimulationTime(s.representedTimestamp);
+
+  /// Enumerates the [SimulationTime]s produced by a simulation run at time [t].
+  static Iterable<SimulationTime> samplesForRun(
+      HourUtc t, SimulationSchedule schedule) sync* {
+    if ((t.hour - schedule.firstHour) % schedule.intervalHours != 0) {
+      throw ArgumentError('No simulation run for schedule at time t.');
+    }
+
+    for (int i = 0; i <= schedule.coverageHours; ++i) {
+      yield SimulationTime(schedule, t, i);
+    }
+  }
 
   static Uri resourceUri({
     required SimulationTime simulationTime,
@@ -91,6 +100,24 @@ class OfsClient {
     return size;
   }
 
+  static void interleaveLatLng(
+    BytesBuilder out,
+    Uint8List lon,
+    Uint8List lat,
+  ) =>
+      out
+        ..add(lat)
+        ..add(lon);
+
+  static void interleaveUv(
+    BytesBuilder out,
+    Uint8List u,
+    Uint8List v,
+  ) =>
+      out
+        ..add(u)
+        ..add(v);
+
   static Stream<Uint8List> interleave2x32(
     BufferedReader reader,
     void Function(BytesBuilder out, Uint8List a, Uint8List b) combiner,
@@ -126,13 +153,7 @@ class OfsClient {
     final reader = BufferedReader(stream);
     try {
       await reader.consumeUntil(dataMarker);
-
-      yield* interleave2x32(
-          reader,
-          (out, a, b) => out
-            ..add(b)
-            ..add(a));
-
+      yield* interleave2x32(reader, interleaveLatLng);
       await reader.requireEnd();
     } finally {
       reader.cancel();
@@ -175,29 +196,30 @@ class OfsClient {
     return Hex32.fromBytes(hash.events.single.bytes);
   }
 
-  static Future<OfsUvData> readUv(Stream<List<int>> stream) async {
+  /// Reads combined latlng and uv data. The returned object must be closed.
+  static Future<LatLngUv> readLatLngUv(Stream<List<int>> stream) async {
     final reader = BufferedReader(stream);
     try {
       await reader.consumeUntil(dataMarker);
 
-      return OfsUvData(
+      return LatLngUv._(
         latlngHash: await _hashLatLng(reader),
-        uv: () async* {
-          try {
-            yield* interleave2x32(
-              reader,
-              (out, a, b) => out
-                ..add(a)
-                ..add(b),
-            );
-          } finally {
-            reader.cancel();
-          }
-        }(),
+        uv: interleave2x32(reader, interleaveUv),
+        close: reader.cancel,
       );
     } on Object {
       reader.cancel();
       rethrow;
+    }
+  }
+
+  static Stream<List<int>> readUv(Stream<List<int>> stream) async* {
+    final reader = BufferedReader(stream);
+    try {
+      await reader.consumeUntil(dataMarker);
+      yield* interleave2x32(reader, interleaveUv);
+    } finally {
+      reader.cancel();
     }
   }
 
@@ -225,10 +247,18 @@ class OfsClient {
     return file == null ? null : readLatLng(file);
   }
 
-  Future<OfsUvData?> fetchUv(SimulationTime s) async {
+  Future<LatLngUv?> fetchLatLngUv(SimulationTime s) async {
     final file = await fetchResource(s, const [
       'lonc',
       'latc',
+      'u[0][0]',
+      'v[0][0]',
+    ]);
+    return file == null ? null : readLatLngUv(file);
+  }
+
+  Future<Stream<List<int>>?> fetchUv(SimulationTime s) async {
+    final file = await fetchResource(s, const [
       'u[0][0]',
       'v[0][0]',
     ]);

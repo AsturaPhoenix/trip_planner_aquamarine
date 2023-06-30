@@ -56,8 +56,15 @@ class SimulationSchedule {
   });
   final String description;
   final String typePrefix;
+
+  /// The first hour of the day at which the simulation is run.
   final int firstHour;
+
+  /// The index at which the represented timestamp matches the simulation run
+  /// timestamp.
   final int referenceHour;
+
+  /// Hours between simulation runs.
   final int intervalHours;
   final int coverageHours;
 

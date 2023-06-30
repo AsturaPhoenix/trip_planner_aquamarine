@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 import '../../test/data/ofs.nc.dods.dart';
 @GenerateNiceMocks([
   MockSpec<OfsClient>(),
+  MockSpec<LatLngUv>(),
   MockSpec<Persistence>(),
   MockSpec<UvReader>(),
 ])
@@ -28,6 +29,8 @@ void main() {
     HourUtc(2023, 03, 27, 03),
     1,
   );
+  final oldSimulationTime =
+      SimulationTime(SimulationSchedule.forecast, HourUtc(2023, 03, 26, 21), 1);
   final HourUtc sampleTime = HourUtc(2023, 03, 26, 22);
 
   group('uv', () {
@@ -83,8 +86,8 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
-      when(ofsClient.fetchUv(simulationTime))
-          .thenAnswer((_) => OfsClient.readUv(Stream.value(kOfsNcDods)));
+      when(ofsClient.fetchLatLngUv(simulationTime))
+          .thenAnswer((_) => OfsClient.readLatLngUv(Stream.value(kOfsNcDods)));
       when(ofsClient.fetchLatLng(simulationTime)).thenAnswer(
           (_) async => OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
 
@@ -97,7 +100,7 @@ void main() {
       final persistence =
           await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-      final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
       await persistence.writeLatLng(
           kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
       await persistence.writeUv(simulationTime, data.latlngHash, data.uv);
@@ -164,10 +167,7 @@ void main() {
       final persistence =
           await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-      final oldSimulationTime = SimulationTime(
-          SimulationSchedule.forecast, HourUtc(2023, 03, 26, 21), 1);
-
-      final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
       await persistence.writeLatLng(
           kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
       await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -180,9 +180,9 @@ void main() {
 
       await verifyResponses(server.uv(sampleTime, sampleTime, bounds, .005));
 
-      verify(ofsClient.fetchUv(simulationTime));
+      verify(ofsClient.fetchLatLngUv(simulationTime));
       // Make sure we never tried to refetch the simulation we already had.
-      verifyNever(ofsClient.fetchUv(oldSimulationTime));
+      verifyNever(ofsClient.fetchLatLngUv(oldSimulationTime));
 
       expect(persistence.allClosed, true);
     });
@@ -193,10 +193,7 @@ void main() {
       final persistence =
           await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-      final oldSimulationTime = SimulationTime(
-          SimulationSchedule.forecast, HourUtc(2023, 03, 26, 21), 1);
-
-      final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
       await persistence.writeLatLng(
           kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
       await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -207,13 +204,18 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
-      when(ofsClient.fetchUv(simulationTime)).thenAnswer((_) async => OfsUvData(
-          latlngHash: data.latlngHash,
-          uv: StreamController<List<int>>().stream));
+      when(ofsClient.fetchLatLngUv(simulationTime)).thenAnswer(
+        (_) async {
+          final mock = MockLatLngUv();
+          when(mock.latlngHash).thenReturn(data.latlngHash);
+          when(mock.uv).thenAnswer((_) => StreamController<List<int>>().stream);
+          return mock;
+        },
+      );
 
       server.uv(sampleTime, sampleTime, bounds, .005).drain();
 
-      await untilCalled(ofsClient.fetchUv(simulationTime));
+      await untilCalled(ofsClient.fetchLatLngUv(simulationTime));
 
       // Make sure we can start receiving a new response even while the last one
       // is awaiting a write.
@@ -226,10 +228,7 @@ void main() {
       final persistence =
           await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-      final oldSimulationTime = SimulationTime(
-          SimulationSchedule.forecast, HourUtc(2023, 03, 26, 21), 1);
-
-      final data = await OfsClient.readUv(Stream.value(kOfsNcDods));
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
       await persistence.writeLatLng(
           kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
       await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -245,8 +244,8 @@ void main() {
         Uint8List.sublistView(kOfsNcDods, kOfsNcDods.length ~/ 2),
       ];
       final controller = StreamController<List<int>>();
-      when(ofsClient.fetchUv(simulationTime))
-          .thenAnswer((_) => OfsClient.readUv(controller.stream));
+      when(ofsClient.fetchLatLngUv(simulationTime))
+          .thenAnswer((_) => OfsClient.readLatLngUv(controller.stream));
       // We want to make sure the server doesn't block while trying to write
       // UVs, so prime some UV data.
       controller.add(partialData[0]);
@@ -296,6 +295,174 @@ void main() {
       await expectLater(server.uv(sampleTime, sampleTime, bounds, .005),
           emitsInOrder([isA<UvResponseEntry>(), emitsDone]));
       verifyNever(persistence.readLatLng(Hex32.zero));
+    });
+  });
+
+  group('fetchSimulationRun', () {
+    test('fetches nowcasts and forecasts', () async {
+      final ofsClient = MockOfsClient();
+      final persistence = MockPersistence();
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      final mockLatLngUv = MockLatLngUv();
+      when(ofsClient.fetchLatLngUv(any)).thenAnswer((_) async => mockLatLngUv);
+      when(ofsClient.fetchLatLng(any))
+          .thenAnswer((_) async => StreamController<Uint8List>().stream);
+      when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
+
+      expect(await server.fetchSimulationRun(t), true);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(1);
+      verify(ofsClient.fetchLatLng(any)).called(1);
+      verify(ofsClient.fetchUv(any)).called(
+          SimulationSchedule.nowcast.coverageHours +
+              SimulationSchedule.forecast.coverageHours);
+
+      verify(persistence.writeLatLng(any, any));
+
+      for (final simulationTime
+          in OfsClient.samplesForRun(t, SimulationSchedule.nowcast)) {
+        verify(persistence.writeUv(simulationTime, any, any));
+      }
+
+      for (final simulationTime
+          in OfsClient.samplesForRun(t, SimulationSchedule.forecast).skip(1)) {
+        verify(persistence.writeUv(simulationTime, any, any));
+      }
+    });
+
+    test('fails fast when nothing is available', () async {
+      final ofsClient = MockOfsClient();
+      final persistence = MockPersistence();
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      expect(await server.fetchSimulationRun(t), false);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(1);
+      verifyNever(ofsClient.fetchLatLng(any));
+      verifyNever(ofsClient.fetchUv(any));
+      verifyNever(persistence.writeLatLng(any, any));
+      verifyNever(persistence.writeUv(any, any, any));
+    });
+
+    test('skips up-to-date hours', () async {
+      final ofsClient = MockOfsClient();
+
+      final persistence =
+          await Persistence.load(fileSystem: MemoryFileSystem.test());
+
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+      await persistence.writeLatLng(
+          kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
+      await persistence.writeUv(simulationTime, data.latlngHash, data.uv);
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      final mockLatLngUv = MockLatLngUv();
+      when(mockLatLngUv.latlngHash).thenReturn(data.latlngHash);
+      when(ofsClient.fetchLatLngUv(any)).thenAnswer((_) async => mockLatLngUv);
+      when(ofsClient.fetchLatLng(any))
+          .thenAnswer((_) async => StreamController<Uint8List>().stream);
+      when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
+
+      expect(await server.fetchSimulationRun(t), true);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(1);
+      verifyNever(ofsClient.fetchLatLng(any));
+      verify(ofsClient.fetchUv(any)).called(
+          SimulationSchedule.nowcast.coverageHours +
+              SimulationSchedule.forecast.coverageHours -
+              1);
+      verifyNever(ofsClient.fetchUv(simulationTime));
+    });
+
+    test('does not skip stale hours', () async {
+      final ofsClient = MockOfsClient();
+
+      final persistence =
+          await Persistence.load(fileSystem: MemoryFileSystem.test());
+
+      final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+      await persistence.writeLatLng(
+          kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
+      await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      final mockLatLngUv = MockLatLngUv();
+      when(mockLatLngUv.latlngHash).thenReturn(data.latlngHash);
+      when(ofsClient.fetchLatLngUv(any)).thenAnswer((_) async => mockLatLngUv);
+      when(ofsClient.fetchLatLng(any))
+          .thenAnswer((_) async => StreamController<Uint8List>().stream);
+      when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
+
+      expect(await server.fetchSimulationRun(t), true);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(1);
+      verifyNever(ofsClient.fetchLatLng(any));
+      verify(ofsClient.fetchUv(any)).called(
+          SimulationSchedule.nowcast.coverageHours +
+              SimulationSchedule.forecast.coverageHours);
+    });
+
+    test('is idempotent', () async {
+      final ofsClient = MockOfsClient();
+      final persistence =
+          await Persistence.load(fileSystem: MemoryFileSystem.test());
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      when(ofsClient.fetchLatLngUv(any))
+          .thenAnswer((_) => OfsClient.readLatLngUv(Stream.value(kOfsNcDods)));
+      when(ofsClient.fetchLatLng(any)).thenAnswer(
+          (_) async => OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
+      when(ofsClient.fetchUv(any)).thenAnswer((_) async =>
+          // This leaks LatLngUvs, but that's okay for a test.
+          (await OfsClient.readLatLngUv(Stream.value(kOfsNcDods))).uv);
+
+      expect(await server.fetchSimulationRun(t), true);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(1);
+      verify(ofsClient.fetchLatLng(any)).called(1);
+      verify(ofsClient.fetchUv(any)).called(
+          SimulationSchedule.nowcast.coverageHours +
+              SimulationSchedule.forecast.coverageHours);
+
+      expect(await server.fetchSimulationRun(t), true);
+
+      verifyNoMoreInteractions(ofsClient);
     });
   });
 }

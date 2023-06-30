@@ -89,4 +89,35 @@ Future<void> main() async {
     1080,
   );
   print('Serving at http://${server.address.host}:${server.port}');
+
+  // TODO(AsturaPhoenix): common SimulationSchedule for nowcasts and forecast
+  // runs
+  const firstHour = 3, intervalHours = 6;
+  // Observed empirically from catalog timestamps.
+  // TODO(AsturaPhoenix): adaptive scheduling
+  const padding = Duration(hours: 1);
+
+  void tick(HourUtc t) async {
+    final next = t + intervalHours;
+    final nextInterval = next.t.add(padding).difference(DateTime.now());
+    Timer(nextInterval, () => tick(next));
+    print('Next fetch scheduled in $nextInterval');
+
+    print('Fetching simulation run $t');
+    try {
+      if (await instance.fetchSimulationRun(t)) {
+        print('Fetch of simulation run $t succeeded');
+      } else {
+        print('Fetch of simulation run $t failed');
+      }
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  HourUtc initial = HourUtc.truncate(DateTime.now().toUtc());
+  // Align to last simulation run before now.
+  initial -= (initial.hour - firstHour) % intervalHours;
+
+  tick(initial);
 }

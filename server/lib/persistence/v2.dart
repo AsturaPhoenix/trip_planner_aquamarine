@@ -437,7 +437,7 @@ class Persistence implements base.Persistence {
             try {
               await writeUv(
                 p1.simulationTime(t) ??
-                    OfsClient.simulationTimes(t, SimulationSchedule.nowcast)
+                    OfsClient.samplesCoveringTime(t, SimulationSchedule.nowcast)
                         .first,
                 await uv.readLatLngHash(),
                 v1.Persistence.uvFile(fileSystem, t).openRead(4),
