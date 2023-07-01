@@ -16,7 +16,7 @@ dependencies:
     git:
       url: https://github.com/AsturaPhoenix/file.dart.git
       path: packages/file
-      ref: 0e8b7def7b4c1efe63a83bf96b1a23fbebe02745
+      ref: 1ffc9bd2dfd4a9be290f6201c8918b30c02909b6
   http: ^0.13.5
   latlng:
     path: ../latlng
@@ -30,7 +30,7 @@ dependency_overrides:
     git:
       url: https://github.com/AsturaPhoenix/file.dart.git
       path: packages/file
-      ref: 0e8b7def7b4c1efe63a83bf96b1a23fbebe02745
+      ref: 1ffc9bd2dfd4a9be290f6201c8918b30c02909b6
 
 dev_dependencies:
   build_runner: ^2.3.3
