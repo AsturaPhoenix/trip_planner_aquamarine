@@ -83,7 +83,7 @@ Future<void> main() async {
                   unawaited(entry.close());
                 }
               }
-            }());
+            }(), context: const {'shelf.io.buffer_output': false});
           })),
     InternetAddress.anyIPv6,
     1080,
