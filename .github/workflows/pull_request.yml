@@ -59,8 +59,6 @@ jobs:
         uses: gradle/gradle-build-action@v2
 
       - name: Build integration test apk
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: flutter build apk -t integration_test/integration_test.dart --debug -v
       - name: Upload integration test apk
         uses: actions/upload-artifact@v3
@@ -87,8 +85,6 @@ jobs:
         uses: gradle/gradle-build-action@v2
 
       - name: Build native test apk
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: flutter build apk -t integration_test/native_test.dart --debug -v
       - name: Upload native test apk
         uses: actions/upload-artifact@v3
