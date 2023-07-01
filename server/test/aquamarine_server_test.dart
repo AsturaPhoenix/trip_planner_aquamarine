@@ -219,8 +219,11 @@ void main() {
 
       // Make sure we can start receiving a new response even while the last one
       // is awaiting a write.
-      await verifyResponse(
-          await server.uv(sampleTime, sampleTime, bounds, .005).first);
+      final responses =
+          StreamIterator(server.uv(sampleTime, sampleTime, bounds, .005));
+      expect(await responses.moveNext(), true);
+      await verifyResponse(responses.current);
+      await responses.cancel();
     });
 
     test('updates response if a newer simulation is available', () async {
