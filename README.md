@@ -72,12 +72,10 @@ flutter drive --driver=test_driver/integration_test.dart --target=integration_te
 Native tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli). We're using an older version of `patrol_cli`; `patrol drive` was removed for the 1.0 release, which sacrificed native screenshots for ability to run on device farms.
 
 ```
-dart pub global activate patrol_cli 0.9.3
+dart run patrol_cli:main drive -t integration_test/native_test.dart
 ```
 
-```
-patrol drive -t integration_test/native_test.dart
-```
+We need to use `dart run`, which uses our `dev_dependencies`, rather than `dart pub global activate` to manage dependencies of `patrol_cli` without upper bounds that may no longer be compatible.
 
 ## Building
 
