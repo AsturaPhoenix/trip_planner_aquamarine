@@ -178,7 +178,6 @@ jobs:
           target: ${{ matrix.target }}
 
       - run: flutter pub get
-      - run: dart pub global activate patrol_cli 0.9.3
 
       - name: Download native test apk
         uses: actions/download-artifact@v3
@@ -195,4 +194,4 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: trip_planner_aquamarine
-          script: patrol drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
+          script: dart run patrol_cli:main drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
