@@ -263,7 +263,7 @@ class CompassState extends State<Compass>
             background: _BackgroundOverlay(accuracy: animatedAccuracy),
             child: GeoOverlay(
               waypoints: [
-                if (widget.waypoint != null) toWaypoint(widget.waypoint!)
+                if (widget.waypoint != null) toWaypoint(widget.waypoint!),
               ],
               position: animatedDevicePosition,
               accuracy: animatedAccuracy,
@@ -319,9 +319,9 @@ class CompassState extends State<Compass>
                     value: value,
                     checked: widget.distanceSystem.value == value,
                     child: Text(value.description),
-                  )
+                  ),
               ],
-            )
+            ),
           ],
         ),
         body: DefaultTextStyle(
@@ -376,7 +376,7 @@ class CompassState extends State<Compass>
                                           cameraController.value.previewSize!;
                                       if (const [
                                         DeviceOrientation.portraitUp,
-                                        DeviceOrientation.portraitDown
+                                        DeviceOrientation.portraitDown,
                                       ].contains(
                                         cameraController
                                             .value.deviceOrientation,
@@ -418,7 +418,7 @@ class CompassState extends State<Compass>
                                     bearingInfo:
                                         bearingInfo(CrossAxisAlignment.start),
                                   ),
-                          )
+                          ),
                         ],
                       );
                     },
@@ -461,7 +461,7 @@ class CompassPortraitLayout extends StatelessWidget {
               child: compass,
             ),
             bearingInfo,
-            Spacer(flex: flex(1 - arLayout / 2))
+            Spacer(flex: flex(1 - arLayout / 2)),
           ],
         ),
       );
@@ -623,7 +623,7 @@ class CompassLandscapeLayoutState extends State<CompassLandscapeLayout>
                   ),
                 ),
                 child: widget.bearingInfo,
-              )
+              ),
             ],
           );
         },
@@ -786,7 +786,7 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                       BlinkingIcon(
                         icons: [Icons.my_location, Icons.location_searching],
                       ),
-                      Icon(Icons.location_disabled)
+                      Icon(Icons.location_disabled),
                     ][gpsState],
                     const SizedBox(width: 8),
                     AnimatedSize(
@@ -818,7 +818,7 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                       waypoint!.shortTitle,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  )
+                  ),
                 ],
               ),
             if (waypoint != null && position.hasData)
@@ -835,7 +835,7 @@ class LocationInfo extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                 ),
-              )
+              ),
           ],
         ),
       );
@@ -894,7 +894,7 @@ class RingStack extends StatelessWidget {
               angle: index / children.length * 2 * pi,
               child: child,
             ),
-          )
+          ),
         ],
       );
 }
@@ -988,7 +988,7 @@ class GeoOverlay extends StatelessWidget {
                 if (position.hasData)
                   for (final waypoint in waypoints)
                     waypoint
-                        .map((location) => location.toHeading(position.data!))
+                        .map((location) => location.toHeading(position.data!)),
               ],
               accuracy: accuracy.data!.radians,
             ),

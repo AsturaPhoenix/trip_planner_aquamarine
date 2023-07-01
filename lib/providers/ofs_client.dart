@@ -173,7 +173,7 @@ class OfsClient extends ChangeNotifier {
         () async => [
           for (final entry in (await _latlng(key.hash))
               .sample(key.bounds, resolution: key.resolution))
-            entry.location
+            entry.location,
         ],
       );
 

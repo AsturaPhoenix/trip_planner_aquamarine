@@ -1,7 +1,7 @@
 name: aquamarine_server_interface
 publish_to: none
 environment:
-  sdk: '>=2.18.4 <3.0.0'
+  sdk: '>=2.19.0 <3.0.0'
 
 dependencies:
   equatable: ^2.0.5

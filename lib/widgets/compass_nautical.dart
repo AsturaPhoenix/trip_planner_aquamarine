@@ -22,7 +22,7 @@ class NauticalCompass extends StatelessWidget {
         _InnerRing.minWidth +
         _InnerRing.mid +
         innerRadius0,
-    128.0
+    128.0,
   ];
 
   static String formatMagneticCorrection(Angle correction) {
@@ -121,11 +121,11 @@ class NauticalCompass extends StatelessWidget {
                                             style: const TextStyle(),
                                             child: child!,
                                           ),
-                                        )
+                                        ),
                                     ],
                                   ),
                                 ),
-                              )
+                              ),
                             ],
                           ),
                         ),
@@ -150,7 +150,7 @@ class NauticalCompass extends StatelessWidget {
                               placement: Placement.inside,
                             ),
                         ],
-                        Icon(Icons.add, color: color)
+                        Icon(Icons.add, color: color),
                       ],
                     ),
                   ),
@@ -231,7 +231,7 @@ class _InnerRing extends StatelessWidget {
                   ),
                   const _Tick(dimension: -major, modulus: 4),
                   const _Tick(dimension: -mid, modulus: 2),
-                  const _Tick(dimension: -minor)
+                  const _Tick(dimension: -minor),
                 ],
               ),
             ),
@@ -277,7 +277,7 @@ class _DecimalRing extends StatelessWidget {
                     Align(
                       alignment: Alignment.topCenter,
                       child: Text('$degrees'),
-                    )
+                    ),
                 ],
               ),
               CustomPaint(
@@ -290,10 +290,10 @@ class _DecimalRing extends StatelessWidget {
                     _Tick(dimension: major, modulus: 10 ~/ increment),
                     if (increment == 1)
                       _Tick(dimension: mid, modulus: 5 ~/ increment),
-                    const _Tick(dimension: minor)
+                    const _Tick(dimension: minor),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ),

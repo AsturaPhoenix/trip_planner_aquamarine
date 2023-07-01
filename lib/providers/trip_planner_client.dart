@@ -200,7 +200,7 @@ Map<StationId, Station> parseStations(String xml) => {
       for (final station in XmlDocument.parse(xml)
           .findAllElements('station')
           .map(Station.fromXml))
-        station.id: station
+        station.id: station,
     };
 
 LatLng latLngFromXml(XmlElement node) => LatLng(
@@ -293,7 +293,7 @@ class Station {
         details = node.findElements('details').firstOrNull?.innerText,
         outlines = [
           for (final outline in node.findElements('outline'))
-            [...outline.findElements('coord').map(latLngFromXml)]
+            [...outline.findElements('coord').map(latLngFromXml)],
         ];
   Station.read(BinaryReader reader)
       : id = StationId.parse(reader.readString()),
@@ -307,7 +307,7 @@ class Station {
             Optional.string(reader.readString()).map(StationId.parse),
         details = Optional.string(reader.readString()).value,
         outlines = [
-          for (final outline in reader.readList()) (outline as List).cast()
+          for (final outline in reader.readList()) (outline as List).cast(),
         ];
 
   final StationId id;

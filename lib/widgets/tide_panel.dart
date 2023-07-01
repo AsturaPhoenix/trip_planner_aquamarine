@@ -642,7 +642,7 @@ class TideGraphState extends State<TideGraph> {
                       .weekday],
                   textAlign: TextAlign.center,
                 ),
-              )
+              ),
           ],
         ),
       ),
@@ -990,7 +990,7 @@ class DaysMenuRoute extends PopupRoute<int> {
                     ),
                     onPressed: () => Navigator.of(context).pop(days),
                     child: Text(days.toString()),
-                  )
+                  ),
               ],
             ),
           ),

@@ -86,7 +86,7 @@ class ColorPickerDialogState extends State<ColorPickerDialog>
                             crossAxisSpacing: 5,
                             mainAxisSpacing: 5,
                             children: [
-                              for (final color in colors) child(color)
+                              for (final color in colors) child(color),
                             ],
                           ),
                         ),

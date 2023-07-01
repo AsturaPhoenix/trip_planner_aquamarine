@@ -48,10 +48,10 @@ class ClassicCompass extends StatelessWidget {
                         painter: CompassArrow(elevation: 4),
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
-            )
+            ),
           ],
         ),
       );
@@ -78,7 +78,7 @@ class CompassRose extends StatelessWidget {
                   TextStyle(
                     fontSize: fontSize * fontScale,
                     fontWeight: FontWeight.bold,
-                  )
+                  ),
               ];
 
               return RingStack(
@@ -89,12 +89,12 @@ class CompassRose extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: textStyles[index % 2],
                     ),
-                  )
+                  ),
                 ],
               );
             },
           ),
-          if (child != null) child!
+          if (child != null) child!,
         ],
       );
 }
@@ -124,7 +124,7 @@ class CompassArrow extends CustomPainter {
       Color(0xffc84031),
       Color(0xffb73327),
       Color(0xffd1d3d7),
-      Color(0xffbdc0c5)
+      Color(0xffbdc0c5),
     ];
 
     for (int i = 0; i < 4; ++i) {

@@ -70,7 +70,7 @@ class CacheBoxSet {
       }
     } on Object {
       log.warning('Deleting boxes ${[
-        for (final boxOpener in boxOpeners.keys) boxOpener.name
+        for (final boxOpener in boxOpeners.keys) boxOpener.name,
       ]} and reopening.');
       await Future.wait(boxOpeners.keys.map((boxOpener) => boxOpener.delete()));
       for (final entry in boxOpeners.entries) {

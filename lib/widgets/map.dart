@@ -276,7 +276,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
               color: track.color,
               points: [for (final point in segment.points) point.toFml()],
               strokeWidth: 2,
-            )
+            ),
     ];
   }
 
@@ -537,7 +537,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 
       selectedTrackIds(Iterable<Track> tracks) => {
             for (final track in tracks)
-              if (track.selected) track.key
+              if (track.selected) track.key,
           };
 
       if (!setEquals(
@@ -686,9 +686,9 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                             point: latlng.toFml(),
                             radius: 6,
                             color: track.color,
-                          )
+                          ),
                       ];
-                    }()
+                    }(),
             ],
           ),
           ValueListenableBuilder(
@@ -793,7 +793,7 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
                               position.data!.toLatLng(),
                               _MarkerMetrics.location,
                               (context) => Text(formatPosition(position.data!)),
-                            )
+                            ),
                         ],
                       ),
                     );
@@ -880,8 +880,8 @@ class MapState extends State<Map> with SingleTickerProviderStateMixin {
 extension on List<Widget> {
   List<Widget> delimit(Widget delimiter) => [
         ...[
-          for (final e in this) ...[delimiter, e]
-        ].skip(1)
+          for (final e in this) ...[delimiter, e],
+        ].skip(1),
       ];
 }
 
@@ -954,7 +954,7 @@ class MapControls extends StatelessWidget {
                 Icon(Icons.waves, color: showCurrents ? null : Colors.black26),
             onPressed: () => setShowCurrents(!showCurrents),
           ),
-        )
+        ),
       ],
     );
     return LayoutBuilder(
@@ -977,7 +977,7 @@ class MapControls extends StatelessWidget {
                   if (!wrap) ...[
                     lodControls,
                     layerControls,
-                  ]
+                  ],
                 ].delimit(const SizedBox(height: spacing)),
               ),
             ),
@@ -1178,7 +1178,7 @@ class LodControls extends StatelessWidget {
                     opacity: const AlwaysStoppedAnimation(.625),
                     excludeFromSemantics: true,
                   ),
-                  const Icon(Icons.add)
+                  const Icon(Icons.add),
                 ],
               ),
             ),
@@ -1210,7 +1210,7 @@ class LodControls extends StatelessWidget {
                     opacity: const AlwaysStoppedAnimation(.625),
                     excludeFromSemantics: true,
                   ),
-                  const Icon(Icons.remove)
+                  const Icon(Icons.remove),
                 ],
               ),
             ),
@@ -1315,7 +1315,7 @@ _StationLayers _buildStationLayers({
                 child: Polygon(
                   key: ValueKey(_StationPolygonId(station.id, i)),
                   vertices: [
-                    for (final point in station.outlines[i]) point.toFml()
+                    for (final point in station.outlines[i]) point.toFml(),
                   ],
                   style: const PolygonStyle(
                     fillColor: Color(0x40ff0000),
@@ -1337,7 +1337,7 @@ _StationLayers _buildStationLayers({
     polygonLayer: Stack(children: polygons),
     markerLayers: [
       for (final markers in markersForLayer.reversed)
-        MarkerLayer(rotate: true, rotateAlignment: null, markers: markers)
+        MarkerLayer(rotate: true, rotateAlignment: null, markers: markers),
     ],
   );
 }

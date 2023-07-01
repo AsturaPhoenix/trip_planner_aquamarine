@@ -35,7 +35,7 @@ class Segment {
         times = [
           for (int i = 0; i < trkpts.length; ++i)
             if (trkpts[i].time != null)
-              TimePoint(index: i, time: Instant(trkpts[i].time!))
+              TimePoint(index: i, time: Instant(trkpts[i].time!)),
         ];
 
   final Key key;
@@ -176,7 +176,7 @@ class PlotPanelState extends State<PlotPanel>
           for (int i = 0; i < lb; ++i) tracks[i].copyWith(selected: false),
           for (int i = lb; i <= ub; ++i) tracks[i].copyWith(selected: true),
           for (int i = ub + 1; i < tracks.length; ++i)
-            tracks[i].copyWith(selected: false)
+            tracks[i].copyWith(selected: false),
         ]);
       }
     } else {
@@ -184,7 +184,7 @@ class PlotPanelState extends State<PlotPanel>
       selectionStart = select ? index : null;
       widget.onTracksChanged([
         for (final track in tracks)
-          track.copyWith(selected: track == current && select)
+          track.copyWith(selected: track == current && select),
       ]);
     }
   }
@@ -193,7 +193,7 @@ class PlotPanelState extends State<PlotPanel>
     selectionStart = current.selected ? null : index;
     widget.onTracksChanged([
       for (final track in tracks)
-        track == current ? track.copyWith(selected: !track.selected) : track
+        track == current ? track.copyWith(selected: !track.selected) : track,
     ]);
   }
 
@@ -204,14 +204,14 @@ class PlotPanelState extends State<PlotPanel>
 
     widget.onTracksChanged([
       for (final track in tracks)
-        track == current ? track.copyWith(color: color) : track
+        track == current ? track.copyWith(color: color) : track,
     ]);
   }
 
   void _removeTrack(Track current) {
     widget.onTracksChanged([
       for (final track in tracks)
-        if (track != current) track
+        if (track != current) track,
     ]);
   }
 
@@ -228,7 +228,7 @@ class PlotPanelState extends State<PlotPanel>
     if (files == null) return;
 
     final tracks = [
-      for (final track in this.tracks) track.copyWith(selected: false)
+      for (final track in this.tracks) track.copyWith(selected: false),
     ];
     bool tracksAdded = false;
 
@@ -243,7 +243,7 @@ class PlotPanelState extends State<PlotPanel>
             name: trk.name ?? basenameWithoutExtension(file.name),
             segments: [
               for (final trkseg in trk.trksegs)
-                Segment(key: UniqueKey(), trkpts: trkseg.trkpts)
+                Segment(key: UniqueKey(), trkpts: trkseg.trkpts),
             ],
             selected: true,
           ),
@@ -275,7 +275,7 @@ class PlotPanelState extends State<PlotPanel>
       for (final track in tracks)
         if (track.selected)
           for (final segment in track.segments)
-            segment: _speeds[segment] ?? segment.deriveSpeeds()
+            segment: _speeds[segment] ?? segment.deriveSpeeds(),
     };
 
     _maxSpeed = null;
@@ -378,7 +378,7 @@ class PlotPanelState extends State<PlotPanel>
                             selected: tracks[i].selected,
                             onTap: () => _onTrackTap(i, tracks[i]),
                             onLongPress: () => _toggleTrack(i, tracks[i]),
-                          )
+                          ),
                       ],
                     ),
                   ),
@@ -414,7 +414,7 @@ class PlotPanelState extends State<PlotPanel>
                                     domainFn: (datum, _) => datum.time.value,
                                     measureFn: (datum, _) =>
                                         datum.value.forSystem(distanceSystem),
-                                  )
+                                  ),
                           ],
                           animate: false,
                           primaryMeasureAxis: charts.NumericAxisSpec(
@@ -452,8 +452,8 @@ class PlotPanelState extends State<PlotPanel>
                               groupValue: distanceSystem,
                               onChanged: _setDistanceSystem,
                             ),
-                            Text(Speed.systemDescription(value))
-                          ]
+                            Text(Speed.systemDescription(value)),
+                          ],
                         ],
                       ),
                     ),

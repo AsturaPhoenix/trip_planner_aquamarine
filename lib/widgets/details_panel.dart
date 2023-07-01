@@ -40,7 +40,7 @@ class DetailsPanelState extends State<DetailsPanel>
     final hasScrollbar = const {
       TargetPlatform.linux,
       TargetPlatform.macOS,
-      TargetPlatform.windows
+      TargetPlatform.windows,
     }.contains(defaultTargetPlatform);
 
     return SingleChildScrollView(
@@ -141,7 +141,7 @@ class PoiDetails extends StatelessWidget {
                       )
                     : image;
               },
-            )
+            ),
           },
           onLinkTap: onLinkTap,
         ),

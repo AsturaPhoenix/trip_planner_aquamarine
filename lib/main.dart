@@ -66,7 +66,7 @@ class TripPlanner extends StatefulWidget {
   static Future<void> initAsyncGlobals() => Future.wait([
         orientation.prefetchCapabilities(),
         SharedPreferences.getInstance()
-            .then((instance) => sharedPreferences = instance)
+            .then((instance) => sharedPreferences = instance),
       ]);
 
   // tp.js: show_hide_marker
@@ -87,7 +87,7 @@ class TripPlanner extends StatefulWidget {
 
   static bool _launchDestinationFilter(Station station) => const {
         StationType.launch,
-        StationType.destination
+        StationType.destination,
       }.contains(station.type);
 
   static bool _nogoFilter(Station station) => station.type == StationType.nogo;
@@ -425,7 +425,7 @@ class TripPlannerState extends State<TripPlanner> {
                     ),
                     icon: const Icon(Icons.explore),
                     tooltip: 'Compass',
-                  )
+                  ),
               ],
             ),
             body: ListenableBuilder(
@@ -527,10 +527,10 @@ class TripPlannerState extends State<TripPlanner> {
                                                     scrollController,
                                               ),
                                             ),
-                                          )
+                                          ),
                                         ],
                                       ),
-                                    )
+                                    ),
                                 ],
                               );
                             },
