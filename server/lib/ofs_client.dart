@@ -9,6 +9,7 @@ import 'package:aquamarine_server_interface/types.dart';
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:logging/logging.dart';
 
 import 'types.dart';
 
@@ -23,6 +24,8 @@ class LatLngUv {
 }
 
 class OfsClient {
+  static final log = Logger('OfsClient');
+
   /// Determines the simulation runs that would cover the target time [t].
   static Iterable<SimulationTime> samplesCoveringTime(
     HourUtc t,
@@ -228,15 +231,22 @@ class OfsClient {
 
   Future<http.ByteStream?> fetchResource(
       SimulationTime s, List<String> query) async {
+    final request = resourceUri(simulationTime: s, query: query);
     final http.StreamedResponse response;
     try {
-      response = await client.send(
-          http.Request('get', resourceUri(simulationTime: s, query: query)));
-    } on http.ClientException {
+      log.info('get $request');
+      response = await client.send(http.Request('get', request));
+    } on http.ClientException catch (e, s) {
+      log.warning('$request failed', e, s);
       return null;
     }
 
-    return response.statusCode == HttpStatus.ok ? response.stream : null;
+    if (response.statusCode == HttpStatus.ok) {
+      return response.stream;
+    } else {
+      log.warning('$request returned status code ${response.statusCode}');
+      return null;
+    }
   }
 
   Future<Stream<Uint8List>?> fetchLatLng(SimulationTime s) async {

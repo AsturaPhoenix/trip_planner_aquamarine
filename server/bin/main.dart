@@ -132,7 +132,7 @@ Future<void> main() async {
 
     log.info('Fetching simulation run $t');
     try {
-      if (await instance.fetchSimulationRun(t)) {
+      if (await instance.fetchSimulationRun(t, failFast: false)) {
         log.info('Fetch of simulation run $t succeeded');
       } else {
         log.info('Fetch of simulation run $t failed');
