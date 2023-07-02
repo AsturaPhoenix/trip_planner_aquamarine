@@ -6,6 +6,7 @@ import 'package:aquamarine_server_interface/types.dart';
 import 'package:aquamarine_util/async.dart';
 import 'package:async/async.dart' hide AsyncCache;
 import 'package:latlng/latlng.dart';
+import 'package:logging/logging.dart';
 
 import 'ofs_client.dart';
 import 'persistence/caching.dart';
@@ -53,6 +54,8 @@ class UvRequestContext {
 }
 
 class AquamarineServer {
+  static final log = Logger('AquamarineServer');
+
   AquamarineServer({
     required this.ofsClient,
     required Persistence persistence,
@@ -234,9 +237,12 @@ class AquamarineServer {
   /// [runTime], skipping samples for which a refresh is already underway or for
   /// which the latest simulation has already been fetched. Samples are fetched
   /// one at a time to avoid clogging the network. Returns true if all samples
-  /// were available. If any sample is missing, including any for which a
-  /// refresh was already underway, returns false and aborts.
-  Future<bool> fetchSimulationRun(HourUtc runTime) async {
+  /// were available. Returns false if any of the fetches fails, including any
+  /// for which a refresh was already underway.
+  Future<bool> fetchSimulationRun(
+    HourUtc runTime, {
+    bool failFast = true,
+  }) async {
     Future<bool> needsRefresh(HourUtc t) async {
       final reader = await persistence.readUv(t);
       if (reader == null) return true;
@@ -247,6 +253,7 @@ class AquamarineServer {
       }
     }
 
+    bool allSucceeded = true;
     Hex32? latlngHash;
     for (final simulationTime
         in OfsClient.samplesForRun(runTime, SimulationSchedule.nowcast)
@@ -254,7 +261,12 @@ class AquamarineServer {
                 OfsClient.samplesForRun(runTime, SimulationSchedule.forecast)
                     // Forecast 0 overlaps with nowcast 6.
                     .skip(1))) {
-      if (!await needsRefresh(simulationTime.representedTimestamp)) continue;
+      if (!await needsRefresh(simulationTime.representedTimestamp)) {
+        log.info('Skipping up-to-date sample $simulationTime');
+        continue;
+      }
+
+      log.info('Fetching $simulationTime');
 
       if (!await uvRefreshCache
           .computeIfAbsent(simulationTime.representedTimestamp, () async {
@@ -276,9 +288,16 @@ class AquamarineServer {
           await persistence.writeUv(simulationTime, latlngHash!, uv);
         }
         return true;
-      })) return false;
+      })) {
+        log.warning('Unable to fetch $simulationTime');
+        if (failFast) {
+          return false;
+        } else {
+          allSucceeded = false;
+        }
+      }
     }
 
-    return true;
+    return allSucceeded;
   }
 }
