@@ -20,6 +20,7 @@ dependencies:
   http: ^0.13.5
   latlng:
     path: ../latlng
+  logging: ^1.2.0
   mutex: ^3.0.1
   path: ^1.8.2
   shelf: ^1.4.0
