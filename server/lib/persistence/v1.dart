@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:file/file.dart';
 import 'package:file/local.dart';
+import 'package:logging/logging.dart';
 import 'package:mutex/mutex.dart';
 
 import '../ofs_client.dart';
@@ -33,6 +34,8 @@ class UvReader {
 }
 
 class Persistence {
+  static final log = Logger('Persistence v1');
+
   static const root = 'persistence',
       latlngDirectory = '$root/latlng',
       uvDirectory = '$root/uv';
@@ -62,8 +65,8 @@ class Persistence {
     Map<HourUtc, SimulationTime> simulationTimes;
     try {
       simulationTimes = await readSimulationTimes(fileSystem);
-    } on Exception {
-      print('Unable to load simulation times from disk.');
+    } on Object {
+      log.warning('Unable to load simulation times from disk.');
       simulationTimes = {};
     }
     return Persistence(fileSystem, simulationTimes: simulationTimes);

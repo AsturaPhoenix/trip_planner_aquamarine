@@ -8,6 +8,7 @@ import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:file/file.dart';
 import 'package:file/local.dart';
+import 'package:logging/logging.dart';
 import 'package:path/path.dart';
 
 import '../mutex.dart';
@@ -46,6 +47,8 @@ class UvReader implements base.UvReader {
 }
 
 class Persistence implements base.Persistence {
+  static final log = Logger('Persistence v2');
+
   static const root = 'persistence/v2',
       latlngDirectory = '$root/latlng',
       uvDirectory = '$root/uv';
@@ -71,8 +74,8 @@ class Persistence implements base.Persistence {
     Map<HourUtc, SimulationTime> simulationTimes;
     try {
       simulationTimes = await readSimulationTimes(fileSystem);
-    } on Exception {
-      print('Unable to load simulation times from disk.');
+    } on Object {
+      log.warning('Unable to load simulation times from disk.');
       simulationTimes = {};
     }
     final persistence =
@@ -85,7 +88,7 @@ class Persistence implements base.Persistence {
         verify.add(persistence.verifyLatLng(file: latlng as File));
       }
       await Future.wait(verify);
-      print('Housekeeping complete.');
+      log.info('Housekeeping complete.');
     }();
     if (blockUntilVerified) {
       await housekeeping;
@@ -145,7 +148,7 @@ class Persistence implements base.Persistence {
   ///
   /// If the contents of the file do not match the hash, the file is deleted.
   Future<void> verifyLatLng({File? file, Hex32? hash}) async {
-    print('Verifying latlng $file');
+    log.info('Verifying latlng $file');
     hash ??= Hex32.parse(basename(file!.path));
     file ??= latlngFile(fileSystem, hash);
 
@@ -197,7 +200,7 @@ class Persistence implements base.Persistence {
       if (hash != await computeHash()) {
         mutex.transientRelease();
         if (await mutex.acquireWrite()) {
-          print('Deleting corrupt latlng file $hash');
+          log.warning('Deleting corrupt latlng file $hash');
           await file.delete();
         }
       }
@@ -300,7 +303,8 @@ class Persistence implements base.Persistence {
         final expectedSimulationTime =
             OfsClient.needsFutureRefresh(s) ? s : null;
         if (_simulationTimes[t] != expectedSimulationTime) {
-          print('Metadata corruption; backfilling simulation time $s for $t');
+          log.warning(
+              'Metadata corruption; backfilling simulation time $s for $t');
           if (expectedSimulationTime != null) {
             _simulationTimes[t] = expectedSimulationTime;
           } else {
@@ -320,7 +324,7 @@ class Persistence implements base.Persistence {
         await raf.close();
         mutex.transientRelease();
         if (await mutex.acquireWrite()) {
-          print('Deleting corrupt uv file $t');
+          log.warning('Deleting corrupt uv file $t');
           await file.delete();
         }
       } finally {
@@ -405,32 +409,32 @@ class Persistence implements base.Persistence {
     {
       final latlng = fileSystem.directory(v1.Persistence.latlngDirectory);
       if (await latlng.exists()) {
-        print('Migrating latlng from v1');
+        log.info('Migrating latlng from v1');
         p1 = await loadV1();
         await for (final file in latlng.list()) {
-          print('Migrating $file');
+          log.info('Migrating $file');
           try {
             final hash = Hex32.parse(basename(file.path));
             await writeLatLng(hash, (await p1.readLatLng(hash))!);
             await file.delete();
           } catch (e, s) {
-            print('Error while migrating $file: $e $s');
+            log.warning('Error while migrating $file', e, s);
           }
         }
         try {
           await latlng.delete();
         } catch (e, s) {
-          print('Could not delete $latlng: $e $s');
+          log.warning('Could not delete $latlng', e, s);
         }
       }
     }
     {
       final uv = fileSystem.directory(v1.Persistence.uvDirectory);
       if (await uv.exists()) {
-        print('Migrating uv from v1');
+        log.info('Migrating uv from v1');
         p1 ??= await loadV1();
         await for (final file in uv.list()) {
-          print('Migrating $file');
+          log.info('Migrating $file');
           try {
             final t = HourUtc.fromDateTime(DateTime.parse(basename(file.path)));
             final uv = await p1.readUv(t);
@@ -447,13 +451,13 @@ class Persistence implements base.Persistence {
             }
             await file.delete();
           } catch (e, s) {
-            print('Error while migrating $file: $e $s');
+            log.warning('Error while migrating $file', e, s);
           }
         }
         try {
           await uv.delete();
         } catch (e, s) {
-          print('Could not delete $uv: $e $s');
+          log.warning('Could not delete $uv', e, s);
         }
       }
     }

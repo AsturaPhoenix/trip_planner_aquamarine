@@ -9,11 +9,38 @@ import 'package:aquamarine_server/persistence/v2.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlng/latlng.dart';
+import 'package:logging/logging.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 
+void initializeLogger() {
+  Logger.root.onRecord.listen((record) {
+    final Stdout out;
+    if (record.level >= Level.WARNING) {
+      out = stderr;
+    } else if (record.level >= Level.CONFIG) {
+      out = stdout;
+    } else {
+      return;
+    }
+
+    out.writeln('[${record.time.toUtc()}] ${record.level} '
+        '${record.loggerName}: ${record.message}');
+    if (record.error != null) {
+      out.writeln('\t${record.error}');
+    }
+    if (record.stackTrace != null) {
+      out.writeln(record.stackTrace);
+    }
+  });
+}
+
 Future<void> main() async {
+  initializeLogger();
+
+  final log = Logger('main'), requestLog = Logger('request');
+
   const headers = {'Access-Control-Allow-Origin': '*'};
 
   final instance = AquamarineServer(
@@ -64,10 +91,10 @@ Future<void> main() async {
                 resolution = value == null ? 0 : double.parse(value);
               }
 
-              print('uv: begin: $begin, end: $end, '
+              requestLog.info('uv: begin: $begin, end: $end, '
                   'bounds: $bounds, resolution: $resolution');
-            } on Object catch (e) {
-              print(e);
+            } on Object catch (e, s) {
+              log.warning(e, e, s);
               return Response.badRequest();
             }
 
@@ -88,7 +115,7 @@ Future<void> main() async {
     InternetAddress.anyIPv6,
     1080,
   );
-  print('Serving at http://${server.address.host}:${server.port}');
+  log.info('Serving at http://${server.address.host}:${server.port}');
 
   // TODO(AsturaPhoenix): common SimulationSchedule for nowcasts and forecast
   // runs
@@ -101,17 +128,17 @@ Future<void> main() async {
     final next = t + intervalHours;
     final nextInterval = next.t.add(padding).difference(DateTime.now());
     Timer(nextInterval, () => tick(next));
-    print('Next fetch scheduled in $nextInterval');
+    log.info('Next fetch scheduled in $nextInterval');
 
-    print('Fetching simulation run $t');
+    log.info('Fetching simulation run $t');
     try {
       if (await instance.fetchSimulationRun(t)) {
-        print('Fetch of simulation run $t succeeded');
+        log.info('Fetch of simulation run $t succeeded');
       } else {
-        print('Fetch of simulation run $t failed');
+        log.info('Fetch of simulation run $t failed');
       }
-    } catch (e) {
-      print(e);
+    } catch (e, s) {
+      log.warning('Fetch of simulation run $t failed with an exception', e, s);
     }
   }
 
