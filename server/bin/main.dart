@@ -16,22 +16,24 @@ import 'package:shelf_router/shelf_router.dart';
 
 void initializeLogger() {
   Logger.root.onRecord.listen((record) {
-    final Stdout out;
-    if (record.level >= Level.WARNING) {
-      out = stderr;
-    } else if (record.level >= Level.CONFIG) {
-      out = stdout;
-    } else {
-      return;
+    final message = '[${record.time.toUtc()}] ${record.level} '
+        '${record.loggerName}: ${record.message}';
+
+    if (record.level >= Level.WARNING ||
+        record.error != null ||
+        record.stackTrace != null) {
+      stderr.writeln(message);
     }
 
-    out.writeln('[${record.time.toUtc()}] ${record.level} '
-        '${record.loggerName}: ${record.message}');
+    if (record.level >= Level.CONFIG) {
+      stdout.writeln(message);
+    }
+
     if (record.error != null) {
-      out.writeln('\t${record.error}');
+      stderr.writeln('\t${record.error}');
     }
     if (record.stackTrace != null) {
-      out.writeln(record.stackTrace);
+      stderr.writeln(record.stackTrace);
     }
   });
 }
