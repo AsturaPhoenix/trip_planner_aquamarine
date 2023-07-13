@@ -7,16 +7,16 @@ This is a prototype cross-platform port of the BASK Trip Planner, for better off
 This project uses [Flutter](https://flutter.dev/). Install the dependencies as outlined at https://docs.flutter.dev/get-started/install, possibly stopping short of installing Flutter itself.
 
 Flutter needs a fork to address a couple issues:
-* https://github.com/flutter/flutter/issues/116212
-* <s>https://github.com/flutter/flutter/issues/82016</s> (still open but no longer required)
-* https://github.com/flutter/flutter/issues/119966
-* https://github.com/flutter/flutter/issues/102469
+* [flutter/flutter#116212](https://github.com/flutter/flutter/issues/116212)
+* <s>[flutter/flutter#82016](https://github.com/flutter/flutter/issues/82016)</s> (still open but no longer required)
+* [flutter/flutter#119966](https://github.com/flutter/flutter/issues/119966)
+* [flutter/flutter#102469](https://github.com/flutter/flutter/issues/102469)
 
 Fixes are at `git@github.com:AsturaPhoenix/flutter.git`, branch: `rosswang`. To use this fork,
 ```
-git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang --depth 1
+git clone git@github.com:AsturaPhoenix/flutter.git -b rosswang
 ```
-(optionally omitting `--depth 1` if you anticipate working on the Flutter fork). Then proceed with the instructions at https://docs.flutter.dev/get-started/install after the analogous `git clone`.
+Then proceed with the instructions at https://docs.flutter.dev/get-started/install after the analogous `git clone`. Note a shallow clone will not work ([flutter/flutter#18532](https://github.com/flutter/flutter/issues/18532)).
 
 The project will probably build and run with a stock Flutter install, but there will be bugs, and integration tests won't work.
 
@@ -98,6 +98,11 @@ CI pushes a release build of the master branch to the alpha server at http://34.
 **Analysis failures in CI but not locally**
 
 * Try running `flutter pub upgrade` to pull the latest compatible versions of dependencies.
+
+**Flutter tools fail complaining of "v0.0.0-unknown"**
+
+* Shallow checkouts of Flutter will not work ([flutter/flutter#18532](https://github.com/flutter/flutter/issues/18532)).
+* Run `git fetch --unshallow` in your Flutter repo.
 
 ### Web
 
