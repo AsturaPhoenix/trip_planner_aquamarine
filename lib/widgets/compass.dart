@@ -339,7 +339,7 @@ class CompassState extends State<Compass>
                   final decomposition =
                       QuaternionDecomposition(animatedOrientation.data);
 
-                  // Planar deviation at which to enable the
+                  // Planar deviation at which to enable the camera.
                   const arThreshold = .5;
 
                   if (decomposition.planarDeviation > arThreshold) {
@@ -356,8 +356,8 @@ class CompassState extends State<Compass>
                       return Stack(
                         fit: StackFit.expand,
                         children: [
-                          // Don't show the camera UI at all if we know there's no
-                          //
+                          // Don't show the camera UI at all if we know there's
+                          // no camera.
                           if (camera.connectionState ==
                                   ConnectionState.waiting ||
                               cameraController != null)
