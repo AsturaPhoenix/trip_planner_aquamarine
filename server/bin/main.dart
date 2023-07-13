@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:aquamarine_server/aquamarine_server.dart';
 import 'package:aquamarine_server/ofs_client.dart';
+import 'package:aquamarine_server/persistence/caching.dart';
 import 'package:aquamarine_server/persistence/v2.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:http/http.dart' as http;
@@ -47,7 +48,7 @@ Future<void> main() async {
 
   final instance = AquamarineServer(
     ofsClient: OfsClient(client: http.Client()),
-    persistence: await Persistence.load(),
+    persistence: CachingPersistence(await Persistence.load(), uvCacheSize: 64),
   );
   final server = await io.serve(
     Pipeline()

@@ -9,7 +9,6 @@ import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
 
 import 'ofs_client.dart';
-import 'persistence/caching.dart';
 import 'persistence/persistence.dart';
 import 'types.dart';
 
@@ -58,9 +57,9 @@ class AquamarineServer {
 
   AquamarineServer({
     required this.ofsClient,
-    required Persistence persistence,
+    required this.persistence,
     this.clock = DateTime.now,
-  }) : persistence = CachingPersistence(persistence);
+  });
 
   final OfsClient ofsClient;
   final Persistence persistence;

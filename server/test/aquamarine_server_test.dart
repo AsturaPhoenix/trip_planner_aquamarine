@@ -256,11 +256,11 @@ void main() {
       final responses =
           StreamIterator(server.uv(sampleTime, sampleTime, bounds, .005));
       expect(await responses.moveNext(), true);
-      verifyResponse(responses.current);
+      await verifyResponse(responses.current);
 
       controller.add(partialData[1]);
       expect(await responses.moveNext(), true);
-      verifyResponse(responses.current);
+      await verifyResponse(responses.current);
 
       expect(await responses.moveNext(), false);
       expect(persistence.allClosed, true);
