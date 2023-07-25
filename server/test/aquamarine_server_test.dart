@@ -178,6 +178,9 @@ void main() {
         clock: () => DateTime.utc(2023, 04, 01),
       );
 
+      when(ofsClient.fetchLatLngUv(simulationTime))
+          .thenAnswer((_) async => throw ResourceException(Uri(), 404));
+
       await verifyResponses(server.uv(sampleTime, sampleTime, bounds, .005));
 
       verify(ofsClient.fetchLatLngUv(simulationTime));
@@ -320,7 +323,7 @@ void main() {
           .thenAnswer((_) async => StreamController<Uint8List>().stream);
       when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
 
-      expect(await server.fetchSimulationRun(t), true);
+      expect(await server.fetchSimulationRun(t), FetchResult.success);
 
       verify(ofsClient.fetchLatLngUv(any)).called(1);
       verify(ofsClient.fetchLatLng(any)).called(1);
@@ -353,13 +356,36 @@ void main() {
         clock: () => t.t,
       );
 
-      expect(await server.fetchSimulationRun(t), false);
+      when(ofsClient.fetchLatLngUv(any))
+          .thenAnswer((_) async => throw ResourceException(Uri(), 404));
+
+      expect(await server.fetchSimulationRun(t), FetchResult.unavailable);
 
       verify(ofsClient.fetchLatLngUv(any)).called(1);
       verifyNever(ofsClient.fetchLatLng(any));
       verifyNever(ofsClient.fetchUv(any));
       verifyNever(persistence.writeLatLng(any, any));
       verifyNever(persistence.writeUv(any, any, any));
+    });
+
+    test('continues trying in the case of transient failures', () async {
+      final ofsClient = MockOfsClient();
+      final persistence = MockPersistence();
+
+      final t = simulationTime.timestamp;
+
+      final server = AquamarineServer(
+        ofsClient: ofsClient,
+        persistence: persistence,
+        clock: () => t.t,
+      );
+
+      when(ofsClient.fetchLatLngUv(any))
+          .thenAnswer((_) async => throw ResourceException(Uri(), 500));
+
+      expect(await server.fetchSimulationRun(t), FetchResult.transientFailure);
+
+      verify(ofsClient.fetchLatLngUv(any)).called(6 + 1 + 48);
     });
 
     test('skips up-to-date hours', () async {
@@ -388,7 +414,7 @@ void main() {
           .thenAnswer((_) async => StreamController<Uint8List>().stream);
       when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
 
-      expect(await server.fetchSimulationRun(t), true);
+      expect(await server.fetchSimulationRun(t), FetchResult.success);
 
       verify(ofsClient.fetchLatLngUv(any)).called(1);
       verifyNever(ofsClient.fetchLatLng(any));
@@ -425,7 +451,7 @@ void main() {
           .thenAnswer((_) async => StreamController<Uint8List>().stream);
       when(ofsClient.fetchUv(any)).thenAnswer((_) async => Stream.empty());
 
-      expect(await server.fetchSimulationRun(t), true);
+      expect(await server.fetchSimulationRun(t), FetchResult.success);
 
       verify(ofsClient.fetchLatLngUv(any)).called(1);
       verifyNever(ofsClient.fetchLatLng(any));
@@ -455,7 +481,7 @@ void main() {
           // This leaks LatLngUvs, but that's okay for a test.
           (await OfsClient.readLatLngUv(Stream.value(kOfsNcDods))).uv);
 
-      expect(await server.fetchSimulationRun(t), true);
+      expect(await server.fetchSimulationRun(t), FetchResult.success);
 
       verify(ofsClient.fetchLatLngUv(any)).called(1);
       verify(ofsClient.fetchLatLng(any)).called(1);
@@ -463,7 +489,7 @@ void main() {
           SimulationSchedule.nowcast.coverageHours +
               SimulationSchedule.forecast.coverageHours);
 
-      expect(await server.fetchSimulationRun(t), true);
+      expect(await server.fetchSimulationRun(t), FetchResult.success);
 
       verifyNoMoreInteractions(ofsClient);
     });
