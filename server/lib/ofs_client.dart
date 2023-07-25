@@ -45,9 +45,10 @@ class OfsClient {
     SimulationSchedule schedule,
   ) sync* {
     final baseHour = t + schedule.referenceHour;
-    for (int i = (t.hour - schedule.firstHour) % schedule.intervalHours;
+    for (int i = (t.hour - SimulationSchedule.firstHour) %
+            SimulationSchedule.intervalHours;
         i <= schedule.coverageHours;
-        i += schedule.intervalHours) {
+        i += SimulationSchedule.intervalHours) {
       yield SimulationTime(schedule, baseHour - i, i);
     }
   }
@@ -63,7 +64,9 @@ class OfsClient {
   /// Enumerates the [SimulationTime]s produced by a simulation run at time [t].
   static Iterable<SimulationTime> samplesForRun(
       HourUtc t, SimulationSchedule schedule) sync* {
-    if ((t.hour - schedule.firstHour) % schedule.intervalHours != 0) {
+    if ((t.hour - SimulationSchedule.firstHour) %
+            SimulationSchedule.intervalHours !=
+        0) {
       throw ArgumentError('No simulation run for schedule at time t.');
     }
 
