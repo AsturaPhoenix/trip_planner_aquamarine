@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:aquamarine_server/aquamarine_server.dart';
+import 'package:aquamarine_server/fetch_scheduler.dart';
 import 'package:aquamarine_server/ofs_client.dart';
 import 'package:aquamarine_server/persistence/caching.dart';
 import 'package:aquamarine_server/persistence/v2.dart';
@@ -120,53 +121,5 @@ Future<void> main() async {
   );
   log.info('Serving at http://${server.address.host}:${server.port}');
 
-  // TODO(AsturaPhoenix): common SimulationSchedule for nowcasts and forecast
-  // runs
-  const firstHour = 3, intervalHours = 6;
-  // Observed empirically from catalog timestamps.
-  // TODO(AsturaPhoenix): adaptive scheduling
-  const padding = Duration(minutes: 45);
-  // Exponential backoff. For now, handle both 404s and transient errors with
-  // this.
-  const initialDelay = Duration(minutes: 5);
-  const backoff = 1.5;
-
-  void tick(HourUtc t) async {
-    final next = t + intervalHours;
-    final paddedNext = next.t.add(padding);
-
-    for (Duration delay = initialDelay;; delay *= backoff) {
-      log.info('Fetching simulation run $t');
-
-      FetchResult result;
-      try {
-        result = await instance.fetchSimulationRun(t);
-      } catch (e, s) {
-        log.warning(
-            'Fetch of simulation run $t failed with an exception', e, s);
-        result = FetchResult.transientFailure;
-      }
-
-      if (result == FetchResult.success) {
-        break;
-      } else if (delay >= paddedNext.difference(DateTime.now())) {
-        log.warning('Giving up on fetch of simulation run $t in favor of '
-            'approaching horizon $next.');
-        break;
-      } else {
-        log.info('Waiting $delay before retry.');
-        await Future.delayed(delay);
-      }
-    }
-
-    final nextInterval = paddedNext.difference(DateTime.now());
-    Timer(nextInterval, () => tick(next));
-    log.info('Next fetch scheduled in $nextInterval.');
-  }
-
-  HourUtc initial = HourUtc.truncate(DateTime.now().toUtc().subtract(padding));
-  // Align to last simulation run before now.
-  initial -= (initial.hour - firstHour) % intervalHours;
-
-  tick(initial);
+  FetchScheduler(instance).start();
 }

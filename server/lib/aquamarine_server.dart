@@ -5,6 +5,7 @@ import 'package:aquamarine_server_interface/quadtree.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:aquamarine_util/async.dart';
 import 'package:async/async.dart' hide AsyncCache;
+import 'package:clock/clock.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlng/latlng.dart';
 import 'package:logging/logging.dart';
@@ -61,12 +62,10 @@ class AquamarineServer {
   AquamarineServer({
     required this.ofsClient,
     required this.persistence,
-    this.clock = DateTime.now,
   });
 
   final OfsClient ofsClient;
   final Persistence persistence;
-  final DateTime Function() clock;
 
   final latlngCache = AsyncCache<Hex32, Quadtree<int>>.persistent();
   final uvRefreshCache = AsyncCache<HourUtc, FetchResult>.ephemeral();
@@ -94,7 +93,7 @@ class AquamarineServer {
   bool _isSimulationAvailable(HourUtc timestamp) {
     const maxSimulationAge = Duration(days: 31);
 
-    final now = clock();
+    final now = clock.now();
     return timestamp.t.isBefore(now) &&
         timestamp.t.isAfter(now.subtract(maxSimulationAge));
   }
