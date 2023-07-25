@@ -125,24 +125,43 @@ Future<void> main() async {
   const firstHour = 3, intervalHours = 6;
   // Observed empirically from catalog timestamps.
   // TODO(AsturaPhoenix): adaptive scheduling
-  const padding = Duration(hours: 1);
+  const padding = Duration(minutes: 45);
+  // Exponential backoff. For now, handle both 404s and transient errors with
+  // this.
+  const initialDelay = Duration(minutes: 5);
+  const backoff = 1.5;
 
   void tick(HourUtc t) async {
     final next = t + intervalHours;
-    final nextInterval = next.t.add(padding).difference(DateTime.now());
-    Timer(nextInterval, () => tick(next));
-    log.info('Next fetch scheduled in $nextInterval');
+    final paddedNext = next.t.add(padding);
 
-    log.info('Fetching simulation run $t');
-    try {
-      if (await instance.fetchSimulationRun(t, failFast: false)) {
-        log.info('Fetch of simulation run $t succeeded');
-      } else {
-        log.info('Fetch of simulation run $t failed');
+    for (Duration delay = initialDelay;; delay *= backoff) {
+      log.info('Fetching simulation run $t');
+
+      FetchResult result;
+      try {
+        result = await instance.fetchSimulationRun(t);
+      } catch (e, s) {
+        log.warning(
+            'Fetch of simulation run $t failed with an exception', e, s);
+        result = FetchResult.transientFailure;
       }
-    } catch (e, s) {
-      log.warning('Fetch of simulation run $t failed with an exception', e, s);
+
+      if (result == FetchResult.success) {
+        break;
+      } else if (delay >= paddedNext.difference(DateTime.now())) {
+        log.warning('Giving up on fetch of simulation run $t in favor of '
+            'approaching horizon $next.');
+        break;
+      } else {
+        log.info('Waiting $delay before retry.');
+        await Future.delayed(delay);
+      }
     }
+
+    final nextInterval = paddedNext.difference(DateTime.now());
+    Timer(nextInterval, () => tick(next));
+    log.info('Next fetch scheduled in $nextInterval.');
   }
 
   HourUtc initial = HourUtc.truncate(DateTime.now().toUtc().subtract(padding));

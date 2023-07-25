@@ -23,6 +23,19 @@ class LatLngUv {
   final void Function() close;
 }
 
+class ResourceException implements HttpException {
+  ResourceException(this.uri, this.statusCode);
+  @override
+  final Uri uri;
+  final int statusCode;
+
+  @override
+  String get message => '$uri returned status code $statusCode';
+
+  @override
+  String toString() => message;
+}
+
 class OfsClient {
   static final log = Logger('OfsClient');
 
@@ -229,49 +242,46 @@ class OfsClient {
   OfsClient({required this.client});
   final http.Client client;
 
-  Future<http.ByteStream?> fetchResource(
+  /// Throws [http.ClientException] and [ResourceException].
+  Future<http.ByteStream> fetchResource(
       SimulationTime s, List<String> query) async {
     final request = resourceUri(simulationTime: s, query: query);
-    final http.StreamedResponse response;
-    try {
-      log.info('get $request');
-      response = await client.send(http.Request('get', request));
-    } on http.ClientException catch (e, s) {
-      log.warning('$request failed', e, s);
-      return null;
-    }
+    log.info('get $request');
+    final response = await client.send(http.Request('get', request));
 
     if (response.statusCode == HttpStatus.ok) {
       return response.stream;
     } else {
-      log.warning('$request returned status code ${response.statusCode}');
-      return null;
+      throw ResourceException(request, response.statusCode);
     }
   }
 
-  Future<Stream<Uint8List>?> fetchLatLng(SimulationTime s) async {
+  /// Throws [http.ClientException] and [ResourceException].
+  Future<Stream<Uint8List>> fetchLatLng(SimulationTime s) async {
     final file = await fetchResource(s, const [
       'lonc',
       'latc',
     ]);
-    return file == null ? null : readLatLng(file);
+    return readLatLng(file);
   }
 
-  Future<LatLngUv?> fetchLatLngUv(SimulationTime s) async {
+  /// Throws [http.ClientException] and [ResourceException].
+  Future<LatLngUv> fetchLatLngUv(SimulationTime s) async {
     final file = await fetchResource(s, const [
       'lonc',
       'latc',
       'u[0][0]',
       'v[0][0]',
     ]);
-    return file == null ? null : readLatLngUv(file);
+    return readLatLngUv(file);
   }
 
-  Future<Stream<List<int>>?> fetchUv(SimulationTime s) async {
+  /// Throws [http.ClientException] and [ResourceException].
+  Future<Stream<List<int>>> fetchUv(SimulationTime s) async {
     final file = await fetchResource(s, const [
       'u[0][0]',
       'v[0][0]',
     ]);
-    return file == null ? null : readUv(file);
+    return readUv(file);
   }
 }
