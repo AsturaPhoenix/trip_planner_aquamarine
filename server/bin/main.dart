@@ -145,7 +145,7 @@ Future<void> main() async {
     }
   }
 
-  HourUtc initial = HourUtc.truncate(DateTime.now().toUtc().add(padding));
+  HourUtc initial = HourUtc.truncate(DateTime.now().toUtc().subtract(padding));
   // Align to last simulation run before now.
   initial -= (initial.hour - firstHour) % intervalHours;
 
