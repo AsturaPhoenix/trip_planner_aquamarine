@@ -135,9 +135,11 @@ class CachingPersistence implements Persistence {
               ? Future.value(reader)
               : (() async => (await _backing.readUv(t))!)());
     } else if (cache is _CompleteUvCache) {
+      assert(reader == null);
       return _CompleteUvReader(cache);
     } else {
       assert(cache == null);
+      assert(reader == null);
       return null;
     }
   }
