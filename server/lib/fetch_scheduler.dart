@@ -49,12 +49,14 @@ class FetchScheduler {
     final nextInterval = next.t.add(padding).difference(clock.now());
 
     void scheduleNext() {
+      log.info('Next fetch scheduled in $nextInterval: $next.');
       _t = next;
       _delay = initialDelay;
       _timer = Timer(nextInterval, _tick);
     }
 
     void scheduleRetry() {
+      log.info('Waiting $_delay before retry.');
       _timer = Timer(_delay, _tick);
       _delay *= backoff;
     }
@@ -66,7 +68,6 @@ class FetchScheduler {
           'approaching horizon $next.');
       scheduleNext();
     } else {
-      log.info('Waiting $_delay before retry.');
       scheduleRetry();
     }
   }
