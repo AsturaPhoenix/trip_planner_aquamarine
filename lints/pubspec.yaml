@@ -1,0 +1,12 @@
+name: aquamarine_lints
+publish_to: none
+environment:
+  sdk: '>=2.18.4 <3.0.0'
+
+topics:
+  - analysis
+  - lints
+
+dependencies:
+  flutter_lints: ^2.0.1
+  lints: ^2.0.0

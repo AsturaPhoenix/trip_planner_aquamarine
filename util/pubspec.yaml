@@ -6,5 +6,6 @@ environment:
 dependencies:
 
 dev_dependencies:
-  lints: ^2.0.0
+  aquamarine_lints:
+    path: ../lints
   test: ^1.21.7

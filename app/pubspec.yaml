@@ -37,9 +37,9 @@ dependencies:
   cupertino_icons: ^1.0.2
   
   aquamarine_server_interface:
-    path: server/ifc
+    path: ../server/ifc
   aquamarine_util:
-    path: util
+    path: ../util
   async: ^2.10.0
   camera:
     git:
@@ -73,7 +73,7 @@ dependencies:
       ref: 7bf639a31f1552ae623d470f84fca66770424e9d
   json_annotation: ^4.7.0
   latlng:
-    path: latlng
+    path: ../latlng
   latlong2: ^0.8.1
   logging: ^1.1.0
   meta: ^1.9.0
@@ -105,7 +105,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^2.0.1
+  aquamarine_lints:
+    path: ../lints
+  test_data:
+    path: ../test_data
   
   build_runner: ^2.3.3
   camera_platform_interface: ^2.5.0

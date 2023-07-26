@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mockito/mockito.dart';
+import 'package:test_data/datapoints.xml.dart';
+import 'package:test_data/sfo.gpx.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 
-import '../test/data/datapoints.xml.dart';
-import '../test/data/sfo.gpx.dart';
 import '../test/util/async.dart';
 import '../test/util/harness.dart';
 

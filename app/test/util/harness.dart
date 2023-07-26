@@ -13,6 +13,7 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:test/test.dart';
+import 'package:test_data/empty.png.dart';
 import 'package:timezone/data/latest_10y.dart';
 import 'package:trip_planner_aquamarine/main.dart';
 import 'package:trip_planner_aquamarine/platform/location.dart';
@@ -21,7 +22,6 @@ import 'package:trip_planner_aquamarine/platform/orientation.dart'
 import 'package:trip_planner_aquamarine/providers/ofs_client.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
-import '../data/empty.png.dart';
 import 'async.dart';
 import 'cache.dart';
 @GenerateNiceMocks([

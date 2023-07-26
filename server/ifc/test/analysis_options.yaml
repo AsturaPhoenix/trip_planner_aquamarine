@@ -1,1 +1,1 @@
-include: ../../../lints/dart_test.yaml
+include: package:aquamarine_lints/dart_test.yaml

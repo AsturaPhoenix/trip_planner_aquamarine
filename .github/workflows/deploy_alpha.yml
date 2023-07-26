@@ -20,9 +20,9 @@ jobs:
       - name: Set up Flutter
         uses: ./trip_planner_aquamarine/.github/actions/flutter
 
-      - run: flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit
+      - run: cd app && flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit
       - name: Package web build
-        run: cd build && tar --create -f web.tar.gz web
+        run: cd app/build && tar --create -f web.tar.gz web
 
       - name: Package server
         run: tar --create -f server.tar.gz server util latlng
@@ -36,7 +36,7 @@ jobs:
           chmod 600 id_rsa
 
       - name: Transfer web build
-        run: 'scp build/web.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:'
+        run: 'scp app/build/web.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:'
       - name: Unpack and flip
         run: |
           ssh imagipioneer@${{ vars.ALPHA_IP }} '

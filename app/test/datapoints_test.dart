@@ -5,9 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
+import 'package:test_data/datapoints.xml.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
-import 'data/datapoints.xml.dart';
 @GenerateNiceMocks([MockSpec<http.Client>()])
 import 'datapoints_test.mocks.dart';
 

@@ -32,7 +32,7 @@ There _may_ be ways to make it work with Flutter on WSL if you're determined eno
 
 ### Code generation
 
-Mocks and serialization use code generation. If the code needs to be regenerated,
+Mocks and serialization use code generation. If the code needs to be regenerated, within the appropriate project subdirectory,
 ```
 dart run build_runner build
 ```
@@ -55,21 +55,29 @@ This will start an HTTP server on port 1080. Files will be stored under `server/
 
 ### Unit/widget tests
 
-Unit/widget tests may be run from the IDE or the command line.
+Unit/widget tests may be run from the IDE or the command line within the appropriate project subdirectory.
 
 ```
 flutter test
 ```
 
+or for Dart projects,
+
+```
+dart test
+```
+
 ### Integration tests
 
-To run the integration tests,
+To run the integration tests, under the `app` subdirectory,
 
 ```
 flutter drive --driver=test_driver/integration_test.dart --target=integration_test/integration_test.dart
 ```
 
 Native tests are run using the [`patrol_cli`](https://pub.dev/packages/patrol_cli). We're using an older version of `patrol_cli`; `patrol drive` was removed for the 1.0 release, which sacrificed native screenshots for ability to run on device farms.
+
+Under the `app` subdirectory,
 
 ```
 dart run patrol_cli:main drive -t integration_test/native_test.dart
@@ -79,7 +87,7 @@ We need to use `dart run`, which uses our `dev_dependencies`, rather than `dart 
 
 ## Building
 
-For web, a typical build is
+For web, a typical build is, under the `app` subdirectory,
 
 ```
 flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit

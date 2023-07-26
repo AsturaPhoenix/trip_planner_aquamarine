@@ -1,12 +1,13 @@
-name: latlng
+name: test_data
 publish_to: none
 environment:
   sdk: '>=2.18.4 <3.0.0'
 
 dependencies:
-  equatable: ^2.0.5
+  file_picker: ^5.2.4
+  trip_planner_aquamarine:
+    path: ../app
 
 dev_dependencies:
   aquamarine_lints:
     path: ../lints
-  test: ^1.21.7
