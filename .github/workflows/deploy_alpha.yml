@@ -24,7 +24,7 @@ jobs:
       - name: Package web build
         run: cd build && tar --create -f web.tar.gz web
 
-      - run: dart compile kernel server/bin/main.dart
+      - run: cd server && dart pub get && dart compile kernel bin/main.dart
 
       - name: Set up SSH
         run: |
