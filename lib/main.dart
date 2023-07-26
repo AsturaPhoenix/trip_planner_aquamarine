@@ -637,7 +637,7 @@ class _Panel extends StatefulWidget {
   _PanelState createState() => _PanelState();
 }
 
-class _PanelState extends State<_Panel> with SingleTickerProviderStateMixin {
+class _PanelState extends State<_Panel> with TickerProviderStateMixin {
   late TabController tabController;
   // This is needed to persist plot panel state between states with different
   // available tabs, such as between station selections with and without
