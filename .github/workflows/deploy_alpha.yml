@@ -24,7 +24,8 @@ jobs:
       - name: Package web build
         run: cd build && tar --create -f web.tar.gz web
 
-      - run: dart compile kernel server/bin/main.dart
+      - name: Package server
+        run: tar --create -f server.tar.gz server util latlng
 
       - name: Set up SSH
         run: |
@@ -45,11 +46,14 @@ jobs:
             rm web.tar.gz'
 
       - name: Transfer server
-        run: 'scp server/bin/main.dill imagipioneer@${{ vars.ALPHA_IP }}:aquamarine_server'
-      - name: Migrate and flip
+        run: 'scp server.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:aquamarine_server'
+      - name: Unpack and flip
         run: |
           ssh imagipioneer@${{ vars.ALPHA_IP }} '
             cd aquamarine_server &&
+            tar --overwrite -xvf server.tar.gz &&
+            rm server.tar.gz &&
+            cd server &&
+            dart pub get &&
             killall dart:main.dart ;
-            mv server/persistence persistence ;
-            dart main.dill >>log 2>>err &'
+            dart bin/main.dart >>log 2>>err &'
