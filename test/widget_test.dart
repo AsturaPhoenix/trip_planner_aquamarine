@@ -186,6 +186,23 @@ void main() {
       await tester.pump(Duration.zero);
     });
 
+    testWidgets(
+        'can select a station without an associated tide/current station',
+        (tester) async {
+      await tester.pumpWidget(harness.buildTripPlanner());
+      await tester.flushAsync();
+      await tester.pumpAndSettle();
+
+      final TripPlannerState state = tester.state(find.byType(TripPlanner));
+      state.mapController.selectStation(kDatapoints.values.firstWhere(
+          (station) =>
+              !station.type.isTideCurrent &&
+              station.tideCurrentStationId == null));
+      await tester.pump();
+
+      expect(find.text('Tides'), findsNothing);
+    });
+
     group('in portrait layout', () {
       setUp(() {
         final window = TestWidgetsFlutterBinding.instance.window;

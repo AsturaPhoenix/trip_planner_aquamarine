@@ -60,6 +60,7 @@ class MapController extends Controller {
     super.dispose();
   }
 
+  /// [mayUnlock]: Whether this operation may unlock camera tracking.
   void selectStation(Station? station, {bool mayUnlock = true}) => setState(() {
         selectedStation.value = station;
 
