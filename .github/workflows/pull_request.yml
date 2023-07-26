@@ -35,7 +35,7 @@ jobs:
       - run: cd server/ifc; dart test
       - run: cd server; dart test
       - run: flutter test
-      - uses: nanasess/setup-chromedriver@v1
+      - uses: nanasess/setup-chromedriver@v2
       - run: chromedriver --port=4444 &
       # -d chrome doesn't work with headless right now; https://github.com/flutter/flutter/issues/95085
       - run: flutter drive --driver=test_driver/integration_test.dart -t integration_test/integration_test.dart -d web-server
