@@ -3,13 +3,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:test_data/datapoints.xml.dart';
 import 'package:trip_planner_aquamarine/main.dart';
-
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 import 'package:trip_planner_aquamarine/widgets/tide_panel.dart';
 
-import 'data/datapoints.xml.dart';
 import 'util/async.dart';
 import 'util/geolocator.dart';
 import 'util/harness.dart';

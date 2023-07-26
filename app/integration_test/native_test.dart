@@ -9,12 +9,12 @@ import 'package:meta/meta.dart';
 import 'package:motion_sensors/motion_sensors.dart';
 import 'package:patrol/patrol.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
+import 'package:test_data/datapoints.xml.dart';
 import 'package:trip_planner_aquamarine/widgets/compass.dart';
 import 'package:trip_planner_aquamarine/widgets/map.dart';
 import 'package:trip_planner_aquamarine/widgets/tide_panel.dart';
 import 'package:vector_math/vector_math_64.dart';
 
-import '../test/data/datapoints.xml.dart';
 import '../test/util/async.dart';
 import '../test/util/harness.dart';
 

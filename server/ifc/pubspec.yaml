@@ -11,6 +11,10 @@ dependencies:
   vector_math: ^2.1.4
 
 dev_dependencies:
+  aquamarine_lints:
+    path: ../../lints
+  test_data:
+    path: ../../test_data
+    
   convert: ^3.1.1
-  lints: ^2.0.0
   test: ^1.21.7

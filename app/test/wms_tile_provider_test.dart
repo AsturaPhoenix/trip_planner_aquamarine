@@ -6,11 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
-
+import 'package:test_data/empty.png.dart';
 import 'package:trip_planner_aquamarine/platform/compositor.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
-import 'data/empty.png.dart';
 import 'util/cache.dart';
 @GenerateNiceMocks([MockSpec<http.Client>()])
 import 'wms_tile_provider_test.mocks.dart';

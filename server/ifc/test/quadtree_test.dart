@@ -2,8 +2,8 @@ import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/quadtree.dart';
 import 'package:latlng/latlng.dart';
 import 'package:test/test.dart';
+import 'package:test_data/ofs.nc.dods.dart';
 
-import '../../../test/data/ofs.nc.dods.dart';
 import '../../lib/ofs_client.dart';
 
 void main() {

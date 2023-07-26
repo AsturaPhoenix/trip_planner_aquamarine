@@ -24,8 +24,10 @@ jobs:
 
       # We need to pub get in each subpackage since `flutter analyze` analyzes tests but `pub get` ignores transient dev dependencies.
       # There also seems to be something additional strange going on.
-      - run: flutter pub get
+      - run: flutter pub get -C latlng
+      - run: flutter pub get -C test_data
       - run: flutter pub get -C util
+      - run: flutter pub get -C app
       - run: flutter pub get -C server
       - run: flutter pub get -C server/ifc
 
@@ -34,18 +36,18 @@ jobs:
       - run: cd util; dart test
       - run: cd server/ifc; dart test
       - run: cd server; dart test
-      - run: flutter test
+      - run: cd app; flutter test
       - uses: nanasess/setup-chromedriver@v2
       - run: chromedriver --port=4444 &
       # -d chrome doesn't work with headless right now; https://github.com/flutter/flutter/issues/95085
-      - run: flutter drive --driver=test_driver/integration_test.dart -t integration_test/integration_test.dart -d web-server
+      - run: cd app; flutter drive --driver=test_driver/integration_test.dart -t integration_test/integration_test.dart -d web-server
 
   build-integration-test-apk:
     name: Build integration test APK
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: trip_planner_aquamarine
+        working-directory: trip_planner_aquamarine/app
 
     steps:
       - name: Check out repo
@@ -64,14 +66,14 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: integration_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk/app-debug.apk
+          path: trip_planner_aquamarine/app/build/app/outputs/flutter-apk/app-debug.apk
 
   build-native-test-apk:
     name: Build native test APK
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: trip_planner_aquamarine
+        working-directory: trip_planner_aquamarine/app
 
     steps:
       - name: Check out repo
@@ -90,14 +92,14 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: native_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk/app-debug.apk
+          path: trip_planner_aquamarine/app/build/app/outputs/flutter-apk/app-debug.apk
 
   emulator-integration-tests:
     runs-on: macos-latest
     needs: build-integration-test-apk
     defaults:
       run:
-        working-directory: trip_planner_aquamarine
+        working-directory: trip_planner_aquamarine/app
 
     strategy:
       matrix:
@@ -128,7 +130,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: integration_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk
+          path: trip_planner_aquamarine/app/build/app/outputs/flutter-apk
       - name: Integration tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -138,7 +140,7 @@ jobs:
           target: ${{ matrix.target }}
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          working-directory: trip_planner_aquamarine
+          working-directory: trip_planner_aquamarine/app
           script: flutter drive --driver=test_driver/integration_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
 
   # Separate integration and native tests for more parallelism and to avoid
@@ -148,7 +150,7 @@ jobs:
     needs: build-native-test-apk
     defaults:
       run:
-        working-directory: trip_planner_aquamarine
+        working-directory: trip_planner_aquamarine/app
 
     strategy:
       matrix:
@@ -179,7 +181,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: native_test_apk
-          path: trip_planner_aquamarine/build/app/outputs/flutter-apk
+          path: trip_planner_aquamarine/app/build/app/outputs/flutter-apk
       - name: Native tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -189,5 +191,5 @@ jobs:
           target: ${{ matrix.target }}
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          working-directory: trip_planner_aquamarine
+          working-directory: trip_planner_aquamarine/app
           script: dart run patrol_cli:main drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk

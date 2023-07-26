@@ -14,8 +14,8 @@ import 'package:file/memory.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
+import 'package:test_data/ofs.nc.dods.dart';
 
-import '../../test/data/ofs.nc.dods.dart';
 import 'ofs_client_test.dart';
 @GenerateNiceMocks([
   MockSpec<FileSystem>(),
