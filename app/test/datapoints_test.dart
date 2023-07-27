@@ -10,6 +10,7 @@ import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 
 @GenerateNiceMocks([MockSpec<http.Client>()])
 import 'datapoints_test.mocks.dart';
+import 'util/harness.dart';
 
 void main() {
   test('datapoints parsing unicode', () {

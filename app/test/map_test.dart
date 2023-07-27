@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart' hide MapController;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlng/latlng.dart';
 import 'package:motion_sensors/motion_sensors.dart';
-import 'package:test_data/datapoints.xml.dart';
 import 'package:trip_planner_aquamarine/providers/ofs_client.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
 import 'package:trip_planner_aquamarine/util/latlng.dart';

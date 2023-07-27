@@ -1,7 +1,3 @@
-import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
-
-Map<StationId, Station> get kDatapoints => parseStations(kDatapointsXml);
-
 const kDatapointsXml = r'''
 <!-- $Id: datapoints.xml,v 1.105 2022/12/16 21:36:40 wp_us7xtt Exp $ -->
 <stations>

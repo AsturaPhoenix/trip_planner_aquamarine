@@ -1,13 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:file_picker/file_picker.dart';
-
-PlatformFile get kSfoGpxFile {
-  final bytes = Uint8List.fromList(utf8.encode(kSfoGpx));
-  return PlatformFile(name: 'sfo.gpx', size: bytes.length, bytes: bytes);
-}
-
 const kSfoGpx = r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX Android" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
