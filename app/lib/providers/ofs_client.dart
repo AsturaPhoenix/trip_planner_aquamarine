@@ -143,13 +143,11 @@ class OfsClient extends ChangeNotifier {
           final samplePoints =
               await _samplePoints(_SamplingKey(hash, bounds, resolution));
 
-          await readVectors(
-            reader,
-            () => !isCancelled() && entry.uv.length < samplePoints.length,
-            entry.uv.add,
-          );
-
-          if (isCancelled()) return;
+          final vectorData = reader.substream(8 * samplePoints.length);
+          await for (final vectors in readVectors(BufferedReader(vectorData))) {
+            if (isCancelled()) return;
+            vectors.forEach(entry.uv.add);
+          }
 
           if (samplePoints.length != entry.uv.length) {
             throw FormatException('Unexpected end of stream; received '

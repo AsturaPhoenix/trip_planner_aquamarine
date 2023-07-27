@@ -18,61 +18,30 @@ Future<HourUtc> readHourUtc(BufferedReader reader) async =>
 Future<Hex32> readHex32(BufferedReader reader) async =>
     Hex32.fromBytes(await reader.readBuffer(4));
 
-/// Reads chunked data as vectors.
-Future<void> readFloat2x32<T>(
-  BufferedReader reader,
-  T Function(double a, double b) readElement,
-  bool Function() condition,
-  void Function(T element) forEach,
-) async {
-  // Only evaluate condition when we're about to produce a value so that
-  // iterators can be used.
-  bool ok = true;
-
-  while (ok && (reader.buffer.length >= 8 || await reader.moveNext())) {
-    if (reader.buffer.length < 8) continue;
-
-    final bytes = reader.buffer.takeBytes();
-    // Use ByteData rather than buffer.asFloat32List to be consistently big
-    // endian.
-    // We need to use sublistView as the buffer itself may extend beyond the
-    // populated contents.
-    final data = ByteData.sublistView(bytes);
-
-    int j;
-    for (j = 0; (ok = condition()) && j <= data.lengthInBytes - 8; j += 8) {
-      forEach(readElement(data.getFloat32(j), data.getFloat32(j + 4)));
-    }
-    reader.buffer.add(Uint8List.sublistView(bytes, j));
-  }
-
-  if (ok) {
-    await reader.requireEnd();
+Stream<List<T>> readFloat2x32<T>(
+    BufferedReader reader, T Function(double, double) readElement) async* {
+  await for (final data in reader.withAlignment(8).map(ByteData.sublistView)) {
+    yield [
+      for (int i = 0; i < data.lengthInBytes; i += 8)
+        readElement(data.getFloat32(i), data.getFloat32(i + 4))
+    ];
   }
 }
 
-Future<void> readVectors(
-  BufferedReader reader,
-  bool Function() condition,
-  void Function(Vector2 vector) forEach,
-) =>
-    readFloat2x32(reader, Vector2.new, condition, forEach);
+Stream<List<Vector2>> readVectors(BufferedReader reader) =>
+    readFloat2x32(reader, Vector2.new);
 
-Future<void> readLatLngs(
-  BufferedReader reader,
-  void Function(LatLng latlng) forEach,
-) =>
-    readFloat2x32(reader, LatLng.new, () => true, forEach);
+Stream<List<LatLng>> readLatLngs(BufferedReader reader) =>
+    readFloat2x32(reader, LatLng.new);
 
 Future<Quadtree<int>> indexLatLng(Stream<List<int>> stream,
     {int threshold = 8}) async {
   final quadtree = Quadtree<int>(threshold: threshold);
   int i = 0;
-  final reader = BufferedReader(stream);
-  try {
-    await readLatLngs(reader, (latlng) => quadtree.add(latlng, i++));
-  } finally {
-    reader.cancel();
+  await for (final latlngs in readLatLngs(BufferedReader(stream))) {
+    for (final latlng in latlngs) {
+      quadtree.add(latlng, i++);
+    }
   }
 
   return quadtree;

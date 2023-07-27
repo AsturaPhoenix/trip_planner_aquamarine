@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:aquamarine_server_interface/io.dart';
@@ -148,21 +147,20 @@ class OfsClient {
       throw FormatException('Unequal number of values.');
     }
 
-    for (int i = 0; i <= v0.length - 4;) {
-      while (reader.buffer.length < 4) {
-        await reader.requireNext();
-      }
-
-      final v1 = reader.buffer.takeBytes();
-      final out = BytesBuilder();
+    int i = 0;
+    await for (final v1
+        in BufferedReader(reader.substream(v0.length)).withAlignment(4)) {
+      final out = BytesBuilder(copy: false);
       int j;
-      for (j = 0; i <= v0.length - 4 && j <= v1.length - 4; i += 4, j += 4) {
-        combiner(out, v0.sublist(i, i + 4), v1.sublist(j, j + 4));
+      for (j = 0; j < v1.length; i += 4, j += 4) {
+        combiner(
+          out,
+          Uint8List.sublistView(v0, i, i + 4),
+          Uint8List.sublistView(v1, j, j + 4),
+        );
       }
 
       yield out.takeBytes();
-
-      reader.buffer.add(v1.sublist(j));
     }
   }
 
@@ -179,37 +177,18 @@ class OfsClient {
     }
   }
 
-  static Future<void> _pipeBytes(
-      BufferedReader reader, Sink<List<int>> sink, int size) async {
-    int remaining = size;
-    void handleBuffer() {
-      final int read = min(remaining, reader.buffer.length);
-      final data = reader.buffer.takeBytes();
-      sink.add(data.sublist(0, read));
-      reader.buffer.add(data.sublist(read));
-      remaining -= read;
-    }
-
-    handleBuffer();
-
-    while (remaining > 0) {
-      await reader.requireNext();
-      handleBuffer();
-    }
-  }
-
   /// Hashes the raw [...lonc][...latc] data from a DODS download.
   static Future<Hex32> _hashLatLng(BufferedReader reader) async {
     final hash = AccumulatorSink<Digest>();
     final bytes = md5.startChunkedConversion(hash);
 
     final size = await _readVectorSize(reader);
-    await _pipeBytes(reader, bytes, 4 * size);
+    await reader.substream(4 * size).forEach(bytes.add);
 
     if (await _readVectorSize(reader) != size) {
       throw FormatException('Unequal number of values.');
     }
-    await _pipeBytes(reader, bytes, 4 * size);
+    await reader.substream(4 * size).forEach(bytes.add);
 
     bytes.close();
     return Hex32.fromBytes(hash.events.single.bytes);
@@ -237,6 +216,7 @@ class OfsClient {
     try {
       await reader.consumeUntil(dataMarker);
       yield* interleave2x32(reader, interleaveUv);
+      await reader.requireEnd();
     } finally {
       reader.cancel();
     }
