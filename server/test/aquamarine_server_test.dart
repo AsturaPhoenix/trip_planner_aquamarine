@@ -48,14 +48,11 @@ void main() {
         expect(response.latLngHash, kLatlngHash);
 
         int vectorCount = 0;
-        final reader = BufferedReader(response.uv);
-        try {
-          await readVectors(reader, () => true, (vector) {
+        await for (final vectors in readVectors(BufferedReader(response.uv))) {
+          for (final vector in vectors) {
             expect(vector.length, lessThan(kSpeedLimit));
             ++vectorCount;
-          });
-        } finally {
-          reader.cancel();
+          }
         }
 
         expect(vectorCount, inInclusiveRange(100, 1000));

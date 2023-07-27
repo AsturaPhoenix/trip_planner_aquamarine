@@ -95,17 +95,11 @@ void main() {
       );
 
       int count = 0;
-      final reader = BufferedReader(result);
-      try {
-        await readLatLngs(reader, (latlng) {
-          expect(
-            latlng,
-            predicate((LatLng latlng) => bounds.contains(latlng)),
-          );
+      await for (final latlngs in readLatLngs(BufferedReader(result))) {
+        for (final latlng in latlngs) {
+          expect(latlng, predicate((LatLng latlng) => bounds.contains(latlng)));
           ++count;
-        });
-      } finally {
-        reader.cancel();
+        }
       }
 
       expect(count, kOfsNele);
@@ -116,14 +110,11 @@ void main() {
       expect(result.latlngHash, kLatlngHash);
 
       int count = 0;
-      final reader = BufferedReader(result.uv);
-      try {
-        await readVectors(reader, () => true, (vector) {
+      await for (final vectors in readVectors(BufferedReader(result.uv))) {
+        for (final vector in vectors) {
           expect(vector.length, lessThan(kSpeedLimit));
           ++count;
-        });
-      } finally {
-        reader.cancel();
+        }
       }
 
       expect(count, kOfsNele);

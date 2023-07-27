@@ -164,30 +164,16 @@ class Persistence implements base.Persistence {
         // The hash was computed from the dods download (lon[], lat[]), so we
         // need to undo the interleaving for verification.
 
-        final reader = BufferedReader(file!.openRead());
         final lats = BytesBuilder(copy: false);
         try {
-          while (reader.buffer.length >= 8 || await reader.moveNext()) {
-            if (reader.buffer.length < 8) continue;
-
-            final bytes = reader.buffer.takeBytes();
-            // Alternatives:
-            // - no inner loop, sublist: don't do this; copies the entire chunk
-            //   each iteration, which in the worst case could be the entire
-            //   800 kb file; 30s =(
-            // - no inner loop, sublistView: better; ~.8s
-            // - inner loop, sublistView: better; ~.6s
-            // - inner loop, sublist: best; ~.5s
-            int i;
-            for (i = 0; i <= bytes.length - 8; i += 8) {
+          await for (final bytes
+              in BufferedReader(file!.openRead()).withAlignment(8)) {
+            for (int i = 0; i < bytes.length; i += 8) {
               lats.add(bytes.sublist(i, i + 4));
               hashSink.add(bytes.sublist(i + 4, i + 8));
             }
-            reader.buffer.add(bytes.sublist(i));
           }
-          await reader.requireEnd();
         } on Object {
-          await reader.cancel();
           return null;
         }
         hashSink
