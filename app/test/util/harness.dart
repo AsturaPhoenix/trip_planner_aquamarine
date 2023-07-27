@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:file_picker/file_picker.dart';
@@ -13,7 +15,9 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:test/test.dart';
+import 'package:test_data/datapoints.xml.dart';
 import 'package:test_data/empty.png.dart';
+import 'package:test_data/sfo.gpx.dart';
 import 'package:timezone/data/latest_10y.dart';
 import 'package:trip_planner_aquamarine/main.dart';
 import 'package:trip_planner_aquamarine/platform/location.dart';
@@ -35,6 +39,13 @@ import 'cache.dart';
 import 'harness.mocks.dart';
 import 'mockito.dart';
 import 'motion_sensors.dart';
+
+Map<StationId, Station> get kDatapoints => parseStations(kDatapointsXml);
+
+PlatformFile get kSfoGpxFile {
+  final bytes = Uint8List.fromList(utf8.encode(kSfoGpx));
+  return PlatformFile(name: 'sfo.gpx', size: bytes.length, bytes: bytes);
+}
 
 class TripPlannerHarness {
   static const horseshoeBayParkingLot = Position(

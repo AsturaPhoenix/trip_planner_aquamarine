@@ -34,7 +34,8 @@ class TestHarness {
   Stream<Uint8List> latlngData() =>
       OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods));
 
-  Future<LatLngUv> uvData() => OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+  Future<LatLngUv> uvData() =>
+      OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
 
   Future<void> writeLatLng(Persistence persistence) =>
       persistence.writeLatLng(kLatlngHash, latlngData());

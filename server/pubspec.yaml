@@ -28,7 +28,7 @@ dependencies:
   shelf_router: ^1.1.3
 
 dependency_overrides:
-  file:
+  file: # TODO: 7.0.0 after Dart 3 migration.
     git:
       url: https://github.com/AsturaPhoenix/file.dart.git
       path: packages/file

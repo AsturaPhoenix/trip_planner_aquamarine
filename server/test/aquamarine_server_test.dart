@@ -88,7 +88,7 @@ void main() {
         );
 
         when(ofsClient.fetchLatLngUv(simulationTime)).thenAnswer(
-            (_) => OfsClient.readLatLngUv(Stream.value(kOfsNcDods)));
+            (_) => OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods)));
         when(ofsClient.fetchLatLng(simulationTime)).thenAnswer(
             (_) async => OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
 
@@ -104,7 +104,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(simulationTime, data.latlngHash, data.uv);
@@ -176,7 +177,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -206,7 +208,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -247,7 +250,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -258,8 +262,10 @@ void main() {
         );
 
         final partialData = [
-          Uint8List.sublistView(kOfsNcDods, 0, kOfsNcDods.length ~/ 2),
-          Uint8List.sublistView(kOfsNcDods, kOfsNcDods.length ~/ 2),
+          Uint8List.sublistView(
+              kOfsLonLatUvNcDods, 0, kOfsLonLatUvNcDods.length ~/ 2),
+          Uint8List.sublistView(
+              kOfsLonLatUvNcDods, kOfsLonLatUvNcDods.length ~/ 2),
         ];
         final controller = StreamController<List<int>>();
         when(ofsClient.fetchLatLngUv(simulationTime))
@@ -421,7 +427,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(simulationTime, data.latlngHash, data.uv);
@@ -461,7 +468,8 @@ void main() {
         final persistence =
             await Persistence.load(fileSystem: MemoryFileSystem.test());
 
-        final data = await OfsClient.readLatLngUv(Stream.value(kOfsNcDods));
+        final data =
+            await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods));
         await persistence.writeLatLng(
             kLatlngHash, OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         await persistence.writeUv(oldSimulationTime, data.latlngHash, data.uv);
@@ -506,12 +514,13 @@ void main() {
         );
 
         when(ofsClient.fetchLatLngUv(any)).thenAnswer(
-            (_) => OfsClient.readLatLngUv(Stream.value(kOfsNcDods)));
+            (_) => OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods)));
         when(ofsClient.fetchLatLng(any)).thenAnswer(
             (_) async => OfsClient.readLatLng(Stream.value(kOfsLonLatNcDods)));
         when(ofsClient.fetchUv(any)).thenAnswer((_) async =>
             // This leaks LatLngUvs, but that's okay for a test.
-            (await OfsClient.readLatLngUv(Stream.value(kOfsNcDods))).uv);
+            (await OfsClient.readLatLngUv(Stream.value(kOfsLonLatUvNcDods)))
+                .uv);
 
         expect(await server.fetchSimulationRun(t), FetchResult.success);
 

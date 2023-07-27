@@ -106,7 +106,22 @@ void main() {
     });
 
     test('readUv', () async {
-      final result = await OfsClient.readLatLngUv(chunker([kOfsNcDods]));
+      final result = OfsClient.readUv(chunker([kOfsUvNcDods]));
+
+      int count = 0;
+      await for (final vectors in readVectors(BufferedReader(result))) {
+        for (final vector in vectors) {
+          expect(vector.length, lessThan(kSpeedLimit));
+          ++count;
+        }
+      }
+
+      expect(count, kOfsNele);
+    });
+
+    test('readLatLngUv', () async {
+      final result =
+          await OfsClient.readLatLngUv(chunker([kOfsLonLatUvNcDods]));
       expect(result.latlngHash, kLatlngHash);
 
       int count = 0;
