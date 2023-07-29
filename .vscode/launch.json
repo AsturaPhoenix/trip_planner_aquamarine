@@ -8,18 +8,21 @@
             "name": "trip_planner_aquamarine",
             "request": "launch",
             "type": "dart",
+            "program": "app/lib/main.dart",
         },
         {
             "name": "trip_planner_aquamarine (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
+            "program": "app/lib/main.dart",
         },
         {
             "name": "trip_planner_aquamarine (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
+            "program": "app/lib/main.dart",
         },
         {
             "name": "aquamarine_server",
