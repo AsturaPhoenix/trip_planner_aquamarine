@@ -60,6 +60,7 @@ jobs:
             sudo docker rm -f aquamarine_server;
             sudo docker run \
               --name aquamarine_server \
+              -d \
               -p 1080:1080 \
               --mount type=bind,src=./persistence,dst=/server/persistence \
-              aquamarine_server &'
+              aquamarine_server'
