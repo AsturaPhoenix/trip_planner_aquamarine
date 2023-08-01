@@ -42,6 +42,9 @@ jobs:
       # -d chrome doesn't work with headless right now; https://github.com/flutter/flutter/issues/95085
       - run: cd app; flutter drive --driver=test_driver/integration_test.dart -t integration_test/integration_test.dart -d web-server
 
+      # Run through docker build as a check, but it's probably not worth uploading the image as an artifact.
+      - run: docker build .
+
   build-integration-test-apk:
     name: Build integration test APK
     runs-on: ubuntu-latest
