@@ -24,8 +24,8 @@ jobs:
       - name: Package web build
         run: cd app/build && tar --create -f web.tar.gz web
 
-      - name: Package server
-        run: tar --create -f server.tar.gz server util latlng
+      - run: docker build -t aquamarine_server .
+      - run: docker save aquamarine_server -o aquamarine_server.tar
 
       - name: Set up SSH
         run: |
@@ -46,14 +46,18 @@ jobs:
             rm web.tar.gz'
 
       - name: Transfer server
-        run: 'scp server.tar.gz imagipioneer@${{ vars.ALPHA_IP }}:aquamarine_server'
+        run: 'scp aquamarine_server.tar imagipioneer@${{ vars.ALPHA_IP }}:aquamarine_server'
       - name: Unpack and flip
         run: |
           ssh imagipioneer@${{ vars.ALPHA_IP }} '
+            # Prune now to retain the previous image for rollbacks
+            sudo docker image prune -f;
             cd aquamarine_server &&
-            tar --overwrite -xvf server.tar.gz &&
-            rm server.tar.gz &&
-            cd server &&
-            dart pub get &&
-            killall dart:main.dart ;
-            dart bin/main.dart >>log 2>>err &'
+            sudo docker load -i aquamarine_server.tar &&
+            rm aquamarine_server.tar &&
+            sudo docker rm -f aquamarine_server;
+            sudo docker run \
+              --name aquamarine_server \
+              -p 1080:1080 \
+              --mount type=bind,src=./persistence,dst=/server/persistence \
+              aquamarine_server &'

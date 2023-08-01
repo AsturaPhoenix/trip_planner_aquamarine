@@ -1,0 +1,6 @@
+.*
+**/.dart_tool/
+Dockerfile
+app/build/
+dev/
+server/persistence/
