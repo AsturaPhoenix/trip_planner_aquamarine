@@ -104,6 +104,11 @@ class BlobCache {
     }
   }
 
+  void remove(String key) {
+    blobs.delete(key);
+    metadata.delete(key);
+  }
+
   void evict(EvictionPolicy shouldEvict) {
     // for logging
     int evictions = 0;
