@@ -7,7 +7,6 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 import 'package:test_data/empty.png.dart';
-import 'package:trip_planner_aquamarine/platform/compositor.dart';
 import 'package:trip_planner_aquamarine/providers/wms_tile_provider.dart';
 
 import 'util/cache.dart';
@@ -71,21 +70,37 @@ void main() {
       (_) async => http.Response.bytes(kEmptyPng, HttpStatus.ok),
     );
 
-    final actualDecode = CompositorImage.decode;
-    CompositorImage.decode = (_) => Future.error('Mock flake');
+    testTileProvider.imageDecoder = (_) => Future.error('Mock flake');
 
     const locator = TileLocator(0, Point(0, 0), 0);
-    try {
-      await testTileProvider.getTileContent(locator);
-    } on String {
-      // expected
-    }
+    await expectLater(
+        () => testTileProvider.getTileContent(locator), throwsA(isA<String>()));
     verify(mockHttpClient.get(any));
 
-    CompositorImage.decode = actualDecode;
+    testTileProvider.imageDecoder = decodeImage;
 
     await testTileProvider.getTileContent(locator);
     // The http call should still be cached.
     verifyNoMoreInteractions(mockHttpClient);
+  });
+
+  // The server can sometimes return empty 200 responses, which we don't want to
+  // cache.
+  test('does not cache empty data', () async {
+    when(mockHttpClient.get(any)).thenAnswer(
+      (_) async => http.Response.bytes(const [], HttpStatus.ok),
+    );
+
+    const locator = TileLocator(0, Point(0, 0), 0);
+    await expectLater(() => testTileProvider.getTileContent(locator),
+        throwsA(isA<Exception>()));
+    verify(mockHttpClient.get(any));
+
+    when(mockHttpClient.get(any)).thenAnswer(
+      (_) async => http.Response.bytes(kEmptyPng, HttpStatus.ok),
+    );
+
+    await testTileProvider.getTileContent(locator);
+    verify(mockHttpClient.get(any));
   });
 }

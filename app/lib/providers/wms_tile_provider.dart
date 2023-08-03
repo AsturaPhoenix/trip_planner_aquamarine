@@ -103,7 +103,16 @@ class TileKey extends TileLocator {
   String toString() => '$type@$zoom:(${coordinate.x},${coordinate.y})+$lod';
 }
 
-Future<Image> _decode(Uint8List data) async {
+class TileException implements Exception {
+  TileException(this.message, this.key);
+  final String message;
+  final TileKey key;
+
+  @override
+  String toString() => 'TileException: $message\nTileKey: $key';
+}
+
+Future<Image> decodeImage(Uint8List data) async {
   final buffer = await ImmutableBuffer.fromUint8List(data);
   final ImageDescriptor imageDescriptor;
   try {
@@ -164,6 +173,7 @@ class WmsTileProvider extends TileProvider {
     this.maxOversample = 2,
     this.fetchLod = 0,
     required this.params,
+    this.imageDecoder = decodeImage,
   });
 
   http.Client client;
@@ -184,6 +194,8 @@ class WmsTileProvider extends TileProvider {
   final int fetchLod;
 
   WmsParams params;
+
+  Future<Image> Function(Uint8List) imageDecoder;
 
   @override
   void dispose() {
@@ -215,25 +227,51 @@ class WmsTileProvider extends TileProvider {
     if (response.statusCode == HttpStatus.ok) {
       return response.bodyBytes;
     } else {
-      throw response;
+      throw TileException(
+        '$url returned status code ${response.statusCode}',
+        TileKey.forLocator(locator, tileType),
+      );
     }
   }
 
   final _memoryCache = AsyncCache<TileLocator, Image>.persistent(
     MemoryCache(
       capacity: 32,
-      onEvict: (image) async => (await image).dispose(),
+      onEvict: (value) async {
+        final Image image;
+        try {
+          image = await value;
+        } on Object {
+          // Errors here are handled elsewhere if they matter, so ignore
+          // silently during eviction.
+          return;
+        }
+        image.dispose();
+      },
     ),
   );
 
-  Future<Uint8List> getImageData(TileLocator locator) async =>
-      cache[TileKey.forLocator(locator, tileType).toString()] ??=
-          await fetchImageData(locator);
+  Future<Uint8List> getImageData(TileLocator locator) async {
+    final key = TileKey.forLocator(locator, tileType);
+    final $key = key.toString();
+    final imageData = cache[$key] ??= await fetchImageData(locator);
+
+    if (imageData.isEmpty) {
+      // We could throw during fetchImageData, but there's also the possibility
+      // of bad data already in the cache from older versions, which we'll want
+      // to clean up.
+      cache.remove($key);
+      // This will fail decoding anyway, but let's short circuit and throw now.
+      throw TileException('Empty tile data.', key);
+    } else {
+      return imageData;
+    }
+  }
 
   Future<Image> getComponentImage(TileLocator locator) async =>
       (await (_memoryCache.computeIfAbsent(locator, () async {
         final data = await getImageData(locator);
-        return _decode(data);
+        return imageDecoder(data);
       })))
           .clone();
 

@@ -39,5 +39,7 @@ class FakeBlobCache extends Fake implements BlobCache {
   @override
   void operator []=(String key, Uint8List value) => data[key] = value;
   @override
+  void remove(String key) => data.remove(key);
+  @override
   void close() {}
 }

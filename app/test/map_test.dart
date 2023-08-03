@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' hide MapController;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlng/latlng.dart';
+import 'package:mockito/mockito.dart';
 import 'package:motion_sensors/motion_sensors.dart';
 import 'package:trip_planner_aquamarine/providers/ofs_client.dart';
 import 'package:trip_planner_aquamarine/providers/trip_planner_client.dart';
@@ -136,6 +140,69 @@ void main() {
           ),
         ),
       );
+    });
+
+    testWidgets('handles tile retrieval errors', (tester) async {
+      when(harness.client.get(any))
+          .thenAnswer((_) async => http.Response('', 404));
+
+      await tester.pumpWidget(MapHarness(harness: harness));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('handles empty tiles', (tester) async {
+      when(harness.client.get(any)).thenAnswer(
+          (_) async => http.Response.bytes(const [], HttpStatus.ok));
+
+      await tester.pumpWidget(MapHarness(harness: harness));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('handles tile decoding errors', (tester) async {
+      when(harness.client.get(any)).thenAnswer(
+          (_) async => http.Response.bytes(const [0], HttpStatus.ok));
+
+      await tester.pumpWidget(MapHarness(harness: harness));
+      await tester.pumpAndSettle();
+    });
+
+    // AsturaPhoenix/trip_planner_aquamarine#83
+    // When the map is moved after long-running tile fetches that eventually
+    // fail, exceptions could be dropped in one of at least two ways:
+    // * via the image provider (OneFrameImageStreamCompleter), if the map tile
+    //   layer has unsubscribed from the image stream, as when the tile scrolls
+    //   offscreen before the image loading fails, or
+    // * via the async cache, if enough tiles are scrolled to cause eviction.
+    //   The onEvict for images has to wait for them to load to dispose them.
+    //   (There's an opportunity for improvement there.)
+    //
+    // The OneFrameImageStreamCompleter/FlutterError.reportError behavior is
+    // acceptable and will be silent in release mode, but note that it can fail
+    // tests.
+    testWidgets('handles tile exceptions after map movement', (tester) async {
+      final response = Completer<http.Response>();
+      when(harness.client.get(any)).thenAnswer((_) => response.future);
+
+      await tester.pumpWidget(MapHarness(harness: harness));
+
+      // Scroll enough to cause both tile unsubscription and cache eviction.
+      await tester.fling(find.byType(FlutterMap), const Offset(0, 1600), 1000);
+      await tester.pumpAndSettle();
+
+      // The OneFrameImageStreamCompleter behavior of using
+      // FlutterError.reportError with silent = true is an acceptable way of
+      // handling image errors that are dropped due to tiles scrolling
+      // offscreen. To acknowledge this in the test, we need to do the
+      // equivalent of tester.takeException on all such exceptions. We can do
+      // something like this by overriding the error handler.
+      addTearDown(() => FlutterError.onError = FlutterError.presentError);
+      FlutterError.onError = (details) {
+        if (!details.silent) {
+          FlutterError.presentError(details);
+        }
+      };
+
+      response.complete(http.Response.bytes(const [], HttpStatus.ok));
     });
   });
 }
