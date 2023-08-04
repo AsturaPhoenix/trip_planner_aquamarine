@@ -9,6 +9,7 @@ import 'package:aquamarine_server_interface/io.dart';
 import 'package:aquamarine_server_interface/types.dart';
 import 'package:clock/clock.dart';
 import 'package:file/memory.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlng/latlng.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -397,7 +398,7 @@ void main() {
     );
 
     test(
-      'continues trying in the case of transient failures',
+      'continues trying in the case of transient failures with status codes',
       () => withClock(clock, () async {
         final ofsClient = MockOfsClient();
         final persistence = MockPersistence();
@@ -411,6 +412,30 @@ void main() {
 
         when(ofsClient.fetchLatLngUv(any))
             .thenAnswer((_) async => throw ResourceException(Uri(), 500));
+
+        expect(
+            await server.fetchSimulationRun(t), FetchResult.transientFailure);
+
+        verify(ofsClient.fetchLatLngUv(any)).called(6 + 1 + 48);
+      }),
+    );
+
+    test(
+      'continues trying in the case of transient failures with client '
+      'exceptions',
+      () => withClock(clock, () async {
+        final ofsClient = MockOfsClient();
+        final persistence = MockPersistence();
+
+        final t = simulationTime.timestamp;
+
+        final server = AquamarineServer(
+          ofsClient: ofsClient,
+          persistence: persistence,
+        );
+
+        when(ofsClient.fetchLatLngUv(any))
+            .thenAnswer((_) async => throw http.ClientException('foo'));
 
         expect(
             await server.fetchSimulationRun(t), FetchResult.transientFailure);

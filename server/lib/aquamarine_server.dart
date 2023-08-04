@@ -299,6 +299,7 @@ class AquamarineServer {
             final uv = await ofsClient.fetchUv(simulationTime);
             await persistence.writeUv(simulationTime, latlngHash!, uv);
           }
+          return FetchResult.success;
         } on ResourceException catch (e) {
           log.warning(e.message);
 
@@ -312,8 +313,8 @@ class AquamarineServer {
           }
         } on http.ClientException catch (e, s) {
           log.warning('Failed to fetch $simulationTime', e, s);
+          return FetchResult.transientFailure;
         }
-        return FetchResult.success;
       });
 
       switch (result) {
