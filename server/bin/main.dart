@@ -18,7 +18,16 @@ import 'package:shelf_router/shelf_router.dart';
 
 void initializeLogger() {
   Logger.root.onRecord.listen((record) {
-    final message = '[${record.time.toUtc()}] ${record.level} '
+    // The default stringization is at microsecond resolution but omits the
+    // microsegment fragment if the microseconds part is 0. Both the
+    // inconsistency and the microseconds themselves are not ideal in the logs,
+    // so let's truncate them.
+    final formattedTime = DateTime.fromMillisecondsSinceEpoch(
+      record.time.millisecondsSinceEpoch,
+      isUtc: true,
+    ).toString();
+
+    final message = '[$formattedTime] ${record.level} '
         '${record.loggerName}: ${record.message}';
 
     if (record.level >= Level.WARNING ||
