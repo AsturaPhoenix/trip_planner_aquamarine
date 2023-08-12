@@ -13,6 +13,10 @@ inputs:
   target:
     description: Target image
     required: true
+  cache-save:
+    description: Whether or not to save the image.
+    required: false
+    default: ${{ github.event_name == 'push' }}
 runs:
   using: composite
   steps:
@@ -25,7 +29,7 @@ runs:
           ~/.android/adb*
         key: avd-${{ inputs.profile }}-${{ inputs.api-level }}-${{ inputs.arch }}-${{ inputs.target }}
     - name: Create AVD and generate snapshot for caching
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ !steps.avd-cache.outputs.cache-hit && inputs.cache-save == 'true' }}
       uses: reactivecircus/android-emulator-runner@v2
       with:
         profile: ${{ inputs.profile }}
@@ -36,7 +40,7 @@ runs:
         emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
         script: echo "Generated AVD snapshot for caching."
     - name: AVD cache save
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: ${{ !steps.avd-cache.outputs.cache-hit && inputs.cache-save == 'true' }}
       uses: actions/cache/save@v3
       with:
         path: |

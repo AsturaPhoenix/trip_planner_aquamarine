@@ -1,5 +1,10 @@
 name: Flutter
 description: Flutter checkout and PATH setup
+inputs:
+  cache-save:
+    description: Whether or not to save the flutter repo and pub caches.
+    required: false
+    default: ${{ github.event_name == 'push' }}
 runs:
   using: composite
   steps:
@@ -18,7 +23,7 @@ runs:
         path: flutter
         key: flutter@${{ steps.ls-remote.outputs.hash }}
     - name: Checkout
-      if: steps.checkout-cache.outputs.cache-hit != 'true'
+      if: ${{ !steps.checkout-cache.outputs.cache-hit }}
       uses: actions/checkout@v3
       with:
         repository: AsturaPhoenix/flutter
@@ -26,15 +31,27 @@ runs:
         path: flutter
         fetch-depth: 0 # to fetch tags to determine the Flutter version
     - name: Flutter checkout save
-      if: steps.checkout-cache.outputs.cache-hit != 'true'
+      if: ${{ !steps.checkout-cache.outputs.cache-hit && inputs.cache-save }}
       uses: actions/cache/save@v3
       with:
         path: flutter
         key: ${{ steps.checkout-cache.outputs.cache-primary-key }}
 
     - name: Flutter/pub cache
+      if: inputs.cache-save == 'true'
       uses: actions/cache@v3
-      id: pub-cache
+      with:
+        path: |
+          flutter/bin/cache
+          ~/.pub-cache
+        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-${{ github.sha }}
+        restore-keys: |
+          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-
+          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-
+          pub-${{ runner.os }}-${{ runner.arch }}-
+    - name: Flutter/pub cache restore
+      if: inputs.cache-save != 'true'
+      uses: actions/cache/restore@v3
       with:
         path: |
           flutter/bin/cache
