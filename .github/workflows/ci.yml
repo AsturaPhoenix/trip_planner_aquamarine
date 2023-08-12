@@ -215,8 +215,6 @@ jobs:
     name: Deploy alpha
     runs-on: ubuntu-latest
     environment: alpha
-    if: github.event_name == 'push'
-    needs: linux-tests
     concurrency: deploy-alpha
     defaults:
       run:
