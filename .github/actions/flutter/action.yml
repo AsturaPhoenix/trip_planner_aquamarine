@@ -44,9 +44,8 @@ runs:
         path: |
           flutter/bin/cache
           ~/.pub-cache
-        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-${{ github.sha }}
+        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}
         restore-keys: |
-          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-
           pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-
           pub-${{ runner.os }}-${{ runner.arch }}-
     - name: Flutter/pub cache restore
@@ -56,9 +55,8 @@ runs:
         path: |
           flutter/bin/cache
           ~/.pub-cache
-        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-${{ github.sha }}
+        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}
         restore-keys: |
-          pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-${{ github.job }}-
           pub-${{ runner.os }}-${{ runner.arch }}-${{ steps.ls-remote.outputs.hash }}-
           pub-${{ runner.os }}-${{ runner.arch }}-
 

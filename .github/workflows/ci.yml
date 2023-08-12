@@ -1,4 +1,5 @@
 name: CI
+run-name: ${{ github.event_name == 'push' && 'Postsubmit' || 'Presubmit' }}
 
 on:
  push:
@@ -245,10 +246,10 @@ jobs:
           chmod 600 id_rsa
 
       - name: Transfer web build
-        run: 'scp app/build/web.tar.gz imagipioneer@${{ vars.HOSTNAME }}:'
+        run: 'scp app/build/web.tar.gz ${{ vars.USERNAME }}@${{ vars.HOSTNAME }}:'
       - name: Unpack and flip
         run: |
-          ssh imagipioneer@${{ vars.HOSTNAME }} '
+          ssh ${{ vars.USERNAME }}@${{ vars.HOSTNAME }} '
             tar -xvf web.tar.gz &&
             rm -rf trip_planner_aquamarine &&
             mv web trip_planner_aquamarine &&
@@ -258,7 +259,7 @@ jobs:
         run: 'scp aquamarine_server.tar ${{ vars.USERNAME }}@${{ vars.HOSTNAME }}:aquamarine_server'
       - name: Unpack and flip
         run: |
-          ssh imagipioneer@${{ vars.HOSTNAME }} '
+          ssh ${{ vars.USERNAME }}@${{ vars.HOSTNAME }} '
             # Prune now to retain the previous image for rollbacks
             sudo docker image prune -f;
             cd aquamarine_server &&
