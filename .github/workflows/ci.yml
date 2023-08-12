@@ -1,6 +1,8 @@
-name: Pull request
+name: CI
 
 on:
+ push:
+   branches: [master]
  pull_request:
    branches: [master]
 
@@ -180,6 +182,11 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Patrol cache restore
+        uses: actions/cache/restore@v3
+        with:
+          path: ~/.cache/patrol
+          key: patrol-cache
       - name: Download native test apk
         uses: actions/download-artifact@v3
         with:
@@ -196,3 +203,71 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: trip_planner_aquamarine/app
           script: dart run patrol_cli:main drive -t integration_test/native_test.dart --use-application-binary build/app/outputs/flutter-apk/app-debug.apk
+      - name: Patrol cache save
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v3
+        with:
+          path: ~/.cache/patrol
+          key: patrol-cache
+
+  deploy-alpha:
+    name: Deploy alpha
+    runs-on: ubuntu-latest
+    environment: alpha
+    if: github.event_name == 'push'
+    needs: linux-tests
+    concurrency: deploy-alpha
+    defaults:
+      run:
+        working-directory: trip_planner_aquamarine
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+        with:
+          path: trip_planner_aquamarine
+      - name: Set up Flutter
+        uses: ./trip_planner_aquamarine/.github/actions/flutter
+
+      - run: cd app && flutter build web --base-href "/trip_planner_aquamarine/" --web-renderer canvaskit
+      - name: Package web build
+        run: cd app/build && tar -czf web.tar.gz web
+
+      - run: docker build -t aquamarine_server .
+      - run: docker save aquamarine_server -o aquamarine_server.tar
+
+      - name: Set up SSH
+        run: |
+          mkdir ~/.ssh
+          cd ~/.ssh
+          echo '${{ secrets.KNOWN_HOSTS }}' >> known_hosts
+          echo '${{ secrets.SSH }}' >> id_rsa
+          chmod 600 id_rsa
+
+      - name: Transfer web build
+        run: 'scp app/build/web.tar.gz imagipioneer@${{ vars.HOSTNAME }}:'
+      - name: Unpack and flip
+        run: |
+          ssh imagipioneer@${{ vars.HOSTNAME }} '
+            tar -xvf web.tar.gz &&
+            rm -rf trip_planner_aquamarine &&
+            mv web trip_planner_aquamarine &&
+            rm web.tar.gz'
+
+      - name: Transfer server
+        run: 'scp aquamarine_server.tar ${{ vars.USERNAME }}@${{ vars.HOSTNAME }}:aquamarine_server'
+      - name: Unpack and flip
+        run: |
+          ssh imagipioneer@${{ vars.HOSTNAME }} '
+            # Prune now to retain the previous image for rollbacks
+            sudo docker image prune -f;
+            cd aquamarine_server &&
+            sudo docker load -i aquamarine_server.tar &&
+            rm aquamarine_server.tar &&
+            sudo docker rm -f aquamarine_server;
+            sudo docker run \
+              --name aquamarine_server \
+              -d \
+              -p 1080:1080 \
+              --mount type=bind,src=./persistence,dst=/server/persistence \
+              aquamarine_server'
